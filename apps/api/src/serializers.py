@@ -8,6 +8,7 @@ from src.services.experience.child_value import normalize_child_value
 
 if TYPE_CHECKING:
     from src.db.models import PersonProfile
+
 from src.domain import (
     PersonSchema,
     LocationBasic,
@@ -22,11 +23,31 @@ from src.domain import (
     PrivacyField,
     QualityField,
     IndexField,
+    Confidence,
+    Visibility,
+    ClaimState,
 )
 
+# ---------------------------------------------------------------------------
+# Module-level constants (avoid re-computing on every call)
+# ---------------------------------------------------------------------------
+
+# Valid Intent values — computed once at import time.
+_VALID_INTENTS: tuple[str, ...] = get_args(Intent)
+
+# Default confidence for serialized cards (no confidence data stored in DB).
+_DEFAULT_CONFIDENCE: Confidence = "medium"
+
+# URL served by the profile-photo endpoint.
+_PROFILE_PHOTO_URL = "/me/bio/photo"
+
+
+# ---------------------------------------------------------------------------
+# Experience card serializers
+# ---------------------------------------------------------------------------
 
 def experience_card_to_response(card: ExperienceCard) -> ExperienceCardResponse:
-    """Map ExperienceCard model to ExperienceCardResponse."""
+    """Map an ``ExperienceCard`` ORM model to ``ExperienceCardResponse``."""
     return ExperienceCardResponse(
         id=card.id,
         user_id=card.user_id,
@@ -54,7 +75,7 @@ def experience_card_to_response(card: ExperienceCard) -> ExperienceCardResponse:
 
 
 def experience_card_child_to_response(child: ExperienceCardChild) -> ExperienceCardChildResponse:
-    """Map ExperienceCardChild model to ExperienceCardChildResponse."""
+    """Map an ``ExperienceCardChild`` ORM model to ``ExperienceCardChildResponse``."""
     raw_value = child.value if isinstance(child.value, dict) else {}
     value_norm = normalize_child_value(raw_value)
     items_raw = (value_norm or {}).get("items") or []
@@ -73,31 +94,36 @@ def experience_card_child_to_response(child: ExperienceCardChild) -> ExperienceC
     )
 
 
+# ---------------------------------------------------------------------------
+# Person serializers
+# ---------------------------------------------------------------------------
+
 def person_to_person_schema(
     person: Person,
     *,
     profile: "PersonProfile | None" = None,
 ) -> PersonSchema:
-    """Map Person + optional PersonProfile to PersonSchema (domain v1)."""
-    from src.db.models import PersonProfile  # avoid circular import
-
+    """Map ``Person`` + optional ``PersonProfile`` to ``PersonSchema`` (domain v1)."""
     location = LocationBasic(
         city=profile.current_city if profile else None,
         region=None,
         country=None,
     )
     verification = PersonVerification(status="unverified", methods=[])
-    default_visibility = "private"
+
+    default_visibility: Visibility = "private"
     if profile:
         if getattr(profile, "open_to_work", False) or getattr(profile, "open_to_contact", False):
             default_visibility = "searchable"
+
     privacy_defaults = PersonPrivacyDefaults(default_visibility=default_visibility)
     updated = getattr(person, "updated_at", None) or person.created_at
+
     return PersonSchema(
         person_id=person.id,
         username=person.email or "",
         display_name=person.display_name or "",
-        photo_url="/me/bio/photo" if (profile and profile.profile_photo is not None) else None,
+        photo_url=_PROFILE_PHOTO_URL if (profile and profile.profile_photo is not None) else None,
         bio=None,
         location=location,
         verification=verification,
@@ -108,34 +134,43 @@ def person_to_person_schema(
 
 
 def experience_card_to_schema(card: ExperienceCard) -> ExperienceCardSchema:
-    """Map ExperienceCard (parent) to ExperienceCardSchema."""
+    """Map an ``ExperienceCard`` (parent) to the domain-v1 ``ExperienceCardSchema``."""
     time = TimeField(
         start=card.start_date.isoformat() if card.start_date else None,
         end=card.end_date.isoformat() if card.end_date else None,
         ongoing=card.is_current,
         text=None,
-        confidence="medium",
+        confidence=_DEFAULT_CONFIDENCE,
     )
     location = LocationWithConfidence(
         city=None,
         region=None,
         country=None,
         text=card.location,
-        confidence="medium",
+        confidence=_DEFAULT_CONFIDENCE,
     )
     roles = []
     if card.normalized_role:
-        roles.append(RoleItem(label=card.normalized_role, seniority=card.seniority_level, confidence="medium"))
+        roles.append(
+            RoleItem(
+                label=card.normalized_role,
+                seniority=card.seniority_level,
+                confidence=_DEFAULT_CONFIDENCE,
+            )
+        )
+
     privacy = PrivacyField(visibility="profile_only", sensitive=False)
     quality = QualityField(
-        overall_confidence="medium",
+        overall_confidence=_DEFAULT_CONFIDENCE,
         claim_state="self_claim",
         needs_clarification=False,
         clarifying_question=None,
     )
     updated = getattr(card, "updated_at", None) or card.created_at
-    valid_intents = get_args(Intent)
-    intent: Intent = card.intent_primary if (card.intent_primary and card.intent_primary in valid_intents) else "other"
+
+    raw_intent = card.intent_primary
+    intent: Intent = raw_intent if (raw_intent and raw_intent in _VALID_INTENTS) else "other"
+
     return ExperienceCardSchema(
         id=card.id,
         person_id=card.user_id,

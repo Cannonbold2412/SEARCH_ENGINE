@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { motion } from "framer-motion";
-import { BackLink } from "@/components/back-link";
+import { BackLink } from "@/components/common";
 import { BuilderChat, VapiVoiceWidget } from "@/components/builder";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

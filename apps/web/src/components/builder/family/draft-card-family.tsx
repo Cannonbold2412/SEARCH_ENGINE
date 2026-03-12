@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { TiltCard } from "@/components/tilt-card";
+import { TiltCard } from "@/components/common";
 import { CardTypeIcon } from "../card/card-type-icon";
 import {
   CardDetails,

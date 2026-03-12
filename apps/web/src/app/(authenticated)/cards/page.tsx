@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { BackLink } from "@/components/back-link";
+import { BackLink } from "@/components/common";
 import { PageLoading } from "@/components/feedback";
 import { SavedCardFamily } from "@/components/builder";
 import { api } from "@/lib/api";

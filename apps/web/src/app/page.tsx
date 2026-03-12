@@ -1,23 +1,31 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/contexts/auth-context";
-import { getPostAuthPath } from "@/lib/auth-flow";
-import { LoadingScreen } from "@/components/feedback";
+import {
+  LandingNavbar,
+  LandingHero,
+  SocialProofBar,
+  ProblemSection,
+  HowItWorks,
+  ForRecruiters,
+  ForPeople,
+  Examples,
+  CTASection,
+  LandingFooter,
+} from "@/components/landing";
 
 export default function RootPage() {
-  const { isAuthenticated, isAuthLoading, onboardingStep } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (isAuthLoading) return;
-    if (!isAuthenticated) {
-      router.replace("/login");
-      return;
-    }
-    router.replace(getPostAuthPath(onboardingStep));
-  }, [isAuthenticated, isAuthLoading, onboardingStep, router]);
-
-  return <LoadingScreen />;
+  return (
+    <main className="bg-background min-h-screen overflow-x-hidden">
+      <LandingNavbar />
+      <LandingHero />
+      <SocialProofBar />
+      <ProblemSection />
+      <HowItWorks />
+      <ForRecruiters />
+      <ForPeople />
+      <Examples />
+      <CTASection />
+      <LandingFooter />
+    </main>
+  );
 }

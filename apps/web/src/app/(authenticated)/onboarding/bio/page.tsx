@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
-import { BackLink } from "@/components/back-link";
+import { BackLink } from "@/components/common";
 import { PageLoading, PageError, ErrorMessage } from "@/components/feedback";
 import { VisibilitySection, type VisibilityMode } from "@/components/onboarding/visibility-section";
 import { api, apiUpload, type ApiOptions } from "@/lib/api";

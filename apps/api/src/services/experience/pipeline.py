@@ -1,28 +1,34 @@
 """
 Experience Card Pipeline
+========================
 
 Orchestrates: rewrite → extract → validate → persist → embed.
 
-SECTIONS (in order):
-  1. Rewrite cache    - In-process cache for rewritten raw text (avoids duplicate LLM calls).
-  2. Models           - Pydantic models for LLM response validation (Card, Family, etc.).
-  3. Parsing          - JSON extraction, parse_llm_response_to_families, parent/child normalization.
-  4. Metadata         - inject_metadata_into_family.
-  5. Field extraction - Date parsing, extract_time_fields, extract_location_fields, normalize_card_title.
-  6. Persistence      - card_to_experience_card_fields, card_to_child_fields, persist_families.
-  7. Serialization    - serialize_card_for_response.
-  8. Fill missing     - fill_missing_fields_from_text (edit-form LLM fill).
-  9. Clarify flow     - _run_clarify_flow, clarify_experience_interactive.
-  10. Public API      - rewrite_raw_text, detect_experiences, next_draft_run_version, run_draft_single.
+Sections (in order)
+-------------------
+1. Constants        - Named LLM token budgets, field length caps, loop limits.
+2. Rewrite cache    - In-process SHA-256 cache for rewritten raw text.
+3. Models           - Pydantic models for LLM response validation (Card, Family, etc.).
+4. Parsing          - JSON extraction, parse_llm_response_to_families, child normalisation.
+5. Metadata         - inject_metadata_into_family.
+6. Field extraction - Date parsing, extract_time_fields, extract_location_fields, normalize_card_title.
+7. Persistence      - card_to_experience_card_fields, card_to_child_fields, persist_families.
+8. Serialisation    - serialize_card_for_response.
+9. Fill missing     - fill_missing_fields_from_text (edit-form LLM fill).
+10. Clarify flow    - _run_clarify_flow, clarify_experience_interactive, and LLM helpers.
+11. Public API      - rewrite_raw_text, detect_experiences, next_draft_run_version, run_draft_single.
 
-Embedding: After persist_families(), embed_experience_cards() builds search-document text per card,
+Embedding
+---------
+After persist_families(), embed_experience_cards() builds search-document text per card,
 fetches vectors from the embedding provider, and flushes. Search-document text is defined in
 search_document; embedding logic lives in embedding.
 
-Public API (for routers):
-  - rewrite_raw_text, detect_experiences, run_draft_single
-  - fill_missing_fields_from_text, clarify_experience_interactive
-  - DEFAULT_MAX_PARENT_CLARIFY, DEFAULT_MAX_CHILD_CLARIFY (re-exported from clarify)
+Public API (for routers)
+------------------------
+- rewrite_raw_text, detect_experiences, run_draft_single
+- fill_missing_fields_from_text, clarify_experience_interactive
+- DEFAULT_MAX_PARENT_CLARIFY, DEFAULT_MAX_CHILD_CLARIFY (re-exported from clarify)
 """
 
 from __future__ import annotations
@@ -55,6 +61,7 @@ from src.db.models import RawExperience, DraftSet, ExperienceCard, ExperienceCar
 from src.domain import ALLOWED_CHILD_TYPES
 from src.schemas import RawExperienceCreate
 from src.providers import get_chat_provider, ChatServiceError
+from src.utils import extract_json_from_llm_response as _extract_json_from_text
 from src.prompts.experience_card import (
     PROMPT_REWRITE,
     PROMPT_DETECT_EXPERIENCES,
@@ -64,6 +71,7 @@ from src.prompts.experience_card import (
     PROMPT_CLARIFY_PLANNER,
     PROMPT_CLARIFY_QUESTION_WRITER,
     PROMPT_CLARIFY_APPLY_ANSWER,
+    PROMPT_PROFILE_REFLECTION,
     fill_prompt,
 )
 from .child_value import (
@@ -93,6 +101,30 @@ from .embedding import embed_experience_cards
 from .errors import PipelineError, PipelineStage
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+# Named LLM token budgets — change here to affect all callers.
+
+_LLM_TOKENS_REWRITE = 2048
+_LLM_TOKENS_EXTRACT = 8192
+_LLM_TOKENS_FILL_MISSING = 2048
+_LLM_TOKENS_DETECT = 1024
+_LLM_TOKENS_PROFILE_REFLECTION = 128
+_LLM_TOKENS_CLARIFY_PLAN = 512
+_LLM_TOKENS_CLARIFY_QUESTION = 256
+_LLM_TOKENS_CLARIFY_APPLY = 512
+
+# Maximum iterations for the autofill loop inside _run_clarify_flow.
+_MAX_AUTOFILL_ITERATIONS = 5
+
+# Field length caps (matching DB column widths).
+_MAX_FIELD_SHORT = 100   # domain, sub_domain, company_type, employment_type
+_MAX_FIELD_NORM = 255    # normalised columns (company_norm, team_norm, etc.)
+_MAX_FIELD_TITLE = 500   # card title
+_MAX_SUMMARY_LEN = 10_000
+_MAX_INTENT_SECONDARY = 20
 
 # =============================================================================
 # REWRITE CACHE
@@ -351,57 +383,6 @@ class ExtractorResponse(BaseModel):
 # and parse_llm_response_to_families.
 # =============================================================================
 
-def _strip_json_fence(text: str) -> str:
-    """Remove markdown code fences from JSON response."""
-    text = text.strip()
-    if not text.startswith("```"):
-        return text
-    
-    lines = text.split("\n")
-    if lines[0].startswith("```"):
-        lines = lines[1:]
-    if lines and lines[-1].strip() == "```":
-        lines = lines[:-1]
-    
-    return "\n".join(lines).strip()
-
-
-def _extract_json_from_text(text: str) -> str:
-    """Find first JSON object/array in text, handling LLM preambles."""
-    text = text.strip()
-    
-    # Try to find JSON markers
-    for start_char in ['{', '[']:
-        start_idx = text.find(start_char)
-        if start_idx == -1:
-            continue
-        
-        # Simple brace counting to find matching close
-        json_candidate = text[start_idx:]
-        try:
-            # Let json.loads validate it
-            json.loads(json_candidate)
-            return json_candidate
-        except json.JSONDecodeError:
-            # Try to find the matching brace
-            depth = 0
-            close_char = '}' if start_char == '{' else ']'
-            
-            for i, char in enumerate(json_candidate):
-                if char == start_char:
-                    depth += 1
-                elif char == close_char:
-                    depth -= 1
-                    if depth == 0:
-                        candidate = json_candidate[:i+1]
-                        try:
-                            json.loads(candidate)
-                            return candidate
-                        except json.JSONDecodeError:
-                            continue
-    
-    raise ValueError("No valid JSON found in text")
-
 
 def _is_time_empty(t: Any) -> bool:
     """True if time is missing or has no meaningful value."""
@@ -601,11 +582,8 @@ def parse_llm_response_to_families(
         )
     
     try:
-        # Clean response text
-        cleaned = _strip_json_fence(response_text)
-        json_str = _extract_json_from_text(cleaned)
+        json_str = _extract_json_from_text(response_text)
         data = json.loads(json_str)
-        
     except (ValueError, json.JSONDecodeError) as e:
         raise PipelineError(
             stage,
@@ -867,34 +845,33 @@ def extract_company(card: Card) -> Optional[str]:
                 company = entity.name
                 break
     
-    return company[:255].strip() if company else None
+    return company[:_MAX_FIELD_NORM].strip() if company else None
 
 
 def extract_team(card: Card) -> Optional[str]:
     """Extract team name from card."""
     team = card.team
-    
+
     if not team:
-        # Check entities
         for entity in card.entities:
             if entity.type == "team":
                 team = entity.name
                 break
-    
-    return team[:255].strip() if team else None
+
+    return team[:_MAX_FIELD_NORM].strip() if team else None
 
 
 def extract_role_info(card: Card) -> tuple[Optional[str], Optional[str]]:
-    """Extract role title and seniority."""
+    """Extract role title and seniority level from card."""
     if card.roles:
         first_role = card.roles[0]
-        title = first_role.label[:255].strip() if first_role.label else None
-        seniority = first_role.seniority[:255].strip() if first_role.seniority else None
+        title = first_role.label[:_MAX_FIELD_NORM].strip() if first_role.label else None
+        seniority = first_role.seniority[:_MAX_FIELD_NORM].strip() if first_role.seniority else None
         if title or seniority:
             return title, seniority
 
-    title = (card.normalized_role or "").strip()[:255] or None
-    seniority = (card.seniority_level or "").strip()[:255] or None
+    title = (card.normalized_role or "").strip()[:_MAX_FIELD_NORM] or None
+    seniority = (card.seniority_level or "").strip()[:_MAX_FIELD_NORM] or None
     return title, seniority
 
 
@@ -910,33 +887,31 @@ def normalize_card_title(card: Card, fallback_text: Optional[str] = None) -> str
     5. fallback_text
     6. "Experience"
     """
-    # Check headline
+    _GENERIC_TITLES = {"general experience", "unspecified experience"}
+    _FIRST_LINE_MAX = 80
+
     headline = (card.headline or "").strip()
-    if headline and headline.lower() not in {"general experience", "unspecified experience"}:
-        return headline[:500]
+    if headline and headline.lower() not in _GENERIC_TITLES:
+        return headline[:_MAX_FIELD_TITLE]
 
-    # Check title
     title = (card.title or "").strip()
-    if title and title.lower() not in {"general experience", "unspecified experience"}:
-        return title[:500]
+    if title and title.lower() not in _GENERIC_TITLES:
+        return title[:_MAX_FIELD_TITLE]
 
-    # Try summary first line
     summary = (card.summary or "").strip()
     if summary:
-        first_line = summary.split("\n")[0].strip()[:80]
+        first_line = summary.split("\n")[0].strip()[:_FIRST_LINE_MAX]
         if first_line:
             return first_line
 
-    # Try raw_text first line
     raw_text = (card.raw_text or "").strip()
     if raw_text:
-        first_line = raw_text.split("\n")[0].strip()[:80]
+        first_line = raw_text.split("\n")[0].strip()[:_FIRST_LINE_MAX]
         if first_line:
             return first_line
 
-    # Use fallback
     if fallback_text:
-        return fallback_text.split("\n")[0].strip()[:80] or "Experience"
+        return fallback_text.split("\n")[0].strip()[:_FIRST_LINE_MAX] or "Experience"
 
     return "Experience"
 
@@ -962,38 +937,39 @@ def card_to_experience_card_fields(
     role_title, role_seniority = extract_role_info(card)
 
     raw_text = (card.raw_text or "").strip() or None
-    summary = (card.summary or "")[:10000]
+    summary = (card.summary or "")[:_MAX_SUMMARY_LEN]
     title = normalize_card_title(card)
-    
-    # Extract domain fields
-    domain = (card.domain or "").strip()[:100] or None
-    sub_domain = (card.sub_domain or "").strip()[:100] or None
+
+    domain = (card.domain or "").strip()[:_MAX_FIELD_SHORT] or None
+    sub_domain = (card.sub_domain or "").strip()[:_MAX_FIELD_SHORT] or None
 
     return {
         "user_id": person_id,
         "raw_text": raw_text,
-        "title": title[:500],
+        "title": title[:_MAX_FIELD_TITLE],
         "normalized_role": role_title,
         "domain": domain,
-        "domain_norm": domain.lower().strip()[:255] if domain else None,
+        "domain_norm": domain.lower().strip()[:_MAX_FIELD_NORM] if domain else None,
         "sub_domain": sub_domain,
-        "sub_domain_norm": sub_domain.lower().strip()[:255] if sub_domain else None,
+        "sub_domain_norm": sub_domain.lower().strip()[:_MAX_FIELD_NORM] if sub_domain else None,
         "company_name": company,
-        "company_norm": company.lower().strip()[:255] if company else None,
-        "company_type": (card.company_type or "").strip()[:100] or None,
+        "company_norm": company.lower().strip()[:_MAX_FIELD_NORM] if company else None,
+        "company_type": (card.company_type or "").strip()[:_MAX_FIELD_SHORT] or None,
         "team": team,
-        "team_norm": team.lower().strip()[:255] if team else None,
+        "team_norm": team.lower().strip()[:_MAX_FIELD_NORM] if team else None,
         "start_date": start_date,
         "end_date": end_date,
         "is_current": is_ongoing if isinstance(is_ongoing, bool) else None,
-        "location": location_text[:255] if location_text else None,
-        "city": city[:255] if city else None,
-        "country": country[:255] if country else None,
+        "location": location_text[:_MAX_FIELD_NORM] if location_text else None,
+        "city": city[:_MAX_FIELD_NORM] if city else None,
+        "country": country[:_MAX_FIELD_NORM] if country else None,
         "is_remote": is_remote if isinstance(is_remote, bool) else None,
-        "employment_type": (card.employment_type or "").strip()[:100] or None,
+        "employment_type": (card.employment_type or "").strip()[:_MAX_FIELD_SHORT] or None,
         "summary": summary,
         "intent_primary": card.intent or card.intent_primary,
-        "intent_secondary": [s for s in card.intent_secondary if isinstance(s, str) and s.strip()][:20],
+        "intent_secondary": [
+            s for s in card.intent_secondary if isinstance(s, str) and s.strip()
+        ][:_MAX_INTENT_SECONDARY],
         "seniority_level": role_seniority,
         "confidence_score": card.confidence_score,
         # Builder draft cards start as non-visible; they become visible only after
@@ -1209,7 +1185,7 @@ async def fill_missing_fields_from_text(
     )
     chat = get_chat_provider()
     try:
-        response = await chat.chat(prompt, max_tokens=2048)
+        response = await chat.chat(prompt, max_tokens=_LLM_TOKENS_FILL_MISSING)
     except ChatServiceError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
@@ -1259,6 +1235,8 @@ def _clarify_result(
     *,
     clarifying_question: Optional[str] = None,
     filled: Optional[dict] = None,
+    profile_update: Optional[dict] = None,
+    profile_reflection: Optional[str] = None,
     should_stop: bool = False,
     stop_reason: Optional[str] = None,
     target_type: Optional[str] = None,
@@ -1273,6 +1251,8 @@ def _clarify_result(
     return {
         "clarifying_question": clarifying_question,
         "filled": filled or {},
+        "profile_update": profile_update or {},
+        "profile_reflection": profile_reflection,
         "should_stop": should_stop,
         "stop_reason": stop_reason,
         "target_type": target_type,
@@ -1283,6 +1263,80 @@ def _clarify_result(
         "asked_history_entry": asked_history_entry,
         "canonical_family": canonical_family,
     }
+
+
+def _profile_axes_for_target(
+    target_type: Optional[str],
+    target_field: Optional[str],
+    target_child_type: Optional[str],
+) -> list[str]:
+    if target_type == "child":
+        mapping = {
+            "skills": ["skills", "unique_advantages"],
+            "tools": ["skills", "knowledge_areas"],
+            "responsibilities": ["skills", "personality_traits"],
+            "achievements": ["unique_advantages", "opportunities"],
+            "metrics": ["unique_advantages", "opportunities"],
+            "collaborations": ["personality_traits", "possible_connections"],
+            "domain_knowledge": ["knowledge_areas", "interests"],
+            "exposure": ["interests", "opportunities"],
+            "education": ["knowledge_areas", "interests"],
+            "certifications": ["knowledge_areas", "opportunities"],
+        }
+        return mapping.get(target_child_type or "", ["skills"])
+    mapping = {
+        "headline": ["experiences"],
+        "role": ["skills"],
+        "summary": ["experiences", "motivations"],
+        "company_name": ["experiences"],
+        "team": ["possible_connections"],
+        "time": ["experiences"],
+        "location": ["possible_connections"],
+        "location.is_remote": ["personality_traits"],
+        "domain": ["knowledge_areas", "interests"],
+        "sub_domain": ["knowledge_areas", "interests"],
+        "intent_primary": ["motivations", "interests"],
+        "seniority_level": ["unique_advantages"],
+        "employment_type": ["opportunities"],
+        "company_type": ["experiences"],
+    }
+    return mapping.get(target_field or "", ["experiences"])
+
+
+async def _extract_profile_reflection_llm(
+    cleaned_text: str,
+    canonical_family: dict,
+    asked_history: list[dict],
+) -> Optional[str]:
+    """Generate a short human reflection about the person. Returns only the reflection string.
+
+    The previous version also produced a structured profile_update dict, but that data
+    has no DB persistence target and was never consumed by the client, so it was
+    spending tokens on output that was immediately discarded on every clarify call.
+    """
+    prompt = fill_prompt(
+        PROMPT_PROFILE_REFLECTION,
+        cleaned_text=cleaned_text,
+        canonical_card_json=json.dumps(canonical_family, indent=2),
+        asked_history_json=json.dumps(asked_history, indent=2),
+    )
+    chat = get_chat_provider()
+    try:
+        response = await chat.chat(prompt, max_tokens=_LLM_TOKENS_PROFILE_REFLECTION)
+    except ChatServiceError as e:
+        logger.warning("profile reflection LLM failed: %s", e)
+        return None
+    if not response or not response.strip():
+        return None
+    try:
+        json_str = _extract_json_from_text(response)
+        data = json.loads(json_str)
+        if not isinstance(data, dict):
+            return None
+        return str(data.get("profile_reflection") or "").strip() or None
+    except (ValueError, json.JSONDecodeError):
+        logger.warning("profile reflection parse failed")
+        return None
 
 
 def _build_asked_history_and_counts(
@@ -1345,7 +1399,7 @@ async def _plan_next_clarify_step_llm(
     )
     chat = get_chat_provider()
     try:
-        response = await chat.chat(prompt, max_tokens=512)
+        response = await chat.chat(prompt, max_tokens=_LLM_TOKENS_CLARIFY_PLAN)
     except ChatServiceError as e:
         logger.warning("clarify planner LLM failed: %s", e)
         return None
@@ -1379,7 +1433,7 @@ async def _generate_clarify_question_llm(plan: ClarifyPlan, canonical_family: di
     )
     chat = get_chat_provider()
     try:
-        response = await chat.chat(prompt, max_tokens=256)
+        response = await chat.chat(prompt, max_tokens=_LLM_TOKENS_CLARIFY_QUESTION)
     except ChatServiceError as e:
         logger.warning("clarify question writer LLM failed: %s", e)
         return None
@@ -1416,7 +1470,7 @@ async def _apply_clarify_answer_patch_llm(
     )
     chat = get_chat_provider()
     try:
-        response = await chat.chat(prompt, max_tokens=512)
+        response = await chat.chat(prompt, max_tokens=_LLM_TOKENS_CLARIFY_APPLY)
     except ChatServiceError as e:
         logger.warning("clarify apply answer LLM failed: %s", e)
         return None, True, "I'd love to capture that—could you rephrase it? I want to get it right."
@@ -1505,6 +1559,11 @@ async def _run_clarify_flow(
                 "target_type": plan_for_apply.target_type,
                 "target_field": plan_for_apply.target_field,
                 "target_child_type": plan_for_apply.target_child_type,
+                "profile_axes": _profile_axes_for_target(
+                    plan_for_apply.target_type,
+                    plan_for_apply.target_field,
+                    plan_for_apply.target_child_type,
+                ),
                 "text": retry_question,
             }
             return _clarify_result(
@@ -1528,9 +1587,16 @@ async def _run_clarify_flow(
     else:
         cleaned_text = await rewrite_raw_text(raw_text)
 
+    profile_update: dict = {}
+    profile_reflection = await _extract_profile_reflection_llm(
+        cleaned_text,
+        canonical,
+        asked_history,
+    )
+
     # 4) Plan -> validate -> ask or autofill or stop
     plan = None
-    for _ in range(5):  # cap autofill loop
+    for _ in range(_MAX_AUTOFILL_ITERATIONS):
         raw_plan = await _plan_next_clarify_step_llm(
             cleaned_text, canonical, asked_history,
             parent_asked_count, child_asked_count, max_parent, max_child,
@@ -1561,6 +1627,8 @@ async def _run_clarify_flow(
                 flat_parent.get("start_date"), flat_parent.get("end_date"), flat_parent.get("time_text"),
             )
             return _clarify_result(
+                profile_update=profile_update,
+                profile_reflection=profile_reflection,
                 filled=flat_parent,
                 should_stop=True,
                 stop_reason=stop_reason,
@@ -1588,10 +1656,17 @@ async def _run_clarify_flow(
                 "target_type": validated_plan.target_type,
                 "target_field": validated_plan.target_field,
                 "target_child_type": validated_plan.target_child_type,
+                "profile_axes": _profile_axes_for_target(
+                    validated_plan.target_type,
+                    validated_plan.target_field,
+                    validated_plan.target_child_type,
+                ),
                 "text": question,
             }
             return _clarify_result(
                 clarifying_question=question,
+                profile_update=profile_update,
+                profile_reflection=profile_reflection,
                 should_stop=False,
                 target_type=validated_plan.target_type,
                 target_field=validated_plan.target_field,
@@ -1604,6 +1679,8 @@ async def _run_clarify_flow(
     # Loop exhausted (autofill only)
     flat_parent = canonical_parent_to_flat_response(canonical.get("parent") or {})
     return _clarify_result(
+        profile_update=profile_update,
+        profile_reflection=profile_reflection,
         filled=flat_parent,
         should_stop=True,
         stop_reason="Max autofill iterations",
@@ -1616,24 +1693,24 @@ async def _run_clarify_flow(
 def _fallback_question_for_plan(plan: ClarifyPlan) -> str:
     """Deterministic fallback when LLM question writer fails. Field-targeted, curious tone."""
     _PARENT_QUESTIONS = {
-        "headline": "I'm curious—what would you call this role or experience in one line?",
-        "role": "What was your job title or role there? I'd love to capture that.",
-        "summary": "Can you give me a quick summary—what did you do there and why did it matter?",
-        "company_name": "Which company or organization was this at? I'd like to get that down.",
-        "team": "Which team or group were you part of? I'm curious about the setup.",
-        "time": "Roughly when did you do this? Even a year or range helps—e.g. 2020–2022 or Jan 2021.",
-        "location": "Where was this based? City, country—whatever you remember.",
-        "domain": "What domain or industry was this in? I'd love to categorize it right.",
-        "sub_domain": "Any specific sub-domain or focus within that? I want to capture the details.",
-        "intent_primary": "What best describes this—work, project, education, or something else?",
+        "headline": "If you had to describe this chapter in one line, what would you call it?",
+        "role": "What role were you really playing there?",
+        "summary": "What do you feel you were really doing there, and why did it matter?",
+        "company_name": "Who was this with, or what organization was it connected to?",
+        "team": "What team or group were you part of?",
+        "time": "Roughly when was this happening? Even an approximate range helps.",
+        "location": "Where was this based, or where were you doing it from?",
+        "domain": "What world or domain would you say this sat in?",
+        "sub_domain": "Was there a more specific niche or focus inside that?",
+        "intent_primary": "What kind of thing was this for you—work, a project, learning, or something else?",
     }
     if plan.target_type == "parent":
         return _PARENT_QUESTIONS.get(
-            plan.target_field or "", "I'd love to know more—can you add the company name, time period, or location?"
+            plan.target_field or "", "I’d love to understand that a little better—what context would you add?"
         )
     if plan.target_type == "child":
-        return f"I'm curious—what specific {plan.target_child_type or 'details'} would you like to add?"
-    return "I'd love to capture more—which can you add: company name, time period, or location?"
+        return f"I’m curious—what stands out most about the {plan.target_child_type or 'details'} here?"
+    return "I’d love to understand that a little better—what context would you add?"
 
 
 def _build_choose_focus_options_from_detected(detected_experiences: list[dict]) -> list[dict]:
@@ -1681,7 +1758,7 @@ async def clarify_experience_interactive(
         }
     if not raw_text or not raw_text.strip():
         return _clarify_result(
-            clarifying_question="I'd love to hear about an experience you're proud of. What's one you'd like to add? Tell me in your own words.",
+            clarifying_question="To get a sense of you, tell me about a few things you’ve worked on or cared about lately. It can be projects, roles, or anything that felt meaningful.",
         )
 
     family = card_family if isinstance(card_family, dict) and (card_family.get("parent") is not None or (card_family.get("children") is not None)) else None
@@ -1744,7 +1821,7 @@ async def rewrite_raw_text(raw_text: str) -> str:
     try:
         chat = get_chat_provider()
         prompt = fill_prompt(PROMPT_REWRITE, user_text=raw_text)
-        rewritten = await chat.chat(prompt, max_tokens=2048)
+        rewritten = await chat.chat(prompt, max_tokens=_LLM_TOKENS_REWRITE)
 
         cleaned = " ".join((rewritten or "").split()).strip()
 
@@ -1779,7 +1856,7 @@ async def detect_experiences(raw_text: str) -> dict:
     prompt = fill_prompt(PROMPT_DETECT_EXPERIENCES, cleaned_text=cleaned)
     chat = get_chat_provider()
     try:
-        response = await chat.chat(prompt, max_tokens=1024)
+        response = await chat.chat(prompt, max_tokens=_LLM_TOKENS_DETECT)
     except ChatServiceError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     if not response or not response.strip():
@@ -1876,7 +1953,7 @@ async def run_draft_single(
         experience_count=total,
     )
     try:
-        extract_response = await chat.chat(extract_prompt, max_tokens=8192)
+        extract_response = await chat.chat(extract_prompt, max_tokens=_LLM_TOKENS_EXTRACT)
         # Run CPU-bound parsing in thread pool to avoid blocking the event loop
         extracted_families = await asyncio.to_thread(
             parse_llm_response_to_families,

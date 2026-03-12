@@ -5,8 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { getPostAuthPath, isPathAllowedForStep } from "@/lib/auth-flow";
 import { SearchProvider } from "@/contexts/search-context";
-import { AppNav } from "@/components/app-nav";
+import { AppNav } from "@/components/navigation";
 import { SidebarWidthProvider, useSidebarWidth } from "@/contexts/sidebar-width-context";
+import { LoadingScreen } from "@/components/feedback";
 
 import type { ReactNode } from "react";
 
@@ -33,12 +34,7 @@ export default function AuthenticatedLayout({
   }, [isAuthLoading, isAuthenticated, onboardingStep, requiredPath, routeAllowed, router]);
 
   if (isAuthLoading || !isAuthenticated || !routeAllowed) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
-        <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30 border-t-foreground animate-spin" />
-        <p className="text-sm text-muted-foreground">Loading...</p>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (

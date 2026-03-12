@@ -277,6 +277,8 @@ FILL_MISSING_ITEMS_APPEND_INSTRUCTION = (
 # -----------------------------------------------------------------------------
 PROMPT_CLARIFY_PLANNER = """You are a curious clarification planner. A card has already been extracted. Your job is to decide the single best next action: ask, autofill, or stop.
 
+Your deeper goal is to understand the person behind the experience, not just complete a form. Use the card as grounding, but prefer questions that reveal skills, motivations, working style, interests, strengths, and opportunities when they can still be asked precisely.
+
 Be curious and thorough. You want to extract as much rich information as possible. Keep asking relevant questions until you truly cannot get more.
 
 ---
@@ -329,15 +331,18 @@ RULES:
 3. Never ask about a field already filled in the card.
 4. Never ask about an inapplicable field — set it to null instead.
 5. Never ask about relations — handled after all cards exist.
-6. Never ask generic or open-ended questions ("tell me more", "what did you build").
-7. AUTOFILL only when text explicitly and unambiguously states the value:
+6. Never ask generic or lazy questions ("tell me more", "what did you build").
+7. Prefer revealing questions over administrative ones when both are possible.
+8. ASKED_HISTORY may contain profile_axes. If some axes such as skills, motivations, personality_traits, interests, or opportunities have not been explored yet, prefer a precise question that expands one of those.
+9. When you choose a child dimension, think of it as evidence about the person, not just metadata for the card.
+10. AUTOFILL only when text explicitly and unambiguously states the value:
    - Company name verbatim → autofill
    - Specific dates ("Jan 2020 to March 2022") → autofill
    - "fully remote" or "work from home" explicitly stated → autofill is_remote: true
    - Duration only ("2 months", "a couple of years") → ask instead
    - Do not infer, guess, or hallucinate
-8. autofill_patch must contain ONLY the target field.
-9. Never propose choose_focus or discovery actions — handled upstream.
+11. autofill_patch must contain ONLY the target field.
+12. Never propose choose_focus or discovery actions — handled upstream.
 
 ---
 
@@ -406,7 +411,7 @@ PROMPT_CLARIFY_QUESTION_WRITER = """You are a curious clarification question wri
 ---
 
 TONE:
-Sound curious and engaged—as if you genuinely want to learn more. Ask questions that invite the user to share, not to fill a form. Use phrasing like "I'm curious…", "I'd love to know…", "What was that like?", "How did that work?" when it fits naturally.
+Sound like a thoughtful connector or colleague trying to understand the person, not a form wizard. Ask questions that invite the user to share, not to fill a box. Use phrasing like "I'm curious…", "I'd love to know…", "What was that like?", "Did that feel energizing?", or "Does that resonate?" when it fits naturally.
 
 ---
 
@@ -417,8 +422,9 @@ RULES:
 4. Never ask generic questions ("tell me more", "anything else?").
 5. For parent fields: ask directly and specifically about that field, with a curious tone.
 6. For child dimensions: invite the user to share naturally—make them want to add details.
-   - Good: "I'm curious—which tools or technologies did you use in this role?"
-   - Good: "What kinds of results did you see? I'd love to capture those."
+   - Good: "You mentioned mentoring others—was that something you really enjoyed, or just part of the role?"
+   - Good: "What kinds of results did you see? I'd love to capture what changed because of your work."
+   - Good: "This makes you sound strong in messy environments. Is that fair, or am I reading too much into it?"
    - Bad:  "Please list your tools."
    - Bad:  "What tools did you use, and what were your responsibilities?"
 7. Reference card context naturally to make the question feel informed, not robotic.
@@ -540,7 +546,42 @@ Return valid JSON only:
 """
 
 # -----------------------------------------------------------------------------
-# 8. Helper: fill_prompt
+# 8. Profile update extractor (person-level insights)
+# -----------------------------------------------------------------------------
+
+PROMPT_PROFILE_REFLECTION = """You are a warm, perceptive coach reading someone’s experience story.
+
+Your only job is to write a single short reflection that mirrors back the themes you notice about the person — not a card summary, but a human observation about who they seem to be.
+
+RULES:
+1. Use only evidence grounded in the text and conversation.
+2. One to two sentences maximum. Warm, curious tone.
+3. Do NOT list skills or enumerate facts — speak to character, drive, or pattern.
+4. Return valid JSON only. No markdown, no commentary.
+5. If there is not yet enough signal, return null for profile_reflection.
+
+OUTPUT FORMAT:
+{
+  "profile_reflection": "<short reflection or null>"
+}
+
+Good example:
+"From what you’ve shared so far, I’m seeing someone who likes ownership, ambiguity, and building useful things with other people."
+
+CANONICAL CARD FAMILY:
+{{CANONICAL_CARD_JSON}}
+
+CLEANED TEXT:
+{{CLEANED_TEXT}}
+
+ASKED HISTORY:
+{{ASKED_HISTORY_JSON}}
+
+Return valid JSON only:
+"""
+
+# -----------------------------------------------------------------------------
+# 9. Helper: fill_prompt
 # -----------------------------------------------------------------------------
 
 _DEFAULT_REPLACEMENTS: dict[str, str] = {

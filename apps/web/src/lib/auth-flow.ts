@@ -1,3 +1,11 @@
+/**
+ * Auth routing helpers and localStorage key constants.
+ *
+ * Onboarding flow:
+ *   "bio"     → /onboarding/bio   (fill profile)
+ *   "builder" → /builder          (add experience cards)
+ *   null      → /home             (fully onboarded)
+ */
 export type OnboardingStep = "bio" | "builder";
 export const AUTH_TOKEN_KEY = "token";
 export const ONBOARDING_STEP_KEY = "onboarding_step";

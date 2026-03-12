@@ -1,6 +1,6 @@
 """
 Domain types and schemas for Experience Cards.
-Single source of truth for prompts, validation, and API.
+Single source of truth for prompts, validation, and API responses.
 """
 
 from datetime import datetime
@@ -8,9 +8,9 @@ from typing import Literal, Optional, get_args
 
 from pydantic import BaseModel, Field
 
-# -----------------------------------------------------------------------------
-# 1. Enums
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# 1. Enums (Literal types used for validation and prompt generation)
+# ---------------------------------------------------------------------------
 
 Intent = Literal[
     "work", "education", "project", "business", "research",
@@ -32,18 +32,18 @@ SeniorityLevel = Literal[
     "intern", "junior", "mid", "senior", "lead", "principal",
     "staff", "manager", "director", "vp", "executive",
     "founder", "independent", "volunteer", "student",
-    "apprentice",      # NEW — learning under a master/ustaad
-    "owner",           # NEW — family business / own shop
+    "apprentice",   # learning under a master/ustaad
+    "owner",        # family business / own shop
     "other",
 ]
 
 EmploymentType = Literal[
     "full_time", "part_time", "contract", "freelance",
     "internship", "volunteer", "self_employed", "founder",
-    "apprenticeship",  # formal or informal, under a master
-    "family_business", # NEW — working in family-owned business
-    "daily_wage",      # NEW — informal daily wage / labour
-    "gig",             # NEW — gig economy (delivery, ride-share etc.)
+    "apprenticeship",   # formal or informal, under a master
+    "family_business",  # working in a family-owned business
+    "daily_wage",       # informal daily wage / labour
+    "gig",              # gig economy (delivery, ride-share, etc.)
     "other",
 ]
 
@@ -51,9 +51,9 @@ CompanyType = Literal[
     "startup", "scaleup", "mnc", "sme", "agency", "ngo",
     "government", "university", "research_institution",
     "self_employed", "cooperative",
-    "family_business",    # NEW — family-owned business
-    "informal",           # NEW — street vendor, local shop, dhaba etc.
-    "master_apprentice",  # NEW — ustaad/master-based learning or work
+    "family_business",    # family-owned business
+    "informal",           # street vendor, local shop, dhaba, etc.
+    "master_apprentice",  # ustaad/master-based learning or work
     "other",
 ]
 
@@ -78,17 +78,17 @@ EntityType = Literal[
     "instrument", "method", "process",
 ]
 
-# NEW — describes how two parallel experiences relate to each other
+# Describes how two parallel experiences relate to each other.
 ExperienceRelationType = Literal[
-    "parallel",       # running simultaneously (job + side business)
-    "sequential",     # one after the other
-    "nested",         # one within the other (project within a job)
-    "transitional",   # one led directly to the other
+    "parallel",      # running simultaneously (job + side business)
+    "sequential",    # one after the other
+    "nested",        # one within the other (project within a job)
+    "transitional",  # one led directly to the other
 ]
 
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # 2. Constants
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 ALLOWED_CHILD_TYPES: tuple[str, ...] = (
     "skills", "tools", "metrics", "achievements", "responsibilities",
@@ -97,9 +97,9 @@ ALLOWED_CHILD_TYPES: tuple[str, ...] = (
 
 ENTITY_TAXONOMY: list[str] = list(get_args(EntityType))
 
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # 3. Nested field models
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 class TimeField(BaseModel):
     start: Optional[str] = None       # YYYY-MM | YYYY-MM-DD
@@ -114,7 +114,7 @@ class LocationField(BaseModel):
     region: Optional[str] = None
     country: Optional[str] = None
     text: Optional[str] = None        # user's original phrasing
-    is_remote: Optional[bool] = None  # NEW — explicit remote flag
+    is_remote: Optional[bool] = None
     confidence: Confidence
 
 
@@ -179,12 +179,13 @@ class IndexField(BaseModel):
     embedding_ref: Optional[str] = None
 
 
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # Person (profile) domain types
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 class LocationBasic(BaseModel):
-    """Simple location for person profile."""
+    """Simple location for person profile (no confidence field)."""
+
     city: Optional[str] = None
     region: Optional[str] = None
     country: Optional[str] = None
@@ -192,7 +193,7 @@ class LocationBasic(BaseModel):
 
 class PersonVerification(BaseModel):
     status: str = "unverified"
-    methods: list = Field(default_factory=list)
+    methods: list[str] = Field(default_factory=list)
 
 
 class PersonPrivacyDefaults(BaseModel):
@@ -201,6 +202,7 @@ class PersonPrivacyDefaults(BaseModel):
 
 class PersonSchema(BaseModel):
     """Person profile schema (for /profile, serializers)."""
+
     person_id: str
     username: str
     display_name: str
@@ -213,7 +215,9 @@ class PersonSchema(BaseModel):
     updated_at: datetime
 
 
-# Alias for API/serializers (same shape as LocationField).
+# LocationWithConfidence is the same shape as LocationField.
+# The alias exists so serializers can import a semantically distinct name
+# without duplicating the model definition.
 LocationWithConfidence = LocationField
 
 
@@ -222,19 +226,21 @@ class LanguageField(BaseModel):
     confidence: Confidence
 
 
-# NEW — links two experience cards that overlapped in time
 class ExperienceRelation(BaseModel):
+    """Links two experience cards that overlapped in time."""
+
     related_card_id: str
     relation_type: ExperienceRelationType
-    note: Optional[str] = None        # e.g. "ran this side business while employed at X"
+    note: Optional[str] = None  # e.g. "ran this side business while employed at X"
 
 
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # 4. Experience Card schemas
-# -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
-class _ExperienceCardBase(BaseModel):
+class ExperienceCardBase(BaseModel):
     """Shared fields for parent and child cards."""
+
     id: str
     person_id: str
     created_by: str
@@ -257,8 +263,9 @@ class _ExperienceCardBase(BaseModel):
     updated_at: datetime
 
 
-class ExperienceCardParentSchema(_ExperienceCardBase):
+class ExperienceCardParentSchema(ExperienceCardBase):
     """Parent card — root of a card family."""
+
     parent_id: Optional[str] = None
     depth: Literal[0] = 0
     relation_type: Optional[str] = None
@@ -267,11 +274,12 @@ class ExperienceCardParentSchema(_ExperienceCardBase):
     seniority_level: Optional[SeniorityLevel] = None
     employment_type: Optional[EmploymentType] = None
     company_type: Optional[CompanyType] = None
-    relations: list[ExperienceRelation] = Field(default_factory=list)  # NEW — parallel/overlapping experiences
+    relations: list[ExperienceRelation] = Field(default_factory=list)
 
 
-class ExperienceCardChildSchema(_ExperienceCardBase):
+class ExperienceCardChildSchema(ExperienceCardBase):
     """Child card — belongs to a parent."""
+
     parent_id: str
     depth: Literal[1] = 1
     relation_type: ChildRelationType

@@ -10,8 +10,34 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-outfit)", "system-ui", "sans-serif"],
+        sans: ["var(--font-satoshi)", "var(--font-outfit)", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "monospace"],
+        display: ["var(--font-clash)", "var(--font-outfit)", "system-ui", "sans-serif"],
+        body: ["var(--font-satoshi)", "system-ui", "sans-serif"],
+      },
+      container: {
+        center: true,
+        padding: "2rem",
+        screens: { "2xl": "1400px" },
+      },
+      keyframes: {
+        ticker: {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
+        "glow-pulse": {
+          "0%, 100%": { opacity: "0.4" },
+          "50%": { opacity: "1" },
+        },
+        "typewriter-cursor": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
+        },
+      },
+      animation: {
+        ticker: "ticker 30s linear infinite",
+        "glow-pulse": "glow-pulse 3s ease-in-out infinite",
+        "typewriter-cursor": "typewriter-cursor 1s step-end infinite",
       },
       colors: {
         border: "hsl(var(--border))",
@@ -31,7 +57,7 @@ const config: Config = {
       borderRadius: { lg: "var(--radius)", md: "calc(var(--radius) - 2px)", sm: "calc(var(--radius) - 4px)" },
     },
   },
-  plugins: [],
+  plugins: [require("tailwindcss-animate")],
 };
 
 export default config;

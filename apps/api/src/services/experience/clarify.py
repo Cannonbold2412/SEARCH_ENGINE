@@ -85,7 +85,7 @@ DEFAULT_MAX_CHILD_CLARIFY = 2
 
 # When multiple experiences exist and no focus selected, show this message.
 CHOOSE_FOCUS_MESSAGE = (
-    "I found multiple experiences in what you shared—I'm curious, which one would you like to add first? We'll build one card and capture as much detail as we can."
+    "I’m hearing a few different stories in what you shared. Which one feels most worth digging into first?"
 )
 
 # Patterns that indicate generic onboarding/discovery questions (BANNED in post-extraction clarify).

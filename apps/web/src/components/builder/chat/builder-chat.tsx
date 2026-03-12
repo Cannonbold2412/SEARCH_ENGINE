@@ -47,6 +47,7 @@ export type ClarifyHistoryEntry = {
   target_type?: string | null;
   target_field?: string | null;
   target_child_type?: string | null;
+  profile_axes?: string[] | null;
   text: string;
 };
 
@@ -57,6 +58,17 @@ export type ClarifyOption = { parent_id: string; label: string };
 type ClarifyResponse = {
   clarifying_question?: string | null;
   filled?: Record<string, unknown>;
+  profile_update?: {
+    skills?: string[];
+    knowledge_areas?: string[];
+    interests?: string[];
+    motivations?: string[];
+    personality_traits?: string[];
+    unique_advantages?: string[];
+    opportunities?: string[];
+    possible_connections?: string[];
+  } | null;
+  profile_reflection?: string | null;
   should_stop?: boolean | null;
   stop_reason?: string | null;
   target_type?: string | null;
@@ -105,14 +117,12 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
   const [clarifyHistory, setClarifyHistory] = useState<ClarifyHistoryEntry[]>([]);
   /** When true, speak each new assistant message (text-to-speech for conversation). Default on for voice-first flow. */
   const [speakReplies, setSpeakReplies] = useState(true);
-  const [sessionLocked, setSessionLocked] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastSpokenMessageIdRef = useRef<string | null>(null);
   const ttsQueueRef = useRef<{ id: string; content: string }[]>([]);
   const lastEnqueuedMessageIdRef = useRef<string | null>(null);
   const isSpeakingTtsRef = useRef(false);
   const speechSynthRef = useRef<SpeechSynthesis | null>(null);
-  const sessionLockedRef = useRef(false);
   const isRecordingRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isConnectingRecorder, setIsConnectingRecorder] = useState(false);
@@ -157,18 +167,22 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
               : [{ ...PLACEHOLDER_FIRST_MESSAGE, content: question }]
           );
         } else if (!cancelled) {
+          const fallback =
+            "To get a sense of you, tell me about a few things you’ve worked on or cared about lately. It can be projects, roles, or anything that felt meaningful.";
           setMessages((prev) =>
             prev.length > 0
-              ? [{ ...prev[0], content: "What would you like to add? You can type or use the microphone." }, ...prev.slice(1)]
-              : [{ ...PLACEHOLDER_FIRST_MESSAGE, content: "What would you like to add? You can type or use the microphone." }]
+              ? [{ ...prev[0], content: fallback }, ...prev.slice(1)]
+              : [{ ...PLACEHOLDER_FIRST_MESSAGE, content: fallback }]
           );
         }
       } catch {
         if (!cancelled) {
+          const fallback =
+            "If we were grabbing coffee, what would you be excited to tell me you’re working on or exploring right now?";
           setMessages((prev) =>
             prev.length > 0
-              ? [{ ...prev[0], content: "What would you like to add? You can type or use the microphone." }, ...prev.slice(1)]
-              : [{ ...PLACEHOLDER_FIRST_MESSAGE, content: "What would you like to add? You can type or use the microphone." }]
+              ? [{ ...prev[0], content: fallback }, ...prev.slice(1)]
+              : [{ ...PLACEHOLDER_FIRST_MESSAGE, content: fallback }]
           );
         }
       } finally {
@@ -252,7 +266,14 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
     setMessages((prev) => [...prev, { ...msg, id: String(prev.length + Date.now()) }]);
   }, []);
 
-  sessionLockedRef.current = sessionLocked;
+  const addAssistantReflection = useCallback(
+    (content?: string | null) => {
+      const text = content?.trim();
+      if (!text) return;
+      addMessage({ role: "assistant", content: text });
+    },
+    [addMessage]
+  );
 
   const extractSingle = useCallback(
     async (
@@ -363,7 +384,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           addMessage({
             role: "assistant",
             content:
-              "I didn't quite get that—what role or place were you at, and what did you do there?",
+              "I might be missing a bit—where were you, and what were you roughly responsible for there?",
           });
           setStage("awaiting_experience");
           return;
@@ -373,7 +394,8 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           if (!result) {
             addMessage({
               role: "assistant",
-              content: "Can you tell me a bit more—like where you worked and roughly when?",
+              content:
+                "Can you tell me a bit more—roughly when this was and where you were doing it? Even loose details help me capture it well.",
             });
             setLoading(false);
             return;
@@ -381,7 +403,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           const { summary, family } = result;
           addMessage({
             role: "assistant",
-            content: `Here's what I understood: **${summary}**\n\nI have a few questions to get more detail.`,
+            content: `Here’s how I’d describe what you did—tell me if this feels right: **${summary}**\n\nI’m curious about a couple of things so I can really understand it.`,
           });
           const parent = family.parent as Record<string, unknown>;
           const firstClarify = await askClarify(family, [], { rawTextOverride: text });
@@ -402,6 +424,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
               );
             }
             setClarifyHistory([firstEntry]);
+            addAssistantReflection(firstClarify.profile_reflection);
             addMessage({ role: "assistant", content: firstClarify.clarifying_question });
             setStage("clarifying");
           } else if (firstClarify.should_stop || (firstClarify.filled && Object.keys(firstClarify.filled).length > 0)) {
@@ -418,18 +441,18 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
                 // If finalize fails, user can still edit later via manual flows.
               }
             }
-            queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
-            queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
-            addMessage({
-              role: "assistant",
-              content: "Your experience card is ready. You can edit it anytime in **Your Cards**.",
-              card: { ...family, parent: mergedParent },
-            });
-            setCurrentCardFamily(null);
-            setStage("awaiting_experience");
-            onCardsSaved?.();
-            sessionLockedRef.current = true;
-            setSessionLocked(true);
+          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
+          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
+          addAssistantReflection(firstClarify.profile_reflection);
+          addMessage({
+            role: "assistant",
+            content:
+              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nIf another chapter of your story pops into your head later, just tell me and I’ll keep updating your profile.",
+            card: { ...family, parent: mergedParent },
+          });
+          setCurrentCardFamily(null);
+          setStage("awaiting_experience");
+          onCardsSaved?.();
           } else {
             const cardId = (parent as { id?: string }).id;
             if (cardId) {
@@ -442,18 +465,18 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
                 // Non-fatal; card will remain hidden until successfully finalized.
               }
             }
-            addMessage({
-              role: "assistant",
-              content: "Your experience card is ready. You can edit it anytime in **Your Cards**.",
-              card: family,
-            });
-            setCurrentCardFamily(null);
-            setStage("awaiting_experience");
-            queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
-            queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
-            onCardsSaved?.();
-            sessionLockedRef.current = true;
-            setSessionLocked(true);
+          addAssistantReflection(firstClarify.profile_reflection);
+          addMessage({
+            role: "assistant",
+            content:
+              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nWhenever you’re ready, share another story and I’ll weave it into the bigger picture of you.",
+            card: family,
+          });
+          setCurrentCardFamily(null);
+          setStage("awaiting_experience");
+          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
+          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
+          onCardsSaved?.();
           }
           setLoading(false);
           return;
@@ -509,7 +532,8 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
         if (!result) {
           addMessage({
             role: "assistant",
-            content: "Can you tell me a bit more—like where you worked and roughly when?",
+            content:
+              "Can you tell me a bit more—where you were and roughly when this was happening? That helps me pin it down.",
           });
           setStage("awaiting_experience");
           setLoading(false);
@@ -518,7 +542,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
         const { summary, family } = result;
         addMessage({
           role: "assistant",
-          content: `Here's what I got: **${summary}**\n\nA couple of quick questions:`,
+          content: `Here’s how I’d sum that up—see if this fits: **${summary}**\n\nI’ve got a couple of quick questions so I can get the nuances right:`,
         });
         const parent = family.parent as Record<string, unknown>;
         const firstClarify = await askClarify(family, [], { rawTextOverride: currentExperienceText });
@@ -539,6 +563,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
             );
           }
           setClarifyHistory([firstEntryChoice]);
+          addAssistantReflection(firstClarify.profile_reflection);
           addMessage({ role: "assistant", content: firstClarify.clarifying_question });
           setStage("clarifying");
         } else if (firstClarify.should_stop || (firstClarify.filled && Object.keys(firstClarify.filled).length > 0)) {
@@ -557,16 +582,16 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           }
           queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
           queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
+          addAssistantReflection(firstClarify.profile_reflection);
           addMessage({
             role: "assistant",
-            content: "Your experience card is ready. You can edit it anytime in **Your Cards**.",
+            content:
+              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nThis is really helpful—if another story or project comes to mind, tell me about it and I’ll keep building up your profile.",
             card: { ...family, parent: mergedParent },
           });
           setCurrentCardFamily(null);
           setStage("awaiting_experience");
           onCardsSaved?.();
-          sessionLockedRef.current = true;
-          setSessionLocked(true);
         } else {
           const cardId = (parent as { id?: string }).id;
           if (cardId) {
@@ -578,24 +603,25 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
             } catch {
               // Ignore finalize error; card remains draft until successful.
             }
-          }
-          addMessage({
-            role: "assistant",
-            content: "Your experience card is ready. You can edit it anytime in **Your Cards**.",
-            card: family,
-          });
-          setCurrentCardFamily(null);
-          setStage("awaiting_experience");
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
-          onCardsSaved?.();
-          sessionLockedRef.current = true;
-          setSessionLocked(true);
+            }
+            addAssistantReflection(firstClarify.profile_reflection);
+            addMessage({
+              role: "assistant",
+              content:
+                "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nIf you think of another story—big or small—share it and I’ll fold it into how I understand you.",
+              card: family,
+            });
+            setCurrentCardFamily(null);
+            setStage("awaiting_experience");
+            queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
+            queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
+            onCardsSaved?.();
         }
       } catch (e) {
         addMessage({
           role: "assistant",
-          content: "Something went wrong. Please try again.",
+          content:
+            "I got a bit tangled up processing that. Mind trying it again in your own words so I can do it justice?",
         });
         setStage("awaiting_experience");
       } finally {
@@ -629,6 +655,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
             );
           }
           setClarifyHistory((h) => [...h, nextEntry]);
+          addAssistantReflection(res.profile_reflection);
           addMessage({ role: "assistant", content: res.clarifying_question });
         } else if (res.should_stop || (res.filled && Object.keys(res.filled).length > 0)) {
           if (res.filled && Object.keys(res.filled).length > 0) mergeFilledIntoCard(res.filled);
@@ -651,16 +678,16 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           const finalFamily: DraftCardFamily = currentCardFamily
             ? { ...currentCardFamily, parent: mergedParent }
             : { parent: mergedParent, children: [] };
+          addAssistantReflection(res.profile_reflection);
           addMessage({
             role: "assistant",
-            content: "Your experience card is ready. You can edit it anytime in **Your Cards**.",
+            content:
+              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nThis already says a lot about you—if another example comes to mind later, tell me and I’ll keep deepening your profile.",
             card: finalFamily,
           });
           setCurrentCardFamily(null);
           setStage("awaiting_experience");
           onCardsSaved?.();
-          sessionLockedRef.current = true;
-          setSessionLocked(true);
           if (isRecordingRef.current) {
             stopRecording();
           }
@@ -677,9 +704,11 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
               // Ignore; card stays draft until finalize succeeds.
             }
           }
+          addAssistantReflection(res.profile_reflection);
           addMessage({
             role: "assistant",
-            content: "Your experience card is ready. You can edit it anytime in **Your Cards**.",
+            content:
+              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nWhenever you feel like it, share another story and I’ll keep connecting the dots on your skills and interests.",
             card: currentCardFamily ?? undefined,
           });
           setCurrentCardFamily(null);
@@ -687,8 +716,6 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
           queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
           onCardsSaved?.();
-          sessionLockedRef.current = true;
-          setSessionLocked(true);
         }
       } catch (e) {
         addMessage({
@@ -709,6 +736,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
     detectedExperiences,
     clarifyHistory,
     addMessage,
+    addAssistantReflection,
     translateRawText,
     extractSingle,
     askClarify,
@@ -827,14 +855,14 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           }}
           rows={2}
           className="flex-1 min-h-[44px] max-h-[120px] resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          disabled={loading || sessionLocked}
+          disabled={loading}
         />
         <Button
           type="button"
           variant={isRecording ? "destructive" : "outline"}
           size="icon"
           onClick={toggleRecording}
-          disabled={loading || isConnectingRecorder || sessionLocked}
+          disabled={loading || isConnectingRecorder}
           className="shrink-0 h-11 w-11"
           aria-label={isRecording ? "Stop recording" : "Voice input"}
         >
@@ -845,7 +873,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           variant={speakReplies ? "secondary" : "outline"}
           size="icon"
           onClick={() => setSpeakReplies((on) => !on)}
-          disabled={loading || sessionLocked}
+          disabled={loading}
           className="shrink-0 h-11 w-11"
           aria-label={speakReplies ? "Voice on — click to turn off" : "Voice off — click to hear AI replies"}
           title={speakReplies ? "Voice on — AI replies are spoken" : "Turn on to hear AI replies"}
@@ -856,7 +884,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           type="button"
           size="icon"
           onClick={() => sendMessage()}
-          disabled={!input.trim() || loading || sessionLocked}
+          disabled={!input.trim() || loading}
           className="shrink-0 h-11 w-11"
           aria-label="Send"
         >

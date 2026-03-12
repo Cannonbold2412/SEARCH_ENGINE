@@ -7,7 +7,7 @@ import httpx
 from pydantic import BaseModel
 
 from src.core import get_settings
-from src.utils import strip_json_from_response
+from src.utils import extract_json_from_llm_response
 from src.prompts.search_filters import (
     get_cleanup_prompt,
     get_single_extract_prompt,
@@ -195,7 +195,7 @@ Example: {"company": null, "team": "backend", "open_to_work_only": false, "seman
                 "Chat API rejected response_format=json_object, retrying without it."
             )
             text = await self._chat(messages, max_tokens=max_tokens, response_format=None)
-        raw = strip_json_from_response(text or "")
+        raw = extract_json_from_llm_response(text or "")
         try:
             return json.loads(raw)
         except (ValueError, json.JSONDecodeError) as e:

@@ -1,3 +1,13 @@
+/**
+ * Typed HTTP client for all API requests.
+ *
+ * All functions automatically attach the Bearer token from localStorage
+ * and throw a descriptive Error on non-2xx responses.
+ *
+ * Usage:
+ *   const data = await api<MyType>("/endpoint");
+ *   const data = await api<MyType>("/endpoint", { method: "POST", body: payload });
+ */
 import { API_BASE } from "./constants";
 import { AUTH_TOKEN_KEY } from "./auth-flow";
 

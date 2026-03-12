@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import { Providers } from "@/components/providers";
+import { QueryProvider } from "@/components/providers";
 import { AuthProvider } from "@/contexts/auth-context";
 
 const inter = Inter({
@@ -15,9 +15,27 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+// Fontshare fonts for CONXA landing (Clash Display, Satoshi)
+const fontshareUrl =
+  "https://api.fontshare.com/v2/css?f[]=clash-display@700,600&f[]=satoshi@400,500,700&display=swap";
+
 export const metadata: Metadata = {
-  title: "CONXA - Find people by what they've done",
-  description: "Trust-weighted, AI-structured search. Find people by real experience.",
+  metadataBase: new URL("https://www.conxa.in"),
+  title: "CONXA — Every Experience. Searchable. | conxa.in",
+  description:
+    "CONXA turns messy human stories into structured, searchable data — connecting people to opportunities they'd never find otherwise.",
+  openGraph: {
+    title: "CONXA — Every Experience. Searchable.",
+    description: "CONXA turns messy human stories into structured, searchable data.",
+    url: "https://www.conxa.in",
+    siteName: "CONXA",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CONXA — Every Experience. Searchable.",
+    description: "CONXA turns messy human stories into structured, searchable data.",
+  },
   icons: (() => {
     const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
     const url = (p: string) => `${apiBase}${p}` || p;
@@ -47,10 +65,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
+      <head>
+        <link href={fontshareUrl} rel="stylesheet" />
+        <style>{`:root { --font-clash: 'Clash Display', system-ui, sans-serif; --font-satoshi: 'Satoshi', system-ui, sans-serif; }`}</style>
+      </head>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans bg-background text-foreground antialiased`}>
-        <Providers>
+        <QueryProvider>
           <AuthProvider>{children}</AuthProvider>
-        </Providers>
+        </QueryProvider>
       </body>
     </html>
   );

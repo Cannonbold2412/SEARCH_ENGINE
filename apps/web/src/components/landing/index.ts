@@ -1,0 +1,12 @@
+export { default as LandingNavbar } from "./navbar";
+export { default as LandingHero } from "./hero";
+export { default as SocialProofBar } from "./social-proof-bar";
+export { default as ProblemSection } from "./problem-section";
+export { default as HowItWorks } from "./how-it-works";
+export { default as ForRecruiters } from "./for-recruiters";
+export { default as ForPeople } from "./for-people";
+export { default as Examples } from "./examples";
+export { default as CTASection } from "./cta-section";
+export { default as LandingFooter } from "./footer";
+export { default as SearchDemo } from "./search-demo";
+export { default as FloatingCards } from "./floating-cards";

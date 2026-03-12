@@ -11,7 +11,7 @@ import logging
 import re
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -61,13 +61,19 @@ from src.services.experience.search_document import (
     build_parent_search_document,
     get_child_search_document,
 )
-from src.utils import normalize_embedding, strip_json_from_response
+from src.utils import normalize_embedding, extract_json_from_llm_response
 from .why_matched_helpers import (
     _child_display_fields,
     build_match_explanation_payload,
     validate_why_matched_output,
     fallback_build_why_matched,
     boost_query_matching_reasons,
+)
+from .graph_view import (
+    PersonGraphFeatures,
+    extract_person_graph_features,
+    compute_graph_bonus,
+    build_graph_features_dict,
 )
 
 logger = logging.getLogger(__name__)
@@ -101,6 +107,18 @@ FALLBACK_TIER_TIME_SOFT = 1
 FALLBACK_TIER_LOCATION_SOFT = 2
 FALLBACK_TIER_COMPANY_TEAM_SOFT = 3
 
+# LLM settings
+SEARCH_LLM_MAX_TOKENS = 1200
+SEARCH_WHY_MATCHED_TEMPERATURE = 0.1
+
+# Async why_matched retry settings
+_WHY_MATCHED_COMMIT_WAIT_S = 1.0   # seconds to wait for request session to commit
+_WHY_MATCHED_RETRY_COUNT = 4
+_WHY_MATCHED_RETRY_BACKOFF = 0.15  # seconds * (attempt + 1)
+
+# Generic fallback reason when no specific evidence is available
+_FALLBACK_WHY_MATCHED = "Matched your search intent and profile signals."
+
 # Patterns to extract requested result count from query (when LLM omits num_cards)
 _NUM_CARDS_PATTERNS = [
     re.compile(r"(?:give me|show me|get me|fetch me|I need|want|return)\s+(\d+)\s*(?:cards?|results?|people|profiles?)?\b", re.I),
@@ -121,8 +139,8 @@ class _FilterContext:
     must: ParsedConstraintsMust
     apply_location: bool
     apply_time: bool
-    time_start: object
-    time_end: object
+    time_start: date | None
+    time_end: date | None
     exclude_norms: list[str]
     norm_terms_exclude: list[str]
     open_to_work_only: bool
@@ -144,8 +162,8 @@ class _PendingSearchRow:
 @dataclass(frozen=True)
 class _SearchConstraintTerms:
     """Normalized terms and flags derived from parsed MUST/EXCLUDE constraints."""
-    time_start: object
-    time_end: object
+    time_start: date | None
+    time_end: date | None
     query_has_time: bool
     query_has_location: bool
     company_norms: list[str]
@@ -239,7 +257,8 @@ def _parse_date(s: str | None):
 
 
 def _card_dates_overlap_query(
-    card_start: object, card_end: object, query_start: object, query_end: object
+    card_start: date | None, card_end: date | None,
+    query_start: date | None, query_end: date | None,
 ) -> bool:
     """True if card has both dates and [card_start, card_end] overlaps [query_start, query_end]."""
     if card_start is None or card_end is None or query_start is None or query_end is None:
@@ -420,7 +439,7 @@ def _why_matched_fallback_all(
 ) -> dict[str, list[str]]:
     """Build deterministic why_matched for all persons when LLM is not used."""
     out: dict[str, list[str]] = {}
-    generic = ["Matched your search intent and profile signals."]
+    generic = [_FALLBACK_WHY_MATCHED]
     for p in cleaned_payloads:
         person_id = str(p.get("person_id") or "").strip()
         if not person_id:
@@ -467,7 +486,7 @@ async def _generate_llm_why_matched(
         (payload.query_cleaned or payload.query_original or "")[:60],
     )
     try:
-        raw = await chat.chat(prompt, max_tokens=1200, temperature=0.1)
+        raw = await chat.chat(prompt, max_tokens=SEARCH_LLM_MAX_TOKENS, temperature=SEARCH_WHY_MATCHED_TEMPERATURE)
         logger.info("why_matched: LLM call success | response_chars=%d", len(raw or ""))
     except ChatServiceError as e:
         logger.warning(
@@ -478,7 +497,7 @@ async def _generate_llm_why_matched(
         return _why_matched_fallback_all(cleaned_payloads, query_context)
 
     try:
-        parsed = json.loads(strip_json_from_response(raw))
+        parsed = json.loads(extract_json_from_llm_response(raw))
         logger.info("why_matched: JSON parse success")
     except (TypeError, ValueError, json.JSONDecodeError) as e:
         logger.warning(
@@ -491,7 +510,7 @@ async def _generate_llm_why_matched(
 
     validated, fallback_count = validate_why_matched_output(parsed)
     by_person_cleaned = {p["person_id"]: p for p in cleaned_payloads}
-    generic = ["Matched your search intent and profile signals."]
+    generic = [_FALLBACK_WHY_MATCHED]
     out: dict[str, list[str]] = {}
     for p in cleaned_payloads:
         person_id = str(p.get("person_id") or "").strip()
@@ -536,7 +555,7 @@ async def _update_why_matched_async(
     if not people_evidence or not person_ids:
         return
     # Let the request session commit before we query (task is started before response returns).
-    await asyncio.sleep(1.0)
+    await asyncio.sleep(_WHY_MATCHED_COMMIT_WAIT_S)
     try:
         chat = get_chat_provider()
     except Exception as e:
@@ -554,7 +573,7 @@ async def _update_why_matched_async(
     try:
         async with async_session() as bg_db:
             result_rows: list[SearchResult] = []
-            for attempt in range(4):
+            for attempt in range(_WHY_MATCHED_RETRY_COUNT):
                 result = await bg_db.execute(
                     select(SearchResult).where(
                         SearchResult.search_id == search_id,
@@ -565,7 +584,7 @@ async def _update_why_matched_async(
                 if result_rows:
                     break
                 await bg_db.rollback()
-                await asyncio.sleep(0.15 * (attempt + 1))
+                await asyncio.sleep(_WHY_MATCHED_RETRY_BACKOFF * (attempt + 1))
             if not result_rows:
                 return
 
@@ -985,6 +1004,9 @@ def _score_person(
     query_has_time: bool,
     query_has_location: bool,
     query_loc_terms: list[str],
+    graph_features: PersonGraphFeatures | None = None,
+    must: "ParsedConstraintsMust | None" = None,
+    should: "ParsedConstraintsShould | None" = None,
 ) -> float:
     """Compute final blended score for one person."""
     all_sims = [sim for _, sim in parent_cards]
@@ -1009,6 +1031,11 @@ def _score_person(
     lexical_bonus = lexical_scores.get(pid, 0.0)
     should_bonus = min(person_should_hits.get(pid, 0) * SHOULD_BOOST, SHOULD_BONUS_MAX)
 
+    # Graph-aware bonus: small nudge from structural/dimensional signals
+    graph_bonus = 0.0
+    if graph_features is not None and must is not None and should is not None:
+        graph_bonus = compute_graph_bonus(graph_features, must, should)
+
     penalty = 0.0
     if query_has_time and fallback_tier >= FALLBACK_TIER_TIME_SOFT:
         has_any_dated = any(
@@ -1021,7 +1048,24 @@ def _score_person(
         if not _has_location_match(parent_cards, query_loc_terms):
             penalty += LOCATION_MISMATCH_PENALTY
 
-    return max(0.0, base_score + lexical_bonus + should_bonus - penalty)
+    return max(0.0, base_score + lexical_bonus + should_bonus + graph_bonus - penalty)
+
+
+def _build_person_children_map(
+    child_evidence_rows: list,
+    children_by_id: dict[str, ExperienceCardChild],
+) -> dict[str, list[ExperienceCardChild]]:
+    """Build per-person list of ExperienceCardChild objects from evidence rows and the loaded child map."""
+    result: dict[str, list[ExperienceCardChild]] = {}
+    for row in child_evidence_rows:
+        pid = str(row.person_id)
+        child_id = str(row.child_id)
+        child_obj = children_by_id.get(child_id)
+        if child_obj is not None:
+            result.setdefault(pid, [])
+            if child_obj not in result[pid]:
+                result[pid].append(child_obj)
+    return result
 
 
 def _collapse_and_rank_persons(
@@ -1034,20 +1078,40 @@ def _collapse_and_rank_persons(
     query_has_time: bool,
     query_has_location: bool,
     must: ParsedConstraintsMust,
+    children_by_id: dict[str, ExperienceCardChild] | None = None,
 ) -> tuple[
     dict[str, list[tuple[ExperienceCard, float]]],
     dict[str, list[tuple[str, str, float]]],
     dict[str, list[str]],
     list[tuple[str, float]],
+    dict[str, PersonGraphFeatures],
 ]:
-    """Build person_cards, child evidence, child_best_parent_ids, and sorted person_best (pid, score)."""
+    """Build person_cards, child evidence, child_best_parent_ids, sorted person_best (pid, score),
+    and per-person graph features map."""
     child_best_parent_ids = _collect_child_best_parent_ids(child_evidence_rows)
     person_cards, person_should_hits = _build_parent_card_scores(rows, payload.should)
     child_sims_by_person, child_best_sim = _build_child_similarity_maps(child_rows, child_evidence_rows)
 
+    # Build per-person children map for graph feature extraction (uses already-loaded children)
+    person_children_map: dict[str, list[ExperienceCardChild]] = {}
+    if children_by_id:
+        person_children_map = _build_person_children_map(child_evidence_rows, children_by_id)
+
     query_loc_terms = [x.lower() for x in (must.city, must.country, must.location_text) if x]
     person_best: list[tuple[str, float]] = []
+    graph_features_map: dict[str, PersonGraphFeatures] = {}
+
     for pid in set(person_cards.keys()) | set(child_best_sim.keys()):
+        parent_card_objs = [card for card, _ in person_cards.get(pid, [])]
+        child_objs = person_children_map.get(pid, [])
+        graph_feat = extract_person_graph_features(
+            parent_cards=parent_card_objs,
+            children=child_objs,
+            must=must,
+            should=payload.should,
+        )
+        graph_features_map[pid] = graph_feat
+
         final_score = _score_person(
             pid,
             person_cards.get(pid, []),
@@ -1059,10 +1123,13 @@ def _collapse_and_rank_persons(
             query_has_time=query_has_time,
             query_has_location=query_has_location,
             query_loc_terms=query_loc_terms,
+            graph_features=graph_feat,
+            must=must,
+            should=payload.should,
         )
         person_best.append((pid, final_score))
     person_best.sort(key=lambda x: -x[1])
-    return person_cards, child_sims_by_person, child_best_parent_ids, person_best
+    return person_cards, child_sims_by_person, child_best_parent_ids, person_best, graph_features_map
 
 
 def _resolve_open_to_work_only(body: SearchRequest, must: ParsedConstraintsMust) -> bool:
@@ -1332,13 +1399,26 @@ async def _load_people_profiles_and_children(
     db: AsyncSession,
     person_ids: list[str],
     child_evidence_rows: list,
+    preloaded_children: dict[str, ExperienceCardChild] | None = None,
 ) -> tuple[dict[str, Person], dict[str, PersonProfile], dict[str, ExperienceCardChild]]:
-    """Load Person, PersonProfile, and child-evidence objects for the ranked people set."""
-    people_result, profiles_result, children_by_id = await asyncio.gather(
-        db.execute(select(Person).where(Person.id.in_(person_ids))),
-        db.execute(select(PersonProfile).where(PersonProfile.person_id.in_(person_ids))),
-        _load_child_evidence_map(db, child_evidence_rows),
-    )
+    """Load Person, PersonProfile, and child-evidence objects for the ranked people set.
+
+    When *preloaded_children* is supplied (already fetched from the same
+    child_evidence_rows earlier in the call stack) the second DB round-trip for
+    child evidence is skipped entirely.
+    """
+    if preloaded_children is not None:
+        people_result, profiles_result = await asyncio.gather(
+            db.execute(select(Person).where(Person.id.in_(person_ids))),
+            db.execute(select(PersonProfile).where(PersonProfile.person_id.in_(person_ids))),
+        )
+        children_by_id = preloaded_children
+    else:
+        people_result, profiles_result, children_by_id = await asyncio.gather(
+            db.execute(select(Person).where(Person.id.in_(person_ids))),
+            db.execute(select(PersonProfile).where(PersonProfile.person_id.in_(person_ids))),
+            _load_child_evidence_map(db, child_evidence_rows),
+        )
     people_map = {str(person.id): person for person in people_result.scalars().all()}
     profiles_map = {str(profile.person_id): profile for profile in profiles_result.scalars().all()}
     return people_map, profiles_map, children_by_id
@@ -1443,7 +1523,7 @@ def _prepare_pending_search_rows(
         }
     cleaned_payloads = build_match_explanation_payload(query_context, llm_people_evidence)
     by_person_cleaned = {p["person_id"]: p for p in cleaned_payloads}
-    generic_fallback = ["Matched your search intent and profile signals."]
+    generic_fallback = [_FALLBACK_WHY_MATCHED]
     for person_id, rank, score, matched_parent_ids, matched_child_ids in row_data:
         item = by_person_cleaned.get(person_id)
         fallback_why = generic_fallback
@@ -1470,6 +1550,7 @@ def _persist_search_results(
     search_id: Any,
     pending_search_rows: list[_PendingSearchRow],
     llm_why_by_person: dict[str, list[str]],
+    graph_features_map: dict[str, PersonGraphFeatures] | None = None,
 ) -> dict[str, list[str]]:
     """Insert SearchResult rows and return resolved why_matched per person."""
     why_matched_by_person: dict[str, list[str]] = {}
@@ -1477,17 +1558,20 @@ def _persist_search_results(
     for row in pending_search_rows:
         why_matched = llm_why_by_person.get(row.person_id) or row.fallback_why
         why_matched_by_person[row.person_id] = why_matched
+        extra: dict[str, Any] = {
+            "matched_parent_ids": row.matched_parent_ids,
+            "matched_child_ids": row.matched_child_ids,
+            "why_matched": why_matched,
+        }
+        if graph_features_map and row.person_id in graph_features_map:
+            extra["graph_features"] = build_graph_features_dict(graph_features_map[row.person_id])
         to_add.append(
             SearchResult(
                 search_id=search_id,
                 person_id=row.person_id,
                 rank=row.rank,
                 score=Decimal(str(round(row.score, 6))),
-                extra={
-                    "matched_parent_ids": row.matched_parent_ids,
-                    "matched_child_ids": row.matched_child_ids,
-                    "why_matched": why_matched,
-                },
+                extra=extra,
             )
         )
     db.add_all(to_add)
@@ -1645,7 +1729,10 @@ async def run_search(
         offer_salary_inr_per_year=offer_salary_inr_per_year,
     )
 
-    person_cards, child_sims_by_person, child_best_parent_ids, person_best = _collapse_and_rank_persons(
+    # Pre-load child evidence objects so graph features can be computed during scoring
+    children_by_id_early = await _load_child_evidence_map(db, child_evidence_rows)
+
+    person_cards, child_sims_by_person, child_best_parent_ids, person_best, graph_features_map = _collapse_and_rank_persons(
         rows,
         child_rows,
         child_evidence_rows,
@@ -1655,6 +1742,7 @@ async def run_search(
         term_ctx.query_has_time,
         term_ctx.query_has_location,
         must,
+        children_by_id=children_by_id_early,
     )
     ranked_people_full = person_best[:TOP_PEOPLE_STORED]
 
@@ -1674,6 +1762,7 @@ async def run_search(
         db=db,
         person_ids=person_ids_full,
         child_evidence_rows=child_evidence_rows,
+        preloaded_children=children_by_id_early,
     )
 
     ranked_people_full = _apply_post_rank_tiebreakers(
@@ -1732,6 +1821,7 @@ async def run_search(
         search_id=search_rec.id,
         pending_search_rows=pending_to_persist,
         llm_why_by_person=llm_why_by_person,
+        graph_features_map=graph_features_map,
     )
     # Post-persist boost: ensure query-matching outcomes surface in why_matched
     if llm_evidence_to_persist:

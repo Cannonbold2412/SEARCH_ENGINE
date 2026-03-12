@@ -41,8 +41,8 @@ export function VisibilitySection({
             className={cn(
               "flex items-start gap-3 cursor-pointer rounded-lg border p-3 transition-colors",
               visibilityMode === opt.value
-                ? "border-primary/50 bg-accent"
-                : "border-border hover:bg-accent/50"
+                ? "border-primary/60 bg-primary/5"
+                : "border-border hover:bg-muted/40"
             )}
           >
             <input
@@ -96,7 +96,7 @@ export function VisibilitySection({
                 {workPreferredLocations.map((city) => (
                   <span
                     key={city}
-                    className="inline-flex items-center gap-1 rounded-md bg-accent border border-border px-2 py-1 text-xs text-foreground"
+                    className="inline-flex items-center gap-1 rounded-md bg-muted border border-border/70 px-2 py-1 text-xs text-foreground"
                   >
                     {city}
                     <button

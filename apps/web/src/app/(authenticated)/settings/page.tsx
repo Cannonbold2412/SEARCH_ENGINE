@@ -61,12 +61,36 @@ export default function SettingsPage() {
   const patchVisibility = useMutation({
     mutationFn: (body: PatchVisibilityRequest) =>
       api<VisibilitySettingsResponse>("/me/visibility", { method: "PATCH", body }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: VISIBILITY_QUERY_KEY });
-      setIsEditingVisibility(false);
+    // Optimistic update so the UI feels instant
+    onMutate: async (body: PatchVisibilityRequest) => {
       setSaveError(null);
+      await queryClient.cancelQueries({ queryKey: VISIBILITY_QUERY_KEY });
+
+      const previous = queryClient.getQueryData<VisibilitySettingsResponse>(VISIBILITY_QUERY_KEY);
+
+      const optimistic: VisibilitySettingsResponse = {
+        ...(previous ?? ({} as VisibilitySettingsResponse)),
+        open_to_work: Boolean(body.open_to_work),
+        open_to_contact: Boolean(body.open_to_contact),
+        work_preferred_locations: body.work_preferred_locations ?? [],
+        work_preferred_salary_min:
+          body.work_preferred_salary_min !== undefined ? body.work_preferred_salary_min : null,
+      };
+
+      queryClient.setQueryData(VISIBILITY_QUERY_KEY, optimistic);
+      setIsEditingVisibility(false);
+
+      return { previous };
     },
-    onError: (e: Error) => setSaveError(e.message),
+    onError: (e: Error, _body, context) => {
+      setSaveError(e.message);
+      if (context?.previous) {
+        queryClient.setQueryData(VISIBILITY_QUERY_KEY, context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: VISIBILITY_QUERY_KEY });
+    },
   });
 
   const buildPayload = (): PatchVisibilityRequest => {
