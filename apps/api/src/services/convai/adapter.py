@@ -195,7 +195,8 @@ async def convai_chat_turn(
                 state.asked_history.append(first_clarify["asked_history_entry"])
             if first_clarify.get("canonical_family"):
                 state.card_family = first_clarify["canonical_family"]
-            return f"Here's what I understood: {summary}. {q or 'I have a few questions—I\'d love to learn more.'}"
+            default_q = "I have a few questions—I'd love to learn more."
+            return f"Here's what I understood: {summary}. {q or default_q}"
 
         # Multiple experiences: choose_focus
         state.detected_experiences = experiences
