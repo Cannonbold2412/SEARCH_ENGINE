@@ -1,7 +1,7 @@
 """Add chat conversations and messages tables.
 
 Revision ID: 029_add_chat_conversations_and_messages
-Revises: 028_remove_label_from_experience_card_children
+Revises: 028
 Create Date: 2026-03-13
 """
 
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "029_add_chat_conversations_and_messages"
-down_revision: Union[str, None] = "028_remove_label_from_experience_card_children"
+down_revision: Union[str, None] = "028"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
