@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     vapi_callback_base_url: str | None = None
     # Voice: 11labs, playht, cartesia, etc. Add provider keys in Vapi Dashboard for BYOK (lower cost).
     vapi_voice_provider: str = "11labs"
-    vapi_voice_id: str = "MbmiTDI5YuxpN7UUP2St"
+    vapi_voice_id: str = "fEJqMD6Jp1JFP8T1BZpd"
     # Transcriber: deepgram, gladia, etc. Add provider keys in Vapi Dashboard for BYOK (lower cost).
     vapi_transcriber_provider: str = "deepgram"
     vapi_transcriber_model: str = "nova-2"

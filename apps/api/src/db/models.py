@@ -473,3 +473,67 @@ class UnlockContact(Base):
             unique=True,
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Chat (1:1 conversations)
+# ---------------------------------------------------------------------------
+
+class Conversation(Base):
+    """Direct chat conversation between two people.
+
+    We model 1:1 chats only. The pair (person_a_id, person_b_id) is stored in a
+    canonical order (min, max) so lookups are symmetric regardless of who
+    started the chat.
+    """
+
+    __tablename__ = "conversations"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=uuid4_str)
+    person_a_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("people.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    person_b_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("people.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_message_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_conversations_pair_unique",
+            "person_a_id",
+            "person_b_id",
+            unique=True,
+        ),
+        Index("ix_conversations_person_a", "person_a_id"),
+        Index("ix_conversations_person_b", "person_b_id"),
+    )
+
+
+class Message(Base):
+    """Individual chat message within a conversation."""
+
+    __tablename__ = "messages"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=uuid4_str)
+    conversation_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sender_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("people.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_messages_conversation_created_at", "conversation_id", "created_at"),
+    )

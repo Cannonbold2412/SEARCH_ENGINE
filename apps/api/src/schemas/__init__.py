@@ -58,6 +58,15 @@ from src.schemas.discover import (
     UnlockedCardItem,
     UnlockedCardsResponse,
 )
+from src.schemas.chat import (
+    StartChatRequest,
+    StartChatResponse,
+    MessageItem,
+    ConversationPeer,
+    ConversationSummary,
+    ConversationDetail,
+    SendMessageRequest,
+)
 
 __all__ = [
     "SignupRequest",
@@ -113,4 +122,11 @@ __all__ = [
     "PersonPublicProfileResponse",
     "UnlockedCardItem",
     "UnlockedCardsResponse",
+    "StartChatRequest",
+    "StartChatResponse",
+    "MessageItem",
+    "ConversationPeer",
+    "ConversationSummary",
+    "ConversationDetail",
+    "SendMessageRequest",
 ]

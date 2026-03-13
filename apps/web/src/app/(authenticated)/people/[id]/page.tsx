@@ -13,6 +13,7 @@ import {
   MapPin,
   Phone,
   ExternalLink,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,7 @@ import type {
   ContactDetails,
   ExperienceCard,
 } from "@/types";
+import { useRouter } from "next/navigation";
 
 type DetailRow = {
   label: string;
@@ -111,6 +113,7 @@ export default function PersonProfilePage() {
 function PersonProfilePageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const personId = params.id as string;
   const searchId = searchParams.get("search_id");
   const queryClient = useQueryClient();
@@ -139,6 +142,18 @@ function PersonProfilePageContent() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["person", personId, searchId] });
+    },
+  });
+
+  const startChatMutation = useMutation({
+    mutationFn: () =>
+      api<{ conversation_id: string }>("/chat/conversations", {
+        method: "POST",
+        body: { target_person_id: personId },
+      }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["chat", "conversations"] });
+      router.push(`/inbox/${res.conversation_id}`);
     },
   });
 
@@ -283,6 +298,31 @@ function PersonProfilePageContent() {
                     />
                   </div>
                 )}
+              <div className="mt-4 border-t pt-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  <span>Start an in-app chat with this person for 1 credit.</span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => startChatMutation.mutate()}
+                  disabled={startChatMutation.isPending}
+                >
+                  {startChatMutation.isPending ? "Starting chat..." : "Start chat (1 credit)"}
+                </Button>
+                {startChatMutation.isError && (
+                  <div className="mt-2">
+                    <ErrorMessage
+                      message={
+                        startChatMutation.error instanceof Error
+                          ? startChatMutation.error.message
+                          : "Failed to start chat"
+                      }
+                    />
+                  </div>
+                )}
+              </div>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">This person is not open to contact.</p>

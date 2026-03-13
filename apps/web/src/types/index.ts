@@ -299,3 +299,10 @@ export type PatchVisibilityRequest = {
   work_preferred_salary_min?: number | null;
   open_to_contact?: boolean;
 };
+
+export type {
+  ConversationPeer,
+  ConversationSummary,
+  ConversationDetail,
+  MessageItem,
+} from "./chat";

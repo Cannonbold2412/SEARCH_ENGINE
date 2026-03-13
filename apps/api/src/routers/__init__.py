@@ -4,8 +4,17 @@ from .contact import router as contact_router
 from .builder import router as builder_router
 from .search import router as search_router
 from .convai import router as convai_router
+from .chat import router as chat_router
 
-ROUTERS = (auth_router, profile_router, contact_router, builder_router, search_router, convai_router)
+ROUTERS = (
+    auth_router,
+    profile_router,
+    contact_router,
+    builder_router,
+    search_router,
+    convai_router,
+    chat_router,
+)
 
 __all__ = [
     "ROUTERS",
@@ -15,4 +24,5 @@ __all__ = [
     "builder_router",
     "search_router",
     "convai_router",
+    "chat_router",
 ]
