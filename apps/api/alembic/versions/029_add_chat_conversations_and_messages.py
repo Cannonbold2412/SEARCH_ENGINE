@@ -10,6 +10,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy import text
 
 
 # revision identifiers, used by Alembic. Keep short (<=32 chars) for alembic_version.version_num.
@@ -19,7 +20,20 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _table_exists(conn, name: str) -> bool:
+    r = conn.execute(
+        text(
+            "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = :name"
+        ),
+        {"name": name},
+    ).scalar()
+    return r is not None
+
+
 def upgrade() -> None:
+    conn = op.get_bind()
+    if _table_exists(conn, "conversations"):
+        return  # Already applied (e.g. from a previous failed deploy before version was updated)
     op.create_table(
         "conversations",
         sa.Column("id", postgresql.UUID(as_uuid=False), primary_key=True),
