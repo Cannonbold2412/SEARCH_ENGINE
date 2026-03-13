@@ -9,6 +9,7 @@ import { useSidebarWidth, MOBILE_DRAWER_WIDTH } from "@/contexts/sidebar-width-c
 import { useProfileSchema } from "@/hooks/use-profile-v1";
 import { useProfilePhoto } from "@/hooks/use-profile-photo";
 import { cn } from "@/lib/utils";
+import { apiAssetUrl } from "@/lib/constants";
 import { CreditsBadge } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -29,8 +30,7 @@ function formatSearchDate(value: string): string {
 }
 
 export function AppNav() {
-  const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
-  const logoSrc = apiBase ? `${apiBase}/img/kana_icon_512.png` : "/img/kana_icon_512.png";
+  const logoSrc = apiAssetUrl("/img/kana_icon_512.png");
 
   const pathname = usePathname();
   const searchParams = useSearchParams();

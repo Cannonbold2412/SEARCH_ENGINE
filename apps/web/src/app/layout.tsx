@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers";
 import { AuthProvider } from "@/contexts/auth-context";
+import { apiAssetUrl } from "@/lib/constants";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -36,19 +37,14 @@ export const metadata: Metadata = {
     title: "CONXA — Every Experience. Searchable.",
     description: "CONXA turns messy human stories into structured, searchable data.",
   },
-  icons: (() => {
-    const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
-    const url = (p: string) => `${apiBase}${p}` || p;
-
-    return {
-      icon: [
-        { url: url("/img/kana_icon_512.png"), sizes: "512x512", type: "image/png" },
-        { url: url("/img/kana_icon_1024.png"), sizes: "1024x1024", type: "image/png" },
-        { url: url("/img/kana_icon_1280.png"), sizes: "1280x1280", type: "image/png" },
-      ],
-      apple: [{ url: url("/img/kana_icon_512.png"), sizes: "512x512", type: "image/png" }],
-    };
-  })(),
+  icons: {
+    icon: [
+      { url: apiAssetUrl("/img/kana_icon_512.png"), sizes: "512x512", type: "image/png" },
+      { url: apiAssetUrl("/img/kana_icon_1024.png"), sizes: "1024x1024", type: "image/png" },
+      { url: apiAssetUrl("/img/kana_icon_1280.png"), sizes: "1280x1280", type: "image/png" },
+    ],
+    apple: [{ url: apiAssetUrl("/img/kana_icon_512.png"), sizes: "512x512", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = {
