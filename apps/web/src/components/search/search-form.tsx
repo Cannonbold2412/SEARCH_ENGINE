@@ -14,8 +14,6 @@ import type { SearchResponse } from "@/types";
 type SearchFormProps = {
   query: string;
   setQuery: (q: string) => void;
-  openToWorkOnly: boolean;
-  setOpenToWorkOnly: (v: boolean) => void;
   error: string | null;
   onSuccess: (data: SearchResponse) => void;
   onError: (message: string) => void;
@@ -24,8 +22,6 @@ type SearchFormProps = {
 export function SearchForm({
   query,
   setQuery,
-  openToWorkOnly,
-  setOpenToWorkOnly,
   error,
   onSuccess,
   onError,
@@ -37,7 +33,7 @@ export function SearchForm({
       const idempotencyKey = `search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       return apiWithIdempotency<SearchResponse>("/search", idempotencyKey, {
         method: "POST",
-        body: { query: q, open_to_work_only: openToWorkOnly },
+        body: { query: q },
       });
     },
     onSuccess: (data) => {
@@ -85,16 +81,6 @@ export function SearchForm({
                 className="flex h-11 min-h-[44px] w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 focus-visible:border-foreground/30 transition-colors"
               />
             </div>
-            <label className="flex items-center gap-2 min-h-[44px] cursor-pointer text-muted-foreground touch-manipulation">
-              <input
-                type="checkbox"
-                id="open_to_work"
-                checked={openToWorkOnly}
-                onChange={(e) => setOpenToWorkOnly(e.target.checked)}
-                className="rounded border-border accent-foreground h-4 w-4 shrink-0"
-              />
-              <span className="text-sm">Open to work only</span>
-            </label>
             {error && <ErrorMessage message={error} />}
             <div className="flex flex-wrap items-center gap-3">
               <Button

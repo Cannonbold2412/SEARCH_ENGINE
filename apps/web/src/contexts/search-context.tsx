@@ -17,8 +17,6 @@ type SearchMoreResponse = { people: PersonSearchResult[] };
 type SearchContextValue = {
   query: string;
   setQuery: (q: string) => void;
-  openToWorkOnly: boolean;
-  setOpenToWorkOnly: (v: boolean) => void;
   searchId: string | null;
   people: PersonSearchResult[];
   error: string | null;
@@ -37,7 +35,6 @@ const LOAD_MORE_LIMIT = 6;
 
 export function SearchProvider({ children }: { children: ReactNode }) {
   const [query, setQuery] = useState("");
-  const [openToWorkOnly, setOpenToWorkOnly] = useState(false);
   const [searchId, setSearchId] = useState<string | null>(null);
   const [people, setPeople] = useState<PersonSearchResult[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +47,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
       const idempotencyKey = `search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       return apiWithIdempotency<SearchResponse>("/search", idempotencyKey, {
         method: "POST",
-        body: { query: q, open_to_work_only: openToWorkOnly },
+        body: { query: q },
       });
     },
     onMutate: () => {
@@ -107,8 +104,6 @@ export function SearchProvider({ children }: { children: ReactNode }) {
     () => ({
       query,
       setQuery,
-      openToWorkOnly,
-      setOpenToWorkOnly,
       searchId,
       people,
       error,
@@ -122,7 +117,6 @@ export function SearchProvider({ children }: { children: ReactNode }) {
     }),
     [
       query,
-      openToWorkOnly,
       searchId,
       people,
       error,
@@ -148,8 +142,6 @@ export function useSearch(): SearchContextValue {
     return {
       query: "",
       setQuery: () => {},
-      openToWorkOnly: false,
-      setOpenToWorkOnly: () => {},
       searchId: null,
       people: [],
       error: null,

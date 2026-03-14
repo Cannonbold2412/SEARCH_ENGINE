@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
+import { apiAssetUrl } from "@/lib/constants";
 import type { PersonSearchResult } from "@/types";
 
 type PersonResultCardProps = {
@@ -16,6 +17,11 @@ export function PersonResultCard({ person, searchId, index = 0 }: PersonResultCa
     typeof person.similarity_percent === "number"
       ? Math.max(0, Math.min(100, Math.round(person.similarity_percent)))
       : null;
+  const profilePhotoSrc = person.profile_photo_url
+    ? /^https?:\/\//i.test(person.profile_photo_url)
+      ? person.profile_photo_url
+      : apiAssetUrl(person.profile_photo_url)
+    : null;
 
   const whyFromApi = (person.why_matched ?? [])
     .map((item) => item?.trim() || "")
@@ -39,11 +45,22 @@ export function PersonResultCard({ person, searchId, index = 0 }: PersonResultCa
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-              <span className="text-sm font-medium text-muted-foreground">
-                {(person.name || "A").charAt(0).toUpperCase()}
-              </span>
-            </div>
+            {profilePhotoSrc ? (
+              <div className="h-10 w-10 rounded-full bg-muted overflow-hidden flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={profilePhotoSrc}
+                  alt={person.name || "Profile photo"}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <span className="text-sm font-medium text-muted-foreground">
+                  {(person.name || "A").charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
             <div className="min-w-0">
               <p className="text-base font-semibold text-foreground truncate">
                 {person.name || "Anonymous"}
@@ -56,9 +73,9 @@ export function PersonResultCard({ person, searchId, index = 0 }: PersonResultCa
           <div className="mt-3 border-t border-border/60 pt-3 space-y-1">
             <div className="text-xs text-muted-foreground">
               <p className="font-medium text-foreground/90 flex justify-between items-center gap-2">
-                <span>Why {person.name || "this person"} :</span>
+                <span>Match reasons</span>
                 {similarityPercent != null && (
-                  <span className="flex-shrink-0">{similarityPercent}%</span>
+                  <span className="flex-shrink-0 text-foreground font-semibold">{similarityPercent}%</span>
                 )}
               </p>
               <ul className="mt-1 list-disc pl-4 space-y-0.5">

@@ -38,16 +38,18 @@ export function SearchResults({ searchId, people }: SearchResultsProps) {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.2 }}
           className="space-y-4"
         >
           <h2 className="text-sm font-medium text-muted-foreground">
             {people.length} {people.length === 1 ? "result" : "results"}
+            {hasMore && " · more available"}
           </h2>
           {people.length === 0 ? (
-            <p className="text-muted-foreground py-12 text-center text-sm rounded-lg border border-dashed border-border">
-              {'No matches. Try a different query or clear "Open to work only".'}
-            </p>
+            <div className="py-12 text-center rounded-lg border border-dashed border-border">
+              <p className="text-muted-foreground text-sm">No matches found.</p>
+              <p className="text-muted-foreground/70 text-xs mt-1">Try broadening your query or using different keywords.</p>
+            </div>
           ) : (
             <>
               <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">

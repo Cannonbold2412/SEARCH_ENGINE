@@ -140,7 +140,7 @@ apps/web/
   1. Fetches **bio** and **experience cards** via React Query: `api("/me/bio")`, `api("/me/experience-cards")`.
   2. Loading → “Loading profile…”.
   3. Error → “Failed to load profile…”.
-  4. Success → Card with “My profile”, links to “Edit Bio” (`/onboarding/bio`) and “Experience builder” (`/builder`), then bio fields and list of experience cards with status badges (APPROVED/DRAFT, human_edited, locked).
+  4. Success → Card with “My profile”, links to “Edit Bio” (`/onboarding/bio`) and “Builder” (`/builder`), then bio fields and list of experience cards with status badges (APPROVED/DRAFT, human_edited, locked).
 - **Functions:** No custom handlers; uses `useQuery` and renders data.
 
 ### Builder — `src/app/(authenticated)/builder/page.tsx`

@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
-import { ArrowLeft, Coins } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, Coins, Check } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +12,7 @@ import { api } from "@/lib/api";
 import { useCredits } from "@/hooks";
 import { cn } from "@/lib/utils";
 
-const PRICE_PER_CREDIT = 1; // Rs.1 per credit
+const PRICE_PER_CREDIT = 1;
 
 const PACKS = [
   { credits: 100, label: "100 credits", popular: false },
@@ -23,6 +24,7 @@ const PACKS = [
 export default function CreditsPage() {
   const queryClient = useQueryClient();
   const { data: credits } = useCredits();
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const purchaseMutation = useMutation({
     mutationFn: (creditsAmount: number) =>
@@ -30,8 +32,10 @@ export default function CreditsPage() {
         method: "POST",
         body: { credits: creditsAmount },
       }),
-    onSuccess: () => {
+    onSuccess: (_data, creditsAmount) => {
       queryClient.invalidateQueries({ queryKey: ["credits"] });
+      setSuccessMessage(`Added ${creditsAmount.toLocaleString()} credits!`);
+      setTimeout(() => setSuccessMessage(null), 3000);
     },
   });
 
@@ -39,7 +43,7 @@ export default function CreditsPage() {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
+      transition={{ duration: 0.2 }}
       className="max-w-xl mx-auto space-y-6"
     >
       <div>
@@ -48,15 +52,14 @@ export default function CreditsPage() {
           className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5 group mb-4"
         >
           <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
-          Back to settings
+          Back to Settings
         </Link>
         <h1 className="text-xl font-semibold tracking-tight">Buy credits</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {"Use credits for search and unlocking contacts."}
+          Use credits for search and unlocking contacts.
         </p>
       </div>
 
-      {/* Current balance */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3">
@@ -79,12 +82,25 @@ export default function CreditsPage() {
         </CardContent>
       </Card>
 
-      {/* Packs */}
+      <AnimatePresence>
+        {successMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/5 px-4 py-3 text-sm font-medium text-green-700 dark:text-green-400"
+          >
+            <Check className="h-4 w-4 flex-shrink-0" />
+            {successMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Choose a pack</CardTitle>
           <CardDescription>
-            {"Select a pack and click Buy to add credits to your account."}
+            Select a pack and click Buy to add credits to your account.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -112,7 +128,7 @@ export default function CreditsPage() {
                   <div>
                     <p className="text-sm font-medium text-foreground">{pack.label}</p>
                     <p className="text-xs text-muted-foreground">
-                      {"Rs. "}{priceRupees.toLocaleString()}
+                      ₹{priceRupees.toLocaleString("en-IN")}
                     </p>
                   </div>
                   <Button

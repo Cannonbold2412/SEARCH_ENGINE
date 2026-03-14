@@ -104,7 +104,7 @@ Key files and directories under `apps/api/src`:
   - `__init__.py` – Re-exports common schemas.
 - `routers/`
   - `auth.py` – Login, signup, verify email, token refresh, etc.
-  - `builder.py` – Experience builder endpoints.
+  - `builder.py` – Builder endpoints.
   - `search.py` – Search + related person and history endpoints.
   - `profile.py` – Profile reading/updating endpoints.
   - `contact.py` – Contact and unlock related endpoints.
@@ -136,7 +136,7 @@ Key files and directories under `apps/web/src`:
   - `verify-email/page.tsx` – Email verification page.
   - `(authenticated)/layout.tsx` – Authenticated layout.
   - `(authenticated)/home/page.tsx` – Main home surface after onboarding.
-  - `(authenticated)/builder/page.tsx` – Experience builder.
+  - `(authenticated)/builder/page.tsx` – Builder.
   - `(authenticated)/cards/page.tsx` – Card browsing.
   - `(authenticated)/searches/page.tsx` – Search history.
   - `(authenticated)/people/[id]/page.tsx` – Person profile view.
@@ -328,9 +328,9 @@ Credits are modeled via `services/credits.py` and associated schemas:
 
 ---
 
-## 5. Experience Builder: From Messy Text to Embeddings
+## 5. Builder: From Messy Text to Embeddings
 
-The experience builder flow is fully detailed in `apps/api/docs/EXPERIENCE_CARD_FLOW.md`. Here is the end-to-end overview.
+The builder flow is fully detailed in `apps/api/docs/EXPERIENCE_CARD_FLOW.md`. Here is the end-to-end overview.
 
 ### 5.1 High-Level Stages
 
@@ -770,7 +770,7 @@ Schemas in `apps/api/src/schemas` define the contracts between frontend and back
 Key schema groups:
 
 - `auth.py` – Auth and email verification.
-- `builder.py` – Experience builder, clarify, fill-from-text, and card responses.
+- `builder.py` – Builder, clarify, fill-from-text, and card responses.
 - `search.py` – Search requests/responses and person search result.
 - `profile.py` – Profile update and read models.
 - `contact.py` – Contact details and unlock responses.

@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
-import { BackLink } from "@/components/common";
 import { PageLoading, PageError, ErrorMessage } from "@/components/feedback";
 import { VisibilitySection, type VisibilityMode } from "@/components/onboarding/visibility-section";
 import { api, apiUpload, type ApiOptions } from "@/lib/api";
@@ -211,11 +210,7 @@ export default function OnboardingBioPage() {
 
   if (bioError) {
     return (
-      <PageError
-        message="Failed to load your bio. You may need to sign in again."
-        backHref="/profile"
-        backLabel="← Back to profile"
-      />
+      <PageError message="Failed to load your bio. You may need to sign in again." />
     );
   }
 
@@ -225,9 +220,6 @@ export default function OnboardingBioPage() {
       animate={{ opacity: 1, y: 0 }}
       className="max-w-[720px] mx-auto py-8"
     >
-      <div className="mb-6">
-        <BackLink href="/profile" className="text-sm text-muted-foreground hover:text-foreground transition-colors" />
-      </div>
       <Card className="glass border-border/50 shadow-xl glow-ring overflow-hidden">
         <CardHeader className="space-y-1.5 border-b border-border/50">
           <CardTitle className="text-xl tracking-tight">Create your bio</CardTitle>
@@ -410,7 +402,7 @@ export default function OnboardingBioPage() {
                 size="lg"
                 disabled={putBio.isPending || patchVisibility.isPending}
               >
-                {putBio.isPending || patchVisibility.isPending ? "Saving..." : "Save & continue to Experience Builder"}
+                {putBio.isPending || patchVisibility.isPending ? "Saving..." : "Save & continue to Builder"}
               </Button>
               <p className="text-xs text-muted-foreground self-center leading-relaxed">
                 Next: add your experience in the builder, or go to Home from the menu.

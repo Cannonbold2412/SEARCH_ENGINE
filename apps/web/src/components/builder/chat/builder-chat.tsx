@@ -4,10 +4,13 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Loader2, Volume2, VolumeX, Mic, Square } from "lucide-react";
+import { Send, Loader2, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/constants";
+import { AUTH_TOKEN_KEY } from "@/lib/auth-flow";
+import { AiSphere } from "../ai-sphere";
 import { CardDetails, getChildDisplaySummary, getChildDisplayTitle, isPlaceholderChildCard } from "../card/card-details";
 import {
   EXPERIENCE_CARDS_QUERY_KEY,
@@ -18,6 +21,8 @@ import type {
   DraftSetResponse,
   DetectExperiencesResponse,
 } from "@/types";
+
+let Vapi: typeof import("@vapi-ai/web").default | null = null;
 
 const PLACEHOLDER_FIRST_MESSAGE: ChatMessage = {
   id: "0",
@@ -40,7 +45,6 @@ type Stage =
   | "card_ready"
   | "idle";
 
-/** Structured clarify history entry for target-aware API. */
 export type ClarifyHistoryEntry = {
   role: string;
   kind: "clarify_question" | "clarify_answer";
@@ -51,10 +55,8 @@ export type ClarifyHistoryEntry = {
   text: string;
 };
 
-/** One option for choose_focus (multiple experiences). */
 export type ClarifyOption = { parent_id: string; label: string };
 
-/** Clarify API response (target-aware). */
 type ClarifyResponse = {
   clarifying_question?: string | null;
   filled?: Record<string, unknown>;
@@ -77,7 +79,6 @@ type ClarifyResponse = {
   progress?: { parent_asked?: number; child_asked?: number; max_parent?: number; max_child?: number } | null;
   asked_history_entry?: ClarifyHistoryEntry | null;
   canonical_family?: { parent?: Record<string, unknown>; children?: unknown[] } | null;
-  /** choose_focus: multiple experiences, user must pick one first */
   action?: string | null;
   message?: string | null;
   options?: ClarifyOption[] | null;
@@ -98,6 +99,42 @@ function buildSummaryFromParent(parent: Record<string, unknown>): string {
   return parts.join(". ") || "Your experience";
 }
 
+function isTranscriptMessage(msg: unknown): msg is { type: string; role?: string; transcriptType?: string; transcript?: string } {
+  if (!msg || typeof msg !== "object") return false;
+  const m = msg as Record<string, unknown>;
+  const type = String(m.type ?? "").toLowerCase();
+  return type === "transcript" && typeof (m.transcript ?? m.content) === "string";
+}
+
+function ScrollToBottomButton({ scrollRef }: { scrollRef: React.RefObject<HTMLDivElement | null> }) {
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    const el = scrollRef.current?.parentElement;
+    if (!el) return;
+    const handleScroll = () => {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setShow(distanceFromBottom > 120);
+    };
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, [scrollRef]);
+
+  if (!show) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
+      className="absolute bottom-24 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 rounded-full bg-background/90 border border-border shadow-md px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      aria-label="Scroll to bottom"
+    >
+      <ArrowDown className="h-3 w-3" />
+      New messages
+    </button>
+  );
+}
+
 interface BuilderChatProps {
   translateRawText: (text: string) => Promise<string>;
   onCardsSaved?: () => void;
@@ -113,36 +150,30 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
   const [detectedExperiences, setDetectedExperiences] = useState<DetectExperiencesResponse | null>(null);
   const [currentExperienceText, setCurrentExperienceText] = useState("");
   const [currentCardFamily, setCurrentCardFamily] = useState<DraftCardFamily | null>(null);
-  /** Structured clarify history for target-aware API (role, kind, target_type, target_field, target_child_type, text). */
   const [clarifyHistory, setClarifyHistory] = useState<ClarifyHistoryEntry[]>([]);
-  /** When true, speak each new assistant message (text-to-speech for conversation). Default on for voice-first flow. */
-  const [speakReplies, setSpeakReplies] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const lastSpokenMessageIdRef = useRef<string | null>(null);
-  const ttsQueueRef = useRef<{ id: string; content: string }[]>([]);
-  const lastEnqueuedMessageIdRef = useRef<string | null>(null);
-  const isSpeakingTtsRef = useRef(false);
-  const speechSynthRef = useRef<SpeechSynthesis | null>(null);
-  const isRecordingRef = useRef(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isConnectingRecorder, setIsConnectingRecorder] = useState(false);
 
-  const stopRecording = useCallback(() => {
-    isRecordingRef.current = false;
-    setIsRecording(false);
-  }, []);
+  // Voice state (Vapi integration)
+  const vapiRef = useRef<InstanceType<typeof import("@vapi-ai/web").default> | null>(null);
+  const [voiceConnecting, setVoiceConnecting] = useState(false);
+  const [voiceConnected, setVoiceConnected] = useState(false);
+  // Default the orb to \"AI speaking\" so the sphere feels alive on first load.
+  const [aiSpeaking, setAiSpeaking] = useState(true);
+  const [userSpeaking, setUserSpeaking] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
-  const toggleRecording = useCallback(() => {
-    // Voice recording: placeholder for future implementation
-    if (isRecordingRef.current) {
-      stopRecording();
-    } else {
-      isRecordingRef.current = true;
-      setIsRecording(true);
-    }
-  }, [stopRecording]);
+  // Sphere intensity derived from voice state
+  const sphereActive = voiceConnecting
+    ? "connecting" as const
+    : aiSpeaking
+    ? "ai" as const
+    : userSpeaking || voiceConnected
+    ? "user" as const
+    : "idle" as const;
 
-  // Fetch LLM-generated opening question on mount (no hardcoded first message)
+  const sphereIntensity = aiSpeaking ? 0.85 : userSpeaking ? 0.7 : voiceConnected ? 0.25 : 0;
+
+  // Fetch LLM-generated opening question on mount
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -168,7 +199,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           );
         } else if (!cancelled) {
           const fallback =
-            "To get a sense of you, tell me about a few things you’ve worked on or cared about lately. It can be projects, roles, or anything that felt meaningful.";
+            "To get a sense of you, tell me about a few things you've worked on or cared about lately. It can be projects, roles, or anything that felt meaningful.";
           setMessages((prev) =>
             prev.length > 0
               ? [{ ...prev[0], content: fallback }, ...prev.slice(1)]
@@ -178,7 +209,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
       } catch {
         if (!cancelled) {
           const fallback =
-            "If we were grabbing coffee, what would you be excited to tell me you’re working on or exploring right now?";
+            "If we were grabbing coffee, what would you be excited to tell me you're working on or exploring right now?";
           setMessages((prev) =>
             prev.length > 0
               ? [{ ...prev[0], content: fallback }, ...prev.slice(1)]
@@ -198,67 +229,13 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  /** Strip markdown for TTS (bold, links, etc.). */
-  const plainTextForSpeech = useCallback((content: string) => {
-    return content
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/\*(.*?)\*/g, "$1")
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-      .replace(/\n+/g, " ")
-      .trim();
-  }, []);
-
-  const speakText = useCallback(
-    async (text: string, onPlaybackEnd?: () => void) => {
-      const plain = plainTextForSpeech(text);
-      if (!plain || typeof window === "undefined") return;
-      speechSynthRef.current?.cancel();
-      const done = () => {
-        onPlaybackEnd?.();
-      };
-      if (!("speechSynthesis" in window)) {
-        done();
-        return;
-      }
-      const u = new SpeechSynthesisUtterance(plain);
-      u.rate = 0.95;
-      u.pitch = 1;
-      u.onend = () => done();
-      u.onerror = () => done();
-      const voices = window.speechSynthesis.getVoices();
-      const en = voices.find((v) => v.lang.startsWith("en"));
-      if (en) u.voice = en;
-      window.speechSynthesis.speak(u);
-      speechSynthRef.current = window.speechSynthesis;
-    },
-    [plainTextForSpeech]
-  );
-
-  const processTtsQueue = useCallback(() => {
-    if (!speakReplies) return;
-    if (isSpeakingTtsRef.current) return;
-    const next = ttsQueueRef.current.shift();
-    if (!next) return;
-    isSpeakingTtsRef.current = true;
-    lastSpokenMessageIdRef.current = next.id;
-    speakText(next.content, () => {
-      isSpeakingTtsRef.current = false;
-      processTtsQueue();
-    });
-  }, [speakReplies, speakText]);
-
-  useEffect(() => {
-    if (!speakReplies || messages.length === 0) return;
-    const last = messages[messages.length - 1];
-    if (last.role !== "assistant" || !last.content || last.id === lastEnqueuedMessageIdRef.current) return;
-    lastEnqueuedMessageIdRef.current = last.id;
-    ttsQueueRef.current.push({ id: last.id, content: last.content });
-    processTtsQueue();
-  }, [messages, speakReplies, processTtsQueue]);
-
+  // Cleanup Vapi on unmount
   useEffect(() => {
     return () => {
-      if (typeof window !== "undefined" && window.speechSynthesis) window.speechSynthesis.cancel();
+      if (vapiRef.current) {
+        vapiRef.current.stop();
+        vapiRef.current = null;
+      }
     };
   }, []);
 
@@ -293,11 +270,9 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
       const families = res.card_families ?? [];
       if (families.length === 0) return null;
       const family = families[0];
-      const parent = family.parent as Record<string, unknown>;
-      const summary = buildSummaryFromParent(parent);
       setCurrentCardFamily(family);
       setClarifyHistory([]);
-      return { summary, family };
+      return { summary: buildSummaryFromParent(family.parent as Record<string, unknown>), family };
     },
     [translateRawText]
   );
@@ -310,7 +285,6 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
     ): Promise<ClarifyResponse> => {
       const sourceText = opts?.rawTextOverride ?? currentExperienceText;
       const english = await translateRawText(sourceText);
-      const parent = (cardFamily?.parent ?? {}) as Record<string, unknown>;
       const conversation_history = history.map((h) => ({ role: h.role, content: h.text }));
       let last_question_target: { target_type?: string; target_field?: string; target_child_type?: string } | undefined;
       if (history.length > 0 && history[history.length - 1].role === "user") {
@@ -328,7 +302,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
       }
       const body: Record<string, unknown> = {
         raw_text: english || sourceText,
-        current_card: parent,
+        current_card: (cardFamily?.parent ?? {}) as Record<string, unknown>,
         card_type: "parent",
         conversation_history,
         card_family: cardFamily ? { parent: cardFamily.parent, children: cardFamily.children ?? [] } : undefined,
@@ -342,11 +316,10 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
       if (opts?.detectedExperiences?.length) {
         body.detected_experiences = opts.detectedExperiences.map((e) => ({ index: e.index, label: e.label }));
       }
-      const res = await api<ClarifyResponse>("/experience-cards/clarify-experience", {
+      return api<ClarifyResponse>("/experience-cards/clarify-experience", {
         method: "POST",
         body,
       });
-      return res;
     },
     [currentExperienceText, translateRawText]
   );
@@ -362,11 +335,102 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
     []
   );
 
+  // Voice: toggle Vapi connection
+  const toggleVoice = useCallback(async () => {
+    if (voiceConnected && vapiRef.current) {
+      vapiRef.current.stop();
+      vapiRef.current = null;
+      setVoiceConnected(false);
+      setAiSpeaking(false);
+      setUserSpeaking(false);
+      return;
+    }
+
+    setVoiceError(null);
+    setVoiceConnecting(true);
+
+    const token = typeof window !== "undefined" ? localStorage.getItem(AUTH_TOKEN_KEY) : null;
+    if (!token) {
+      setVoiceError("Please sign in to use voice");
+      setVoiceConnecting(false);
+      return;
+    }
+    if (!API_BASE || !API_BASE.startsWith("http")) {
+      setVoiceError("API not configured");
+      setVoiceConnecting(false);
+      return;
+    }
+
+    try {
+      if (!Vapi) {
+        const mod = await import("@vapi-ai/web");
+        Vapi = mod.default;
+      }
+      const proxyBase = `${API_BASE}/convai`;
+      const vapi = new Vapi(token, proxyBase);
+      vapiRef.current = vapi;
+
+      vapi.on("call-start", () => {
+        setVoiceConnecting(false);
+        setVoiceConnected(true);
+        setVoiceError(null);
+      });
+
+      vapi.on("call-end", () => {
+        setVoiceConnected(false);
+        setAiSpeaking(false);
+        setUserSpeaking(false);
+        vapiRef.current = null;
+        queryClient.invalidateQueries({ queryKey: [EXPERIENCE_CARD_FAMILIES_QUERY_KEY] });
+      });
+
+      vapi.on("speech-start", () => {
+        setAiSpeaking(true);
+        setUserSpeaking(false);
+      });
+      vapi.on("speech-end", () => {
+        setAiSpeaking(false);
+      });
+
+      vapi.on("message", (msg: unknown) => {
+        if (!isTranscriptMessage(msg)) return;
+        const transcriptType = String((msg as Record<string, unknown>).transcriptType ?? "").toLowerCase();
+        if (transcriptType && transcriptType !== "final") return;
+        const text = (msg.transcript ?? (msg as Record<string, unknown>).content) as string;
+        const role = (msg.role === "user" || msg.role === "assistant") ? msg.role : "assistant";
+        const t = (text ?? "").trim();
+        if (!t) return;
+        if (role === "user") setUserSpeaking(true);
+        setMessages((prev) => [
+          ...prev,
+          { id: `${Date.now()}-${prev.length}`, role, content: t },
+        ]);
+      });
+
+      vapi.on("error", (err) => {
+        const errObj = err as Record<string, unknown>;
+        const errType = String(errObj?.type ?? "").toLowerCase();
+        const errMsg = (err?.message as string) || "";
+        const isLocal = typeof window !== "undefined" && /localhost|127\.0\.0\.1/.test(API_BASE);
+        const friendlyMsg =
+          errType === "start-method-error" && isLocal
+            ? "Voice requires a tunnel for local development. Run ngrok http 8000 and set VAPI_CALLBACK_BASE_URL to the ngrok URL."
+            : errMsg || "Voice connection error";
+        setVoiceError(friendlyMsg);
+        setVoiceConnecting(false);
+      });
+
+      await vapi.start({});
+    } catch (e) {
+      setVoiceError(e instanceof Error ? e.message : "Could not start voice session");
+      setVoiceConnecting(false);
+    }
+  }, [voiceConnected, queryClient]);
+
   const sendMessage = useCallback(async (overrideText?: string) => {
     const text = (overrideText !== undefined ? overrideText : input).trim();
     if (!text || loading) return;
     setInput("");
-    if ((overrideText ?? input).toString().trim()) setSpeakReplies(true);
     addMessage({ role: "user", content: text });
 
     if (stage === "awaiting_experience") {
@@ -403,7 +467,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           const { summary, family } = result;
           addMessage({
             role: "assistant",
-            content: `Here’s how I’d describe what you did—tell me if this feels right: **${summary}**\n\nI’m curious about a couple of things so I can really understand it.`,
+            content: `Here's how I'd describe what you did—tell me if this feels right: **${summary}**\n\nI'm curious about a couple of things so I can really understand it.`,
           });
           const parent = family.parent as Record<string, unknown>;
           const firstClarify = await askClarify(family, [], { rawTextOverride: text });
@@ -438,7 +502,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
                   body: { card_id: cardId },
                 });
               } catch {
-                // If finalize fails, user can still edit later via manual flows.
+                // Non-fatal
               }
             }
           queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
@@ -447,7 +511,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           addMessage({
             role: "assistant",
             content:
-              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nIf another chapter of your story pops into your head later, just tell me and I’ll keep updating your profile.",
+              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nIf another chapter of your story pops into your head later, just tell me and I'll keep updating your profile.",
             card: { ...family, parent: mergedParent },
           });
           setCurrentCardFamily(null);
@@ -462,14 +526,14 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
                   body: { card_id: cardId },
                 });
               } catch {
-                // Non-fatal; card will remain hidden until successfully finalized.
+                // Non-fatal
               }
             }
           addAssistantReflection(firstClarify.profile_reflection);
           addMessage({
             role: "assistant",
             content:
-              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nWhenever you’re ready, share another story and I’ll weave it into the bigger picture of you.",
+              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nWhenever you're ready, share another story and I'll weave it into the bigger picture of you.",
             card: family,
           });
           setCurrentCardFamily(null);
@@ -516,7 +580,6 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
     if (stage === "awaiting_choice") {
       const num = parseInt(text.replace(/\D/g, ""), 10);
       const experiences = detectedExperiences?.experiences ?? [];
-      // User sees "1.", "2.", ... so match by 1-based position (avoids API 0-based index mismatch)
       const exp = num >= 1 && num <= experiences.length ? experiences[num - 1] : undefined;
       if (!exp || !detectedExperiences) {
           addMessage({
@@ -542,7 +605,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
         const { summary, family } = result;
         addMessage({
           role: "assistant",
-          content: `Here’s how I’d sum that up—see if this fits: **${summary}**\n\nI’ve got a couple of quick questions so I can get the nuances right:`,
+          content: `Here's how I'd sum that up—see if this fits: **${summary}**\n\nI've got a couple of quick questions so I can get the nuances right:`,
         });
         const parent = family.parent as Record<string, unknown>;
         const firstClarify = await askClarify(family, [], { rawTextOverride: currentExperienceText });
@@ -577,7 +640,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
                 body: { card_id: cardId },
               });
             } catch {
-              // Non-fatal; user can retry saving from Cards screen.
+              // Non-fatal
             }
           }
           queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
@@ -586,7 +649,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           addMessage({
             role: "assistant",
             content:
-              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nThis is really helpful—if another story or project comes to mind, tell me about it and I’ll keep building up your profile.",
+              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nThis is really helpful—if another story or project comes to mind, tell me about it and I'll keep building up your profile.",
             card: { ...family, parent: mergedParent },
           });
           setCurrentCardFamily(null);
@@ -601,14 +664,14 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
                 body: { card_id: cardId },
               });
             } catch {
-              // Ignore finalize error; card remains draft until successful.
+              // Non-fatal
             }
             }
             addAssistantReflection(firstClarify.profile_reflection);
             addMessage({
               role: "assistant",
               content:
-                "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nIf you think of another story—big or small—share it and I’ll fold it into how I understand you.",
+                "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nIf you think of another story—big or small—share it and I'll fold it into how I understand you.",
               card: family,
             });
             setCurrentCardFamily(null);
@@ -646,7 +709,6 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           text: res.clarifying_question,
         } : null);
         if (res.clarifying_question && nextEntry) {
-          // Update currentCardFamily with the canonical state returned by the backend
           if (res.canonical_family?.parent) {
             setCurrentCardFamily((prev) =>
               prev
@@ -670,7 +732,7 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
                 body: { card_id: cardId },
               });
             } catch {
-              // Finalize failure won't block showing the card preview.
+              // Non-fatal
             }
           }
           queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
@@ -682,15 +744,12 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
           addMessage({
             role: "assistant",
             content:
-              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nThis already says a lot about you—if another example comes to mind later, tell me and I’ll keep deepening your profile.",
+              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nThis already says a lot about you—if another example comes to mind later, tell me and I'll keep deepening your profile.",
             card: finalFamily,
           });
           setCurrentCardFamily(null);
           setStage("awaiting_experience");
           onCardsSaved?.();
-          if (isRecordingRef.current) {
-            stopRecording();
-          }
         } else {
           const parent = (currentCardFamily?.parent ?? {}) as Record<string, unknown>;
           const cardId = (parent as { id?: string }).id;
@@ -701,14 +760,14 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
                 body: { card_id: cardId },
               });
             } catch {
-              // Ignore; card stays draft until finalize succeeds.
+              // Non-fatal
             }
           }
           addAssistantReflection(res.profile_reflection);
           addMessage({
             role: "assistant",
             content:
-              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nWhenever you feel like it, share another story and I’ll keep connecting the dots on your skills and interests.",
+              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nWhenever you feel like it, share another story and I'll keep connecting the dots on your skills and interests.",
             card: currentCardFamily ?? undefined,
           });
           setCurrentCardFamily(null);
@@ -743,12 +802,12 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
     mergeFilledIntoCard,
     queryClient,
     onCardsSaved,
-    stopRecording,
   ]);
 
   return (
-    <div className="flex flex-col h-full min-h-0 rounded-xl border border-border bg-card overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0" ref={scrollRef}>
+    <div className="relative flex flex-col h-full min-h-0 rounded-xl border border-border bg-card overflow-hidden">
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         <AnimatePresence initial={false}>
           {messages.map((msg) => (
             <motion.div
@@ -822,9 +881,9 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
                     })()}
                     <Link
                       href="/cards"
-                      className="inline-block mt-2 text-xs font-medium text-primary hover:underline"
+                      className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-primary hover:underline rounded-md bg-primary/5 px-2 py-1 border border-primary/20 transition-colors hover:bg-primary/10"
                     >
-                      → Open Your Cards
+                      View in Your Cards
                     </Link>
                   </>
                 )}
@@ -842,54 +901,64 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
         )}
         <div ref={scrollRef} />
       </div>
-      <div className="flex gap-2 p-3 border-t border-border flex-shrink-0">
-        <textarea
-          placeholder="Type here…"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              sendMessage();
-            }
-          }}
-          rows={2}
-          className="flex-1 min-h-[44px] max-h-[120px] resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          disabled={loading}
+
+      {/* Scroll-to-bottom pill */}
+      <ScrollToBottomButton scrollRef={scrollRef} />
+
+      {/* Free-floating sphere */}
+      <div className="pointer-events-none absolute bottom-10 right-3 z-20 overflow-visible">
+        <AiSphere
+          intensity={sphereIntensity}
+          active={sphereActive}
+          size={56}
+          onClick={toggleVoice}
+          className="pointer-events-auto"
         />
-        <Button
-          type="button"
-          variant={isRecording ? "destructive" : "outline"}
-          size="icon"
-          onClick={toggleRecording}
-          disabled={loading || isConnectingRecorder}
-          className="shrink-0 h-11 w-11"
-          aria-label={isRecording ? "Stop recording" : "Voice input"}
-        >
-          {isRecording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-        </Button>
-        <Button
-          type="button"
-          variant={speakReplies ? "secondary" : "outline"}
-          size="icon"
-          onClick={() => setSpeakReplies((on) => !on)}
-          disabled={loading}
-          className="shrink-0 h-11 w-11"
-          aria-label={speakReplies ? "Voice on — click to turn off" : "Voice off — click to hear AI replies"}
-          title={speakReplies ? "Voice on — AI replies are spoken" : "Turn on to hear AI replies"}
-        >
-          {speakReplies ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          onClick={() => sendMessage()}
-          disabled={!input.trim() || loading}
-          className="shrink-0 h-11 w-11"
-          aria-label="Send"
-        >
-          <Send className="h-4 w-4" />
-        </Button>
+      </div>
+
+      {/* Footer: text input + send (no sphere here) */}
+      <div className="flex flex-col gap-1.5 px-3 py-2 border-t border-border flex-shrink-0">
+        {voiceError && (
+          <p className="text-xs text-destructive text-center" role="alert">
+            {voiceError}
+          </p>
+        )}
+        <div className="flex items-end gap-2">
+          <textarea
+            placeholder={voiceConnected ? "Voice active — or type here…" : "Type here…"}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
+            rows={2}
+            className="flex-1 min-h-[44px] max-h-[120px] resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            disabled={loading}
+          />
+          <Button
+            type="button"
+            size="icon"
+            onClick={() => sendMessage()}
+            disabled={!input.trim() || loading}
+            className="shrink-0 h-11 w-11"
+            aria-label="Send"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+        {voiceConnected && (
+          <p className="text-[11px] text-center text-muted-foreground mb-0">
+            Voice connected — speak naturally or type. Tap the orb to disconnect.
+          </p>
+        )}
+        {!voiceConnected && (
+          <p className="text-[11px] text-center text-muted-foreground mb-0">
+            Tap the orb to start voice, or just type
+          </p>
+        )}
       </div>
     </div>
   );

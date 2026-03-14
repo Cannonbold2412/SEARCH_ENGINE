@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Briefcase, ExternalLink, MapPin } from "lucide-react";
+import { Briefcase, ChevronRight, MapPin } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageError, PageLoading } from "@/components/feedback";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +26,7 @@ export default function ExplorePage() {
       <PageError
         message={error instanceof Error ? error.message : "Failed to load profiles."}
         backHref="/home"
-        backLabel="Back to CONXA"
+        backLabel="Back to Home"
       />
     );
   }
@@ -35,7 +35,7 @@ export default function ExplorePage() {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
+      transition={{ duration: 0.2 }}
       className="max-w-6xl mx-auto space-y-6"
     >
       <div>
@@ -60,7 +60,7 @@ export default function ExplorePage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.02, duration: 0.22 }}
             >
-              <Link href={`/people/${person.id}`} className="block h-full">
+              <Link href={`/people/${person.id}?from=explore`} className="block h-full">
                 <Card className="h-full transition-colors hover:bg-muted/40 hover:border-muted-foreground/20">
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-2">
@@ -75,7 +75,7 @@ export default function ExplorePage() {
                           </p>
                         )}
                       </div>
-                      <ExternalLink className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0">
@@ -104,4 +104,3 @@ export default function ExplorePage() {
     </motion.div>
   );
 }
-

@@ -11,7 +11,7 @@ export const MAX_SIDEBAR_WIDTH = 520;
 export const COLLAPSED_SIDEBAR_WIDTH = 64;
 
 /** Width when sidebar is expanded */
-const EXPANDED_SIDEBAR_WIDTH = 220;
+const EXPANDED_SIDEBAR_WIDTH = 180;
 
 /** Width of mobile drawer when open */
 export const MOBILE_DRAWER_WIDTH = 260;

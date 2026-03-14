@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { ArrowLeft, Briefcase, ExternalLink, LockOpen, MapPin } from "lucide-react";
+import { Briefcase, ChevronRight, LockOpen, MapPin } from "lucide-react";
 import { api } from "@/lib/api";
 import type { UnlockedCardsResponse } from "@/types";
 import { PageError, PageLoading } from "@/components/feedback";
@@ -47,7 +47,7 @@ export default function UnlockedCardsPage() {
       <PageError
         message={error instanceof Error ? error.message : "Failed to load unlocked cards."}
         backHref="/home"
-        backLabel="Back to CONXA"
+        backLabel="Back to Home"
       />
     );
   }
@@ -56,17 +56,10 @@ export default function UnlockedCardsPage() {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
+      transition={{ duration: 0.2 }}
       className="max-w-4xl mx-auto space-y-6"
     >
       <div>
-        <Link
-          href="/home"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5 group mb-4"
-        >
-          <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
-          Back to Search
-        </Link>
         <h1 className="text-xl font-semibold tracking-tight">Unlocked cards</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Every person card you have unlocked appears here.
@@ -92,7 +85,7 @@ export default function UnlockedCardsPage() {
               transition={{ delay: index * 0.03, duration: 0.22 }}
             >
               <Link
-                href={`/people/${card.person_id}`}
+                href={`/people/${card.person_id}?from=unlocked`}
                 className="block h-full"
               >
                 <Card className="h-full transition-colors hover:bg-muted/40 hover:border-muted-foreground/20">
@@ -106,7 +99,7 @@ export default function UnlockedCardsPage() {
                           {formatUnlockedAt(card.unlocked_at)}
                         </p>
                       </div>
-                      <ExternalLink className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                     </div>
                     <div className="flex items-center justify-between gap-2 mt-1">
                       {card.current_location ? (

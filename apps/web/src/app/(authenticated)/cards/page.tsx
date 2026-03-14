@@ -6,7 +6,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { BackLink } from "@/components/common";
 import { PageLoading } from "@/components/feedback";
 import { SavedCardFamily } from "@/components/builder";
 import { api } from "@/lib/api";
@@ -381,8 +380,7 @@ export default function YourCardsPage() {
       className="max-w-3xl mx-auto space-y-8"
     >
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <BackLink href="/profile" className="flex-shrink-0" />
+      <div className="flex items-center justify-end gap-4">
         <Link href="/builder">
           <Button variant="outline" size="sm" className="h-9 touch-manipulation rounded-full px-4">
             <Plus className="h-3.5 w-3.5 mr-1.5" />

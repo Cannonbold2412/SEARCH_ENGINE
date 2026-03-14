@@ -677,6 +677,102 @@ async def _lexical_candidates(
     return {pid: min(LEXICAL_BONUS_MAX, (s / max_r) * LEXICAL_BONUS_MAX) for pid, s in person_scores.items()}
 
 
+# Minimal English stopwords for relaxed OR query (avoids requiring every word to match)
+_LEXICAL_STOP = frozenset(
+    {"a", "an", "the", "in", "on", "at", "to", "for", "of", "with", "and", "or", "is", "are", "was", "were"}
+)
+
+
+def _lexical_query_or_terms(raw_query: str, max_terms: int = 6) -> str:
+    """Build a string of space-separated terms for OR matching (e.g. 'acme corp')."""
+    if not (raw_query or "").strip():
+        return ""
+    words = re.findall(r"[a-zA-Z0-9]+", (raw_query or "").strip().lower())
+    terms = [w for w in words if len(w) > 1 and w not in _LEXICAL_STOP][:max_terms]
+    return " ".join(terms) if terms else (raw_query or "").strip()[:100]
+
+
+async def _lexical_candidates_relaxed(
+    db: AsyncSession,
+    raw_query: str,
+    limit_per_table: int = 100,
+) -> dict[str, float]:
+    """
+    Like _lexical_candidates but uses OR semantics so any term can match.
+    Used when vector and strict lexical return 0 candidates (e.g. demo data without embeddings).
+    """
+    query_or = _lexical_query_or_terms(raw_query)
+    if not query_or:
+        return {}
+    # Build tsquery as term1 | term2 | ... (plainto_tsquery with single terms and merge with OR)
+    terms = query_or.split()
+    if not terms:
+        return {}
+    # Use plainto_tsquery per term and OR in SQL: to_tsquery('english', 'acme | corp') - need to escape
+    safe_parts = []
+    for t in terms:
+        if t and re.match(r"^[a-zA-Z0-9]+$", t):
+            safe_parts.append(t)
+    if not safe_parts:
+        return {}
+    or_ts = " | ".join(safe_parts)
+    person_scores: dict[str, float] = defaultdict(float)
+    parent_doc_expr = """concat_ws(' ',
+        ec.title, ec.normalized_role, ec.domain, ec.sub_domain, ec.company_name, ec.company_type,
+        ec.location, ec.employment_type, ec.summary, ec.raw_text, ec.intent_primary,
+        array_to_string(COALESCE(ec.intent_secondary, '{}'::text[]), ' '),
+        ec.seniority_level,
+        CASE WHEN ec.start_date IS NOT NULL AND ec.end_date IS NOT NULL THEN ec.start_date::text || ' - ' || ec.end_date::text
+             WHEN ec.start_date IS NOT NULL THEN ec.start_date::text
+             WHEN ec.end_date IS NOT NULL THEN ec.end_date::text ELSE NULL END,
+        CASE WHEN ec.is_current = true THEN 'current' ELSE NULL END
+    )"""
+    # Use to_tsquery for OR; bind or_ts as single param (already sanitized alphanumeric + |)
+    stmt_parents = text(f"""
+        SELECT ec.person_id, ts_rank_cd(to_tsvector('english', COALESCE({parent_doc_expr}, '')), to_tsquery('english', :q)) AS r
+        FROM experience_cards ec
+        WHERE ec.experience_card_visibility = true
+          AND to_tsvector('english', COALESCE({parent_doc_expr}, '')) @@ to_tsquery('english', :q)
+        ORDER BY r DESC
+        LIMIT :lim
+    """)
+    child_doc_expr = """concat_ws(' ',
+        COALESCE((ecc.value->'items'->0->>'title'), (ecc.value->'items'->0->>'subtitle'), ecc.value->>'summary', ''),
+        ecc.value->>'summary', ecc.value->>'raw_text',
+        (SELECT string_agg(COALESCE(elem->>'title','') || ' ' || COALESCE(elem->>'subtitle','') || ' ' || COALESCE(elem->>'description','') || ' ' || COALESCE(elem->>'sub_summary',''), ' ')
+         FROM jsonb_array_elements(COALESCE(ecc.value->'items', '[]'::jsonb)) elem)
+    )"""
+    stmt_children = text(f"""
+        SELECT ecc.person_id, ts_rank_cd(to_tsvector('english', COALESCE({child_doc_expr}, '')), to_tsquery('english', :q)) AS r
+        FROM experience_card_children ecc
+        JOIN experience_cards ec ON ec.id = ecc.parent_experience_id AND ec.experience_card_visibility = true
+        WHERE to_tsvector('english', COALESCE({child_doc_expr}, '')) @@ to_tsquery('english', :q)
+        ORDER BY r DESC
+        LIMIT :lim
+    """)
+    params = {"q": or_ts, "lim": limit_per_table}
+    try:
+        rp, rc = await asyncio.gather(
+            db.execute(stmt_parents, params),
+            db.execute(stmt_children, params),
+        )
+        for row in rp.all():
+            pid = str(row.person_id)
+            person_scores[pid] = max(person_scores[pid], float(row.r or 0))
+        for row in rc.all():
+            pid = str(row.person_id)
+            person_scores[pid] = max(person_scores[pid], float(row.r or 0))
+    except Exception as e:
+        logger.warning("Lexical relaxed search failed: %s", e)
+        return {}
+    if not person_scores:
+        return {}
+    max_r = max(person_scores.values())
+    if max_r <= 0:
+        return {}
+    return {pid: min(LEXICAL_BONUS_MAX, (s / max_r) * LEXICAL_BONUS_MAX) for pid, s in person_scores.items()}
+
+
 def _apply_card_filters(stmt, ctx: _FilterContext):
     """Apply MUST/EXCLUDE filters and optional PersonProfile join to a statement with ExperienceCard in scope."""
     if ctx.apply_company_team and ctx.company_norms:
@@ -867,6 +963,18 @@ def _build_person_bio(profile: PersonProfile | None) -> str | None:
     return " | ".join(bio_parts) if bio_parts else None
 
 
+def _build_search_profile_photo_url(person_id: str, profile: PersonProfile | None) -> str | None:
+    """Return a public profile photo URL for search cards when available."""
+    if not profile:
+        return None
+    if getattr(profile, "profile_photo", None) is not None:
+        return f"/people/{person_id}/photo"
+    raw_url = (getattr(profile, "profile_photo_url", None) or "").strip()
+    if raw_url and not raw_url.startswith("/me/"):
+        return raw_url
+    return None
+
+
 # -----------------------------------------------------------------------------
 # Person list and ranking helpers
 # -----------------------------------------------------------------------------
@@ -894,6 +1002,7 @@ def _build_search_people_list(
                 name=person.display_name if person else None,
                 headline=_build_person_headline(vis),
                 bio=_build_person_bio(vis),
+                profile_photo_url=_build_search_profile_photo_url(pid, vis),
                 similarity_percent=similarity_by_person.get(pid),
                 why_matched=why_matched_by_person.get(pid, []),
                 open_to_work=vis.open_to_work if vis else False,
@@ -1335,6 +1444,37 @@ async def _fetch_candidate_rows_for_filter_ctx(
     return parent_result.all(), child_dist_result.all(), child_evidence_result.all()
 
 
+async def _fetch_candidates_lexical_only(
+    db: AsyncSession,
+    lexical_scores: dict[str, float],
+    limit_people: int = 24,
+) -> tuple[list, list, list]:
+    """When vector search returns no candidates (e.g. no embeddings), build parent rows from lexical scores.
+    Returns (rows, child_rows, child_evidence_rows); child lists are empty.
+    """
+    if not lexical_scores:
+        return [], [], []
+    max_score = max(lexical_scores.values()) or 1.0
+    person_ids_ordered = sorted(
+        lexical_scores.keys(),
+        key=lambda p: lexical_scores[p],
+        reverse=True,
+    )[:limit_people]
+    stmt = (
+        select(ExperienceCard)
+        .where(ExperienceCard.person_id.in_(person_ids_ordered))
+        .where(ExperienceCard.experience_card_visibility == True)
+    )
+    result = (await db.execute(stmt)).scalars().all()
+    rows: list[tuple[ExperienceCard, float]] = []
+    for card in result:
+        pid = str(card.person_id)
+        score = lexical_scores.get(pid, 0.0)
+        dist = 1.0 - (score / max_score)  # lower dist = better match
+        rows.append((card, dist))
+    return rows, [], []
+
+
 async def _fetch_candidates_with_fallback(
     db: AsyncSession,
     query_vec: list[float],
@@ -1729,6 +1869,18 @@ async def run_search(
         offer_salary_inr_per_year=offer_salary_inr_per_year,
     )
 
+    # When no cards have embeddings (e.g. demo seed), vector returns 0 candidates; use lexical-only fallback
+    all_person_ids = set(str(r[0].person_id) for r in rows) | set(str(r.person_id) for r in child_rows)
+    if not all_person_ids:
+        scores_for_fallback = lexical_scores
+        if not scores_for_fallback and (body.query or "").strip():
+            scores_for_fallback = await _lexical_candidates_relaxed(db, (body.query or "").strip())
+        if scores_for_fallback:
+            logger.info("Search: no vector candidates, using lexical-only fallback (e.g. unembedded cards)")
+            rows, child_rows, child_evidence_rows = await _fetch_candidates_lexical_only(
+                db, scores_for_fallback, limit_people=max(num_cards * 2, MIN_RESULTS)
+            )
+
     # Pre-load child evidence objects so graph features can be computed during scoring
     children_by_id_early = await _load_child_evidence_map(db, child_evidence_rows)
 
@@ -1946,6 +2098,7 @@ async def load_search_more(
                 name=person.display_name if person else None,
                 headline=_build_person_headline(vis),
                 bio=_build_person_bio(vis),
+                profile_photo_url=_build_search_profile_photo_url(pid, vis),
                 similarity_percent=similarity,
                 why_matched=why_matched,
                 open_to_work=vis.open_to_work if vis else False,

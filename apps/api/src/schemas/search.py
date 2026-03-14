@@ -155,6 +155,7 @@ class PersonSearchResult(BaseModel):
     name: Optional[str] = None  # display_name
     headline: Optional[str] = None
     bio: Optional[str] = None
+    profile_photo_url: Optional[str] = None
     similarity_percent: Optional[int] = None
     why_matched: list[str] = []
     open_to_work: bool

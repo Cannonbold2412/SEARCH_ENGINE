@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Pencil, User, GraduationCap, Briefcase, Mail } from "lucide-react";
+import { Pencil, User, GraduationCap, Briefcase, Mail, LayoutGrid, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageLoading, PageError } from "@/components/feedback";
@@ -30,21 +30,39 @@ export default function ProfilePage() {
       <PageError
         message="Failed to load profile. Please try again."
         backHref="/home"
-        backLabel="Go home"
+        backLabel="Back to Home"
         className="py-8"
       />
     );
   }
 
   const displayName = [bio?.first_name, bio?.last_name].filter(Boolean).join(" ") || "Anonymous";
+  const isIncomplete = !bio?.complete;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
+      transition={{ duration: 0.2 }}
       className="max-w-2xl mx-auto space-y-6"
     >
+      {isIncomplete && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+          <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground">Your profile is incomplete</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              A complete profile helps others find and connect with you.
+            </p>
+          </div>
+          <Link href="/onboarding/bio">
+            <Button variant="outline" size="sm" className="shrink-0">
+              Complete profile
+            </Button>
+          </Link>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4 min-w-0">
@@ -70,34 +88,31 @@ export default function ProfilePage() {
         <Link href="/onboarding/bio">
           <Button variant="outline" size="sm">
             <Pencil className="h-3.5 w-3.5 mr-1.5" />
-            Edit Bio
+            Edit profile
           </Button>
         </Link>
       </div>
 
       {/* Profile basics */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
-              <User className="h-4 w-4 text-muted-foreground" />
+      {(bio?.first_name || bio?.last_name || bio?.date_of_birth || bio?.current_city) && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
+                <User className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <CardTitle className="text-base">Profile basics</CardTitle>
             </div>
-            <CardTitle className="text-base">Profile basics</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
-            {(bio?.first_name || bio?.last_name) && <BioField label="Name" value={displayName} />}
-            {bio?.date_of_birth && <BioField label="Date of birth" value={bio.date_of_birth} />}
-            {bio?.current_city && <BioField label="Current city" value={bio.current_city} />}
-          </div>
-          {!bio?.complete && (
-            <p className="text-xs text-muted-foreground mt-4 pt-3 border-t border-border">
-              Complete your bio in Edit Bio.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+              {(bio?.first_name || bio?.last_name) && <BioField label="Name" value={displayName} />}
+              {bio?.date_of_birth && <BioField label="Date of birth" value={bio.date_of_birth} />}
+              {bio?.current_city && <BioField label="Current city" value={bio.current_city} />}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Education */}
       {(bio?.school || bio?.college) && (
@@ -182,6 +197,24 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Link to experience cards */}
+      <Card className="border-dashed">
+        <CardContent className="py-4">
+          <Link
+            href="/cards"
+            className="flex items-center gap-3 group"
+          >
+            <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 group-hover:bg-accent transition-colors">
+              <LayoutGrid className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">Your experience cards</p>
+              <p className="text-xs text-muted-foreground">View and manage the cards that make up your profile.</p>
+            </div>
+          </Link>
+        </CardContent>
+      </Card>
     </motion.div>
   );
 }

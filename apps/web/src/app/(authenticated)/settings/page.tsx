@@ -1,16 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { LogOut, User, Coins, Shield, Eye } from "lucide-react";
+import { LogOut, User, Shield, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/auth-context";
-import { useCredits, useVisibility, VISIBILITY_QUERY_KEY } from "@/hooks";
+import { useVisibility, VISIBILITY_QUERY_KEY } from "@/hooks";
 import { api } from "@/lib/api";
 import { INDIA_CITIES } from "@/lib/india-cities";
 import { cn } from "@/lib/utils";
@@ -42,7 +41,6 @@ function visibilityFromSettings(v: VisibilitySettingsResponse | undefined): Visi
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
-  const { data: credits } = useCredits();
   const { data: visibility, isLoading: visibilityLoading } = useVisibility();
   const queryClient = useQueryClient();
   const [isEditingVisibility, setIsEditingVisibility] = useState(false);
@@ -50,6 +48,7 @@ export default function SettingsPage() {
   const [workPreferredLocations, setWorkPreferredLocations] = useState<string[]>([]);
   const [workSalaryMin, setWorkSalaryMin] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   useEffect(() => {
     if (!visibility) return;
@@ -61,7 +60,6 @@ export default function SettingsPage() {
   const patchVisibility = useMutation({
     mutationFn: (body: PatchVisibilityRequest) =>
       api<VisibilitySettingsResponse>("/me/visibility", { method: "PATCH", body }),
-    // Optimistic update so the UI feels instant
     onMutate: async (body: PatchVisibilityRequest) => {
       setSaveError(null);
       await queryClient.cancelQueries({ queryKey: VISIBILITY_QUERY_KEY });
@@ -124,11 +122,20 @@ export default function SettingsPage() {
     patchVisibility.mutate(buildPayload());
   };
 
+  const handleLogout = () => {
+    if (confirmLogout) {
+      logout();
+    } else {
+      setConfirmLogout(true);
+      setTimeout(() => setConfirmLogout(false), 3000);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
+      transition={{ duration: 0.2 }}
       className="max-w-xl mx-auto space-y-6"
     >
       <div>
@@ -169,36 +176,6 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Credits quick view */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
-              <Coins className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div>
-              <CardTitle className="text-base">Credits</CardTitle>
-              <CardDescription>Your current balance and purchase options.</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-semibold tabular-nums text-foreground">
-                {credits?.balance ?? "--"}
-              </span>
-              <span className="text-sm text-muted-foreground">credits remaining</span>
-            </div>
-            <Link href="/credits">
-              <Button variant="outline" size="sm">
-                Buy credits
-              </Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Visibility */}
       <Card>
         <CardHeader className="pb-3">
@@ -210,13 +187,7 @@ export default function SettingsPage() {
               <div>
                 <CardTitle className="text-base">Visibility</CardTitle>
                 <CardDescription>
-                  Open to work: location, minimum salary needed, and contact details are shared.
-                </CardDescription>
-                <CardDescription>
-                  Open to contact: only contact details.
-                </CardDescription>
-                <CardDescription>
-                  No contact: nothing shared.
+                  Control what others can see about you.
                 </CardDescription>
               </div>
             </div>
@@ -293,7 +264,7 @@ export default function SettingsPage() {
                             <button
                               type="button"
                               onClick={() => setWorkPreferredLocations(workPreferredLocations.filter((c) => c !== city))}
-                              className="text-muted-foreground hover:text-foreground ml-0.5"
+                              className="text-muted-foreground hover:text-foreground ml-0.5 min-h-[24px] min-w-[24px] flex items-center justify-center"
                               aria-label={`Remove ${city}`}
                             >
                               ×
@@ -374,11 +345,16 @@ export default function SettingsPage() {
           <Button
             variant="outline"
             size="sm"
-            className="text-muted-foreground hover:text-destructive hover:border-destructive/50"
-            onClick={() => logout()}
+            className={cn(
+              "transition-colors",
+              confirmLogout
+                ? "text-destructive border-destructive/50 hover:bg-destructive/10"
+                : "text-muted-foreground hover:text-destructive hover:border-destructive/50"
+            )}
+            onClick={handleLogout}
           >
             <LogOut className="h-3.5 w-3.5 mr-1.5" />
-            Log out
+            {confirmLogout ? "Click again to confirm" : "Log out"}
           </Button>
         </CardContent>
       </Card>

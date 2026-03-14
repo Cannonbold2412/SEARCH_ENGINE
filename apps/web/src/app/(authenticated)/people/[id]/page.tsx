@@ -20,10 +20,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageLoading, PageError, ErrorMessage } from "@/components/feedback";
 import { SavedCardFamily } from "@/components/builder";
 import { api, apiWithIdempotency } from "@/lib/api";
+import { apiAssetUrl } from "@/lib/constants";
 import type {
   PersonProfile,
   ContactDetails,
-  ExperienceCard,
 } from "@/types";
 import { useRouter } from "next/navigation";
 
@@ -77,8 +77,6 @@ function BioSection({ bio }: { bio: NonNullable<PersonProfile["bio"]> }) {
     : null;
 
   const rows: DetailRow[] = [
-    { label: "First name", value: bio.first_name },
-    { label: "Last name", value: bio.last_name },
     { label: "Date of birth", value: bio.date_of_birth },
     { label: "Current city", value: bio.current_city },
     { label: "School", value: bio.school },
@@ -93,7 +91,7 @@ function BioSection({ bio }: { bio: NonNullable<PersonProfile["bio"]> }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Bio</CardTitle>
+        <CardTitle className="text-base">About</CardTitle>
       </CardHeader>
       <CardContent>
         <DetailGrid rows={rows} />
@@ -116,6 +114,7 @@ function PersonProfilePageContent() {
   const router = useRouter();
   const personId = params.id as string;
   const searchId = searchParams.get("search_id");
+  const from = searchParams.get("from");
   const queryClient = useQueryClient();
 
   const profileQuery = useQuery({
@@ -170,80 +169,116 @@ function PersonProfilePageContent() {
       <PageError
         message={error instanceof Error ? error.message : "Failed to load profile"}
         backHref="/home"
-        backLabel="Back to CONXA"
+        backLabel="Back to Home"
       />
     );
   }
+
   const contactUnlocked = !!profile.contact;
+  const backHref = from === "unlocked" ? "/unlocked" : from === "explore" ? "/explore" : "/home";
+  const backLabel = from === "unlocked" ? "Back to Unlocked" : from === "explore" ? "Back to Explore" : "Back";
+
+  const rawPhotoUrl = profile.bio?.profile_photo_url ?? null;
+  const profilePhotoSrc = rawPhotoUrl
+    ? /^https?:\/\//i.test(rawPhotoUrl)
+      ? rawPhotoUrl
+      : apiAssetUrl(rawPhotoUrl)
+    : null;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
+      transition={{ duration: 0.2 }}
       className="max-w-2xl mx-auto space-y-6"
     >
       <Link
-        href="/home"
+        href={backHref}
         className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5 group"
       >
         <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
-        Back to Search
+        {backLabel}
       </Link>
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg">{profile.display_name || "Anonymous"}</CardTitle>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {profile.open_to_work && (
-                <span className="inline-flex items-center rounded-md bg-success/10 px-2 py-0.5 text-xs font-medium text-success ring-1 ring-inset ring-success/20">
-                  Open to work
+
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-3">
+            {profilePhotoSrc ? (
+              <div className="h-12 w-12 rounded-full bg-muted overflow-hidden flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={profilePhotoSrc}
+                  alt={profile.display_name || "Profile photo"}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            ) : (
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                <span className="text-base font-medium text-muted-foreground">
+                  {(profile.display_name || "A").charAt(0).toUpperCase()}
                 </span>
-              )}
-              {profile.open_to_contact && (
-                <span className="inline-flex items-center rounded-md bg-info/10 px-2 py-0.5 text-xs font-medium text-info ring-1 ring-inset ring-info/20">
-                  Open to contact
-                </span>
-              )}
-            </div>
-            {profile.open_to_work && profile.work_preferred_locations?.length > 0 && (
-              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                <MapPin className="h-3 w-3" />
-                {profile.work_preferred_locations.join(", ")}
-              </p>
+              </div>
             )}
-          </CardHeader>
-        </Card>
-        {profile.bio && <BioSection bio={profile.bio} />}
-        <section>
-          <h2 className="text-sm font-medium text-muted-foreground mb-3">Experience</h2>
-          {profile.card_families && profile.card_families.length > 0 ? (
-            <div className="space-y-6">
-              {profile.card_families.map((family) => (
-                <SavedCardFamily
-                  key={family.parent.id}
-                  readOnly
-                  parent={family.parent}
-                  children={family.children}
-                />
-              ))}
+            <div className="min-w-0">
+              <CardTitle className="text-lg">{profile.display_name || "Anonymous"}</CardTitle>
+              {profile.open_to_work && profile.work_preferred_locations?.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />
+                  {profile.work_preferred_locations.join(", ")}
+                </p>
+              )}
             </div>
-          ) : profile.experience_cards.length === 0 ? (
-            <div className="text-center py-8 rounded-lg border border-dashed border-border">
-              <Briefcase className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No experience cards shared.</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {profile.experience_cards.map((card) => (
-                <SavedCardFamily
-                  key={card.id}
-                  readOnly
-                  parent={card}
-                  children={[]}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-3">
+            {profile.open_to_work && (
+              <span className="inline-flex items-center rounded-md bg-success/10 px-2.5 py-1 text-xs font-medium text-success ring-1 ring-inset ring-success/20">
+                Open to work
+              </span>
+            )}
+            {profile.open_to_contact && (
+              <span className="inline-flex items-center rounded-md bg-info/10 px-2.5 py-1 text-xs font-medium text-info ring-1 ring-inset ring-info/20">
+                Open to contact
+              </span>
+            )}
+          </div>
+        </CardHeader>
+      </Card>
+
+      {profile.bio && <BioSection bio={profile.bio} />}
+
+      <section>
+        <h2 className="text-sm font-medium text-muted-foreground mb-3">Experience</h2>
+        {profile.card_families && profile.card_families.length > 0 ? (
+          <div className="space-y-6">
+            {profile.card_families.map((family) => (
+              <SavedCardFamily
+                key={family.parent.id}
+                readOnly
+                parent={family.parent}
+                children={family.children}
+              />
+            ))}
+          </div>
+        ) : profile.experience_cards.length === 0 ? (
+          <div className="text-center py-8 rounded-lg border border-dashed border-border">
+            <Briefcase className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No experience cards shared.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {profile.experience_cards.map((card) => (
+              <SavedCardFamily
+                key={card.id}
+                readOnly
+                parent={card}
+                children={[]}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {(profile.open_to_work || profile.open_to_contact || contactUnlocked) && (
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
@@ -282,53 +317,56 @@ function PersonProfilePageContent() {
                   <p className="text-sm text-muted-foreground mt-1">{profile.contact.other}</p>
                 )}
               </div>
-            ) : (profile.open_to_work || profile.open_to_contact) ? (
-              <div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                  <Lock className="h-3.5 w-3.5" />
-                  <span>Unlock contact details for 1 credit.</span>
-                </div>
-                <Button size="sm" onClick={() => unlockMutation.mutate()} disabled={unlockMutation.isPending}>
-                  {unlockMutation.isPending ? "Unlocking..." : "Unlock contact (1 credit)"}
-                </Button>
-                {unlockMutation.isError && (
-                  <div className="mt-2">
-                    <ErrorMessage
-                      message={unlockMutation.error instanceof Error ? unlockMutation.error.message : "Failed"}
-                    />
-                  </div>
-                )}
-              <div className="mt-4 border-t pt-3">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                  <MessageCircle className="h-3.5 w-3.5" />
-                  <span>Start an in-app chat with this person for 1 credit.</span>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => startChatMutation.mutate()}
-                  disabled={startChatMutation.isPending}
-                >
-                  {startChatMutation.isPending ? "Starting chat..." : "Start chat (1 credit)"}
-                </Button>
-                {startChatMutation.isError && (
-                  <div className="mt-2">
-                    <ErrorMessage
-                      message={
-                        startChatMutation.error instanceof Error
-                          ? startChatMutation.error.message
-                          : "Failed to start chat"
-                      }
-                    />
-                  </div>
-                )}
-              </div>
-              </div>
             ) : (
-              <p className="text-sm text-muted-foreground">This person is not open to contact.</p>
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                      <Lock className="h-3.5 w-3.5" />
+                      <span>Unlock contact details (1 credit)</span>
+                    </div>
+                    <Button size="sm" onClick={() => unlockMutation.mutate()} disabled={unlockMutation.isPending}>
+                      {unlockMutation.isPending ? "Unlocking..." : "Unlock contact"}
+                    </Button>
+                    {unlockMutation.isError && (
+                      <div className="mt-2">
+                        <ErrorMessage
+                          message={unlockMutation.error instanceof Error ? unlockMutation.error.message : "Failed"}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                      <MessageCircle className="h-3.5 w-3.5" />
+                      <span>Start an in-app chat (1 credit)</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => startChatMutation.mutate()}
+                      disabled={startChatMutation.isPending}
+                    >
+                      {startChatMutation.isPending ? "Starting..." : "Start chat"}
+                    </Button>
+                    {startChatMutation.isError && (
+                      <div className="mt-2">
+                        <ErrorMessage
+                          message={
+                            startChatMutation.error instanceof Error
+                              ? startChatMutation.error.message
+                              : "Failed to start chat"
+                          }
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
-      </motion.div>
+      )}
+    </motion.div>
   );
 }

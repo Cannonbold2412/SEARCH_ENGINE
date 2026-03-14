@@ -1,40 +1,18 @@
 "use client";
-
-import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LockOpen, Settings, Compass, LayoutGrid, Hammer, Globe, PanelLeftClose, PanelLeft, Menu, MoreVertical, Trash2 } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { LockOpen, Settings, Compass, LayoutGrid, Hammer, Globe, PanelLeftClose, PanelLeft, Menu, MessageSquare, Search } from "lucide-react";
 import { useSidebarWidth, MOBILE_DRAWER_WIDTH } from "@/contexts/sidebar-width-context";
 import { useProfileSchema } from "@/hooks/use-profile-v1";
 import { useProfilePhoto } from "@/hooks/use-profile-photo";
 import { cn } from "@/lib/utils";
 import { apiAssetUrl } from "@/lib/constants";
 import { CreditsBadge } from "@/components/common";
-import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
-import type { SavedSearchesResponse } from "@/types";
-
-function truncateQuery(text: string, maxLen = 40): string {
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen).trim() + "…";
-}
-
-function formatSearchDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-  }).format(date);
-}
 
 export function AppNav() {
   const logoSrc = apiAssetUrl("/img/kana_icon_512.png");
 
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const selectedSearchId = searchParams.get("id");
   const {
     sidebarWidth,
     collapsed,
@@ -50,59 +28,15 @@ export function AppNav() {
   const accountName = (profile?.display_name || profile?.username || "Account").trim();
   const accountInitial = accountName ? accountName[0]?.toUpperCase() : "U";
 
-  const queryClient = useQueryClient();
-  const { data } = useQuery({
-    queryKey: ["me", "searches"],
-    queryFn: () => api<SavedSearchesResponse>("/me/searches?limit=200"),
-  });
-
-  const deleteSearchMutation = useMutation({
-    mutationFn: (searchId: string) =>
-      api(`/me/searches/${encodeURIComponent(searchId)}`, { method: "DELETE" }),
-    onMutate: async (searchId: string) => {
-      setOpenDropdownId(null);
-      await queryClient.cancelQueries({ queryKey: ["me", "searches"] });
-      const prev = queryClient.getQueryData<SavedSearchesResponse>(["me", "searches"]);
-      if (prev?.searches) {
-        queryClient.setQueryData<SavedSearchesResponse>(["me", "searches"], {
-          ...prev,
-          searches: prev.searches.filter((s) => s.id !== searchId),
-        });
-      }
-      return { prev };
-    },
-    onError: (_err, _searchId, context) => {
-      if (context?.prev) {
-        queryClient.setQueryData(["me", "searches"], context.prev);
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["me", "searches"] });
-    },
-  });
-
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (openDropdownId === null) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current?.contains(e.target as Node)) return;
-      setOpenDropdownId(null);
-    };
-    document.addEventListener("click", handleClickOutside, true);
-    return () => document.removeEventListener("click", handleClickOutside, true);
-  }, [openDropdownId]);
-
   const sidebarItems = [
     { href: "/home", label: "Home", icon: Compass },
+    { href: "/searches", label: "Searches", icon: Search },
     { href: "/explore", label: "Explore", icon: Globe },
     { href: "/cards", label: "Your Cards", icon: LayoutGrid },
     { href: "/builder", label: "Builder", icon: Hammer },
+    { href: "/inbox", label: "Inbox", icon: MessageSquare },
     { href: "/unlocked", label: "Unlocked", icon: LockOpen },
   ];
-
-  const searches = data?.searches ?? [];
 
   const navLinkClass = (isActive: boolean) =>
     cn(
@@ -191,9 +125,13 @@ export function AppNav() {
               const isActive =
                 pathname === href ||
                 (href === "/home" && (pathname === "/" || pathname === "/home")) ||
-                (href === "/explore" && pathname.startsWith("/explore")) ||
+                (href === "/explore" && (pathname.startsWith("/explore") || pathname.startsWith("/people/"))) ||
+                (href === "/searches" && pathname.startsWith("/searches")) ||
                 (href === "/cards" && pathname.startsWith("/cards")) ||
-                (href === "/builder" && pathname.startsWith("/builder"));
+                (href === "/builder" && pathname.startsWith("/builder")) ||
+                (href === "/inbox" && pathname.startsWith("/inbox")) ||
+                (href === "/unlocked" && pathname.startsWith("/unlocked"));
+
               return (
                 <Link
                   key={href}
@@ -207,101 +145,9 @@ export function AppNav() {
                 </Link>
               );
             })}
-
-            {/* Your searches - section header (hidden when collapsed on desktop) */}
-            {(!collapsed || isMobile) && (
-              <div className="pt-4 pb-1">
-                <p className="px-3 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Your searches
-                </p>
-              </div>
-            )}
           </nav>
 
-          {/* Your searches list - only this section scrolls (hidden when collapsed on desktop) */}
-          {(!collapsed || isMobile) && (
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-theme px-2 pb-2">
-            {searches.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-muted-foreground/80">
-                No searches yet
-              </p>
-            ) : (
-              <ul className="space-y-0.5">
-                {searches.map((search) => {
-                  const isSearchActive =
-                    pathname.startsWith("/searches") && selectedSearchId === search.id;
-                  const content = (
-                    <>
-                      <span className="truncate font-medium block">
-                        {truncateQuery(search.query_text)}
-                      </span>
-                      <span className="text-xs opacity-80">
-                        {`${search.result_count} results · ${formatSearchDate(search.created_at)}`}
-                      </span>
-                    </>
-                  );
-                  const rowClass = cn(
-                    "flex flex-col gap-0.5 px-3 py-2.5 rounded-lg text-sm min-w-0 min-h-[44px] justify-center",
-                    isSearchActive ? "bg-accent text-foreground font-medium" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-                  );
-                  return (
-                    <li key={search.id} className="min-w-0">
-                      <div
-                        ref={openDropdownId === search.id ? dropdownRef : undefined}
-                        className="flex items-stretch min-w-0 gap-0.5 rounded-lg"
-                      >
-                        <Link
-                          href={`/searches?id=${encodeURIComponent(search.id)}`}
-                          onClick={handleNavClick}
-                          className={cn("flex-1 min-w-0 search-row-link", rowClass)}
-                        >
-                          {content}
-                        </Link>
-                        <div className="relative flex-shrink-0 flex items-center">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 min-h-[44px] min-w-[44px] text-muted-foreground hover:text-foreground"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setOpenDropdownId((id) => (id === search.id ? null : search.id));
-                            }}
-                            aria-label="Search options"
-                            aria-expanded={openDropdownId === search.id}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                          {openDropdownId === search.id && (
-                            <div
-                              className="absolute right-0 top-full z-50 mt-0.5 rounded-md border border-border bg-background px-1 py-1 shadow-md min-w-[8rem]"
-                              role="menu"
-                            >
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-accent hover:text-destructive"
-                                onClick={() => {
-                                  deleteSearchMutation.mutate(search.id);
-                                  setOpenDropdownId(null);
-                                }}
-                                disabled={deleteSearchMutation.isPending}
-                              >
-                                <Trash2 className="h-4 w-4 shrink-0" />
-                                Delete
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-          )}
+          <div className="flex-1 min-h-0" />
 
           {/* Account + Settings at bottom */}
           <div className="flex-shrink-0 border-t border-border px-2 py-3 space-y-0.5">
@@ -339,12 +185,12 @@ export function AppNav() {
         </div>
       </aside>
 
-      {/* Top bar - hamburger on mobile, CONXA centered, credits on right */}
+      {/* Top bar */}
       <header
         className="sticky top-0 z-40 flex h-14 min-h-[44px] items-center border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
-        style={{ marginLeft: sidebarWidth }}
+        style={{ paddingLeft: sidebarWidth }}
       >
-        <div className="grid h-full w-full grid-cols-3 items-center px-3 sm:px-4 gap-2">
+        <div className="flex h-full w-full items-center justify-between px-3 sm:px-4 gap-2">
           <div className="flex items-center min-w-0">
             {isMobile && (
               <button
@@ -356,14 +202,16 @@ export function AppNav() {
                 <Menu className="h-5 w-5" />
               </button>
             )}
+            {isMobile && (
+              <Link
+                href="/home"
+                className="font-semibold text-sm text-foreground hover:text-foreground/90 transition-colors min-h-[44px] flex items-center ml-1"
+              >
+                CONXA
+              </Link>
+            )}
           </div>
-          <Link
-            href="/home"
-            className="justify-self-center font-semibold text-sm text-foreground hover:text-foreground/90 transition-colors min-h-[44px] flex items-center"
-          >
-            CONXA
-          </Link>
-          <div className="flex items-center justify-self-end min-h-[44px]">
+          <div className="flex items-center min-h-[44px]">
             <CreditsBadge />
           </div>
         </div>

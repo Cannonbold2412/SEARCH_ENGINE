@@ -14,6 +14,31 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PageLoading, PageError } from "@/components/feedback";
 
+function formatMessageTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const now = new Date();
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (isToday) {
+    return date.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export default function ConversationPage() {
   const params = useParams();
   const conversationId = params.conversationId as string;
@@ -61,7 +86,7 @@ export default function ConversationPage() {
             : "Failed to load chat"
         }
         backHref="/inbox"
-        backLabel="Back to inbox"
+        backLabel="Back to Inbox"
       />
     );
   }
@@ -74,11 +99,18 @@ export default function ConversationPage() {
     sendMessageMutation.mutate(text);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
+      transition={{ duration: 0.2 }}
       className="max-w-2xl mx-auto space-y-4 h-[calc(100vh-6rem)]"
     >
       <Link
@@ -86,16 +118,16 @@ export default function ConversationPage() {
         className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5 group"
       >
         <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
-        Back to inbox
+        Back to Inbox
       </Link>
 
       <Card className="flex flex-col h-full">
-        <CardHeader className="flex flex-row items-center gap-3 pb-3">
-          <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center">
-            <MessageCircle className="h-4 w-4 text-muted-foreground" />
+        <CardHeader className="flex flex-row items-center gap-2.5 px-4 py-3 border-b border-border">
+          <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0">
+            <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
-          <div>
-            <CardTitle className="text-base">
+          <div className="min-w-0">
+            <CardTitle className="text-sm font-medium truncate">
               Chat with {conversation.peer.display_name ?? "Person"}
             </CardTitle>
           </div>
@@ -115,13 +147,22 @@ export default function ConversationPage() {
                   }`}
                 >
                   <div
-                    className={`max-w-[70%] rounded-2xl px-3 py-2 text-sm ${
-                      msg.is_mine
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-foreground"
+                    className={`flex flex-col max-w-[70%] ${
+                      msg.is_mine ? "items-end" : "items-start"
                     }`}
                   >
-                    {msg.body}
+                    <div
+                      className={`rounded-2xl px-3 py-2 text-sm ${
+                        msg.is_mine
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-foreground"
+                      }`}
+                    >
+                      {msg.body}
+                    </div>
+                    <span className="mt-1 text-[11px] text-muted-foreground">
+                      {formatMessageTime(msg.created_at)}
+                    </span>
                   </div>
                 </div>
               ))
@@ -129,27 +170,31 @@ export default function ConversationPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="border-t pt-3 space-y-2">
-            <Textarea
-              placeholder="Type a message..."
-              value={messageText}
-              onChange={(e) => setMessageText(e.target.value)}
-              rows={2}
-              className="resize-none"
-            />
-            <div className="flex justify-end">
+          <div className="pt-3">
+            <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/40 px-3 py-2.5 shadow-sm">
+              <Textarea
+                placeholder="Type a message..."
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows={1}
+                className="flex-1 resize-none border-0 bg-transparent px-0 py-1 text-sm leading-snug min-h-0 h-10 focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
               <Button
                 size="sm"
                 onClick={handleSend}
+                className="shrink-0"
                 disabled={sendMessageMutation.isPending || !messageText.trim()}
               >
                 {sendMessageMutation.isPending ? "Sending..." : "Send"}
               </Button>
             </div>
+            <p className="text-[11px] text-center mt-1.5 text-muted-foreground">
+              Enter to send · Shift+Enter for new line
+            </p>
           </div>
         </CardContent>
       </Card>
     </motion.div>
   );
 }
-
