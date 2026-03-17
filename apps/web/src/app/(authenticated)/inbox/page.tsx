@@ -86,9 +86,6 @@ export default function InboxPage() {
         </div>
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Inbox</h1>
-          <p className="text-sm text-muted-foreground">
-            Chats you&apos;ve started with people.
-          </p>
         </div>
       </div>
 

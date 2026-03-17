@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { LockOpen } from "lucide-react";
+import { LockOpen, SearchX } from "lucide-react";
 import { PersonResultCard } from "./person-result-card";
 import { useSearch } from "@/contexts/search-context";
 import { Button } from "@/components/ui/button";
@@ -46,9 +46,12 @@ export function SearchResults({ searchId, people }: SearchResultsProps) {
             {hasMore && " · more available"}
           </h2>
           {people.length === 0 ? (
-            <div className="py-12 text-center rounded-lg border border-dashed border-border">
-              <p className="text-muted-foreground text-sm">No matches found.</p>
-              <p className="text-muted-foreground/70 text-xs mt-1">Try broadening your query or using different keywords.</p>
+            <div className="py-14 text-center rounded-xl border border-dashed border-border bg-muted/20">
+              <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                <SearchX className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="text-foreground font-medium text-sm">No matches found</p>
+              <p className="text-muted-foreground text-xs mt-1">Try broadening your query or using different keywords.</p>
             </div>
           ) : (
             <>

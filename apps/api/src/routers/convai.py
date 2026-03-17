@@ -83,11 +83,18 @@ async def vapi_call_proxy(request: Request):
 
     # Session is stored in this process. Vapi (cloud) must call back to THIS server.
     # If request hits localhost but callback points to production, session won't be found (404).
+    # Tunnel domains (ngrok, etc.) forward to this server, so allow them when request is local.
     request_host = urlparse(str(request.base_url)).hostname or ""
     callback_host = urlparse(settings.vapi_callback_base_url or "").hostname or ""
     is_local_request = request_host in ("127.0.0.1", "localhost", "")
     is_callback_remote = callback_host and callback_host not in ("127.0.0.1", "localhost")
-    if is_local_request and is_callback_remote:
+    is_tunnel_domain = callback_host and (
+        ".ngrok" in callback_host
+        or callback_host.endswith(".ngrok-free.app")
+        or callback_host.endswith(".ngrok.io")
+        or "localhost.run" in callback_host
+    )
+    if is_local_request and is_callback_remote and not is_tunnel_domain:
         logger.warning(
             "Voice call rejected: local request (host=%s) but callback points to %s",
             request_host,
@@ -106,7 +113,7 @@ async def vapi_call_proxy(request: Request):
     llm_url_with_user = f"{llm_base}?{urlencode({'user_id': str(user.id)})}"
 
     assistant = {
-        "firstMessage": "What would you like to share today? Please tell me. When you're done, just say thank you.",
+        "firstMessage": "Welcome to CONXA. Please tell me about yourself like what you did, your qualities, experiences and your talents.",
         "model": {
             "provider": "custom-llm",
             "url": llm_url_with_user,
@@ -168,6 +175,29 @@ async def vapi_call_proxy(request: Request):
 
     # Session key for lookup when Vapi calls our custom LLM with ?user_id=X
     create_session(str(user.id), user.id)
+
+    # region agent log
+    try:
+        with open("c:\\Users\\Lenovo\\Desktop\\Search_Engine\\.cursor\\debug.log", "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "id": "log_vapi_call_proxy",
+                        "timestamp": int(__import__("time").time() * 1000),
+                        "location": "convai.py:vapi_call_proxy",
+                        "message": "Vapi call proxy created session",
+                        "data": {
+                            "has_body": isinstance(body, dict),
+                        },
+                        "runId": "run1",
+                        "hypothesisId": "H_backend_1",
+                    }
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
+    # endregion
 
     return data
 
@@ -261,6 +291,32 @@ async def chat_completions(request: Request):
     if not isinstance(messages, list):
         raise HTTPException(status_code=400, detail="messages array required")
     stream = body.get("stream", True)
+
+    # region agent log
+    try:
+        with open("c:\\Users\\Lenovo\\Desktop\\Search_Engine\\.cursor\\debug.log", "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "id": "log_convai_chat_completions",
+                        "timestamp": int(__import__("time").time() * 1000),
+                        "location": "convai.py:chat_completions",
+                        "message": "Convai chat_completions called",
+                        "data": {
+                            "has_conversation": bool(conversation_id),
+                            "has_session": bool(session_data),
+                            "message_count": len(messages) if isinstance(messages, list) else None,
+                            "stream": bool(stream),
+                        },
+                        "runId": "run1",
+                        "hypothesisId": "H_backend_2",
+                    }
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
+    # endregion
 
     async with async_session() as db:
         try:

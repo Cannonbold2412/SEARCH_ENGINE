@@ -1,49 +1,25 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
-import { Send, Loader2, ArrowDown } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowDown, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
-import { API_BASE } from "@/lib/constants";
+import { EXPERIENCE_CARD_FAMILIES_QUERY_KEY, EXPERIENCE_CARDS_QUERY_KEY } from "@/hooks";
 import { AUTH_TOKEN_KEY } from "@/lib/auth-flow";
+import { API_BASE } from "@/lib/constants";
+import { api } from "@/lib/api";
+import { createPatchedVapiClient, isBenignVapiDisconnectError, type VapiClient } from "@/lib/vapi-client";
+import { cn } from "@/lib/utils";
 import { AiSphere } from "../ai-sphere";
-import { CardDetails, getChildDisplaySummary, getChildDisplayTitle, isPlaceholderChildCard } from "../card/card-details";
-import {
-  EXPERIENCE_CARDS_QUERY_KEY,
-  EXPERIENCE_CARD_FAMILIES_QUERY_KEY,
-} from "@/hooks";
-import type {
-  DraftCardFamily,
-  DraftSetResponse,
-  DetectExperiencesResponse,
-} from "@/types";
 
-let Vapi: typeof import("@vapi-ai/web").default | null = null;
-
-const PLACEHOLDER_FIRST_MESSAGE: ChatMessage = {
-  id: "0",
-  role: "assistant",
-  content: "",
-};
+const BUILDER_SESSION_STORAGE_KEY = "builder-session-id";
 
 export type ChatMessage = {
   id: string;
   role: "assistant" | "user";
   content: string;
-  card?: DraftCardFamily;
 };
-
-type Stage =
-  | "awaiting_experience"
-  | "awaiting_choice"
-  | "extracting"
-  | "clarifying"
-  | "card_ready"
-  | "idle";
 
 export type ClarifyHistoryEntry = {
   role: string;
@@ -57,53 +33,46 @@ export type ClarifyHistoryEntry = {
 
 export type ClarifyOption = { parent_id: string; label: string };
 
-type ClarifyResponse = {
-  clarifying_question?: string | null;
-  filled?: Record<string, unknown>;
-  profile_update?: {
-    skills?: string[];
-    knowledge_areas?: string[];
-    interests?: string[];
-    motivations?: string[];
-    personality_traits?: string[];
-    unique_advantages?: string[];
-    opportunities?: string[];
-    possible_connections?: string[];
-  } | null;
-  profile_reflection?: string | null;
-  should_stop?: boolean | null;
-  stop_reason?: string | null;
-  target_type?: string | null;
-  target_field?: string | null;
-  target_child_type?: string | null;
-  progress?: { parent_asked?: number; child_asked?: number; max_parent?: number; max_child?: number } | null;
-  asked_history_entry?: ClarifyHistoryEntry | null;
-  canonical_family?: { parent?: Record<string, unknown>; children?: unknown[] } | null;
-  action?: string | null;
-  message?: string | null;
-  options?: ClarifyOption[] | null;
-  focus_parent_id?: string | null;
+type BuilderTurn = {
+  id: string;
+  role: "assistant" | "user";
+  content: string;
+  turn_index: number;
+  message_type?: string | null;
 };
 
-function buildSummaryFromParent(parent: Record<string, unknown>): string {
-  const title = [parent.title, parent.normalized_role].find(Boolean) as string | undefined;
-  const company = parent.company_name as string | undefined;
-  const start = parent.start_date as string | undefined;
-  const end = parent.end_date as string | undefined;
-  const summary = parent.summary as string | undefined;
-  const parts: string[] = [];
-  if (title) parts.push(title);
-  if (company) parts.push(`at ${company}`);
-  if (start || end) parts.push([start, end].filter(Boolean).join(" – "));
-  if (summary) parts.push(summary);
-  return parts.join(". ") || "Your experience";
-}
+type BuilderChatTurnResponse = {
+  session_id: string;
+  assistant_message: string;
+  working_narrative?: string | null;
+  surfaced_insights?: string[];
+  should_continue: boolean;
+  session_status: string;
+  ready_to_commit: boolean;
+};
 
-function isTranscriptMessage(msg: unknown): msg is { type: string; role?: string; transcriptType?: string; transcript?: string } {
+type BuilderSessionResponse = {
+  session_id: string;
+  mode: "text" | "voice";
+  session_status: string;
+  current_focus?: string | null;
+  working_narrative?: string | null;
+  turn_count: number;
+  stop_confidence: number;
+  surfaced_insights: string[];
+  should_continue: boolean;
+  ready_to_commit: boolean;
+  turns: BuilderTurn[];
+};
+
+function isTranscriptMessage(msg: unknown): msg is { type?: string; role?: string; transcriptType?: string; transcript?: string } {
   if (!msg || typeof msg !== "object") return false;
   const m = msg as Record<string, unknown>;
   const type = String(m.type ?? "").toLowerCase();
-  return type === "transcript" && typeof (m.transcript ?? m.content) === "string";
+  const hasText = typeof (m.transcript ?? m.content) === "string";
+  // Vapi may use different type strings for transcripts; accept anything that
+  // clearly contains transcript text and whose type either is empty or mentions "transcript".
+  return hasText && (!type || type.includes("transcript"));
 }
 
 function ScrollToBottomButton({ scrollRef }: { scrollRef: React.RefObject<HTMLDivElement | null> }) {
@@ -136,25 +105,26 @@ function ScrollToBottomButton({ scrollRef }: { scrollRef: React.RefObject<HTMLDi
 }
 
 interface BuilderChatProps {
-  translateRawText: (text: string) => Promise<string>;
   onCardsSaved?: () => void;
 }
 
-export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps) {
+export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
   const queryClient = useQueryClient();
-  const [messages, setMessages] = useState<ChatMessage[]>([PLACEHOLDER_FIRST_MESSAGE]);
-  const [loadingFirstMessage, setLoadingFirstMessage] = useState(true);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Used to merge multiple transcript "chunks" into one assistant bubble
+  // during a single speech segment.
+  const activeAssistantMessageIdRef = useRef<string | null>(null);
+  // Used to merge multiple transcript "chunks" into one user bubble
+  // during a single spoken turn.
+  const activeUserMessageIdRef = useRef<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [surfacedInsights, setSurfacedInsights] = useState<string[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [stage, setStage] = useState<Stage>("awaiting_experience");
-  const [detectedExperiences, setDetectedExperiences] = useState<DetectExperiencesResponse | null>(null);
-  const [currentExperienceText, setCurrentExperienceText] = useState("");
-  const [currentCardFamily, setCurrentCardFamily] = useState<DraftCardFamily | null>(null);
-  const [clarifyHistory, setClarifyHistory] = useState<ClarifyHistoryEntry[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Voice state (Vapi integration)
-  const vapiRef = useRef<InstanceType<typeof import("@vapi-ai/web").default> | null>(null);
+  const vapiRef = useRef<VapiClient | null>(null);
   const [voiceConnecting, setVoiceConnecting] = useState(false);
   const [voiceConnected, setVoiceConnected] = useState(false);
   // Default the orb to \"AI speaking\" so the sphere feels alive on first load.
@@ -173,53 +143,34 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
 
   const sphereIntensity = aiSpeaking ? 0.85 : userSpeaking ? 0.7 : voiceConnected ? 0.25 : 0;
 
-  // Fetch LLM-generated opening question on mount
   useEffect(() => {
     let cancelled = false;
+    const storedSessionId =
+      typeof window !== "undefined" ? sessionStorage.getItem(BUILDER_SESSION_STORAGE_KEY) : null;
+    if (!storedSessionId) return;
+
     (async () => {
       try {
-        const res = await api<{ clarifying_question?: string | null }>(
-          "/experience-cards/clarify-experience",
-          {
-            method: "POST",
-            body: {
-              raw_text: "",
-              current_card: {},
-              card_type: "parent",
-              conversation_history: [],
-            },
-          }
-        );
-        const question = res?.clarifying_question?.trim();
-        if (!cancelled && question) {
-          setMessages((prev) =>
-            prev.length > 0
-              ? [{ ...prev[0], content: question }, ...prev.slice(1)]
-              : [{ ...PLACEHOLDER_FIRST_MESSAGE, content: question }]
-          );
-        } else if (!cancelled) {
-          const fallback =
-            "To get a sense of you, tell me about a few things you've worked on or cared about lately. It can be projects, roles, or anything that felt meaningful.";
-          setMessages((prev) =>
-            prev.length > 0
-              ? [{ ...prev[0], content: fallback }, ...prev.slice(1)]
-              : [{ ...PLACEHOLDER_FIRST_MESSAGE, content: fallback }]
+        const session = await api<BuilderSessionResponse>(`/builder/session/${storedSessionId}`);
+        if (cancelled) return;
+        setSessionId(session.session_id);
+        setSurfacedInsights(session.surfaced_insights ?? []);
+        if (session.turns.length > 0) {
+          setMessages(
+            session.turns.map((turn) => ({
+              id: turn.id,
+              role: turn.role,
+              content: turn.content,
+            }))
           );
         }
       } catch {
-        if (!cancelled) {
-          const fallback =
-            "If we were grabbing coffee, what would you be excited to tell me you're working on or exploring right now?";
-          setMessages((prev) =>
-            prev.length > 0
-              ? [{ ...prev[0], content: fallback }, ...prev.slice(1)]
-              : [{ ...PLACEHOLDER_FIRST_MESSAGE, content: fallback }]
-          );
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem(BUILDER_SESSION_STORAGE_KEY);
         }
-      } finally {
-        if (!cancelled) setLoadingFirstMessage(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
@@ -229,125 +180,53 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Cleanup Vapi on unmount
-  useEffect(() => {
-    return () => {
-      if (vapiRef.current) {
-        vapiRef.current.stop();
-        vapiRef.current = null;
-      }
-    };
+  const resetVoiceState = useCallback(() => {
+    setVoiceConnecting(false);
+    setVoiceConnected(false);
+    setAiSpeaking(false);
+    setUserSpeaking(false);
+    activeAssistantMessageIdRef.current = null;
+    activeUserMessageIdRef.current = null;
   }, []);
+
+  const detachVoice = useCallback((target?: VapiClient | null) => {
+    if (!target || vapiRef.current === target) {
+      vapiRef.current = null;
+    }
+    resetVoiceState();
+  }, [resetVoiceState]);
 
   const addMessage = useCallback((msg: Omit<ChatMessage, "id">) => {
     setMessages((prev) => [...prev, { ...msg, id: String(prev.length + Date.now()) }]);
   }, []);
 
-  const addAssistantReflection = useCallback(
-    (content?: string | null) => {
-      const text = content?.trim();
-      if (!text) return;
-      addMessage({ role: "assistant", content: text });
-    },
-    [addMessage]
-  );
-
-  const extractSingle = useCallback(
-    async (
-      experienceIndex: number,
-      experienceCount: number,
-      text: string
-    ): Promise<{ summary: string; family: DraftCardFamily } | null> => {
-      const english = await translateRawText(text);
-      const res = await api<DraftSetResponse>("/experience-cards/draft-single", {
-        method: "POST",
-        body: {
-          raw_text: english || text,
-          experience_index: experienceIndex,
-          experience_count: experienceCount,
-        },
-      });
-      const families = res.card_families ?? [];
-      if (families.length === 0) return null;
-      const family = families[0];
-      setCurrentCardFamily(family);
-      setClarifyHistory([]);
-      return { summary: buildSummaryFromParent(family.parent as Record<string, unknown>), family };
-    },
-    [translateRawText]
-  );
-
-  const askClarify = useCallback(
-    async (
-      cardFamily: DraftCardFamily | null,
-      history: ClarifyHistoryEntry[],
-      opts?: { detectedExperiences?: { index: number; label: string }[]; rawTextOverride?: string }
-    ): Promise<ClarifyResponse> => {
-      const sourceText = opts?.rawTextOverride ?? currentExperienceText;
-      const english = await translateRawText(sourceText);
-      const conversation_history = history.map((h) => ({ role: h.role, content: h.text }));
-      let last_question_target: { target_type?: string; target_field?: string; target_child_type?: string } | undefined;
-      if (history.length > 0 && history[history.length - 1].role === "user") {
-        for (let i = history.length - 1; i >= 0; i--) {
-          const e = history[i];
-          if (e.role === "assistant" && e.kind === "clarify_question" && (e.target_type || e.target_field || e.target_child_type)) {
-            last_question_target = {
-              target_type: e.target_type ?? undefined,
-              target_field: e.target_field ?? undefined,
-              target_child_type: e.target_child_type ?? undefined,
-            };
-            break;
-          }
-        }
+  // Voice: stop existing Vapi connection
+  const stopVoice = useCallback(() => {
+    const vapi = vapiRef.current;
+    detachVoice(vapi);
+    if (!vapi) return;
+    void vapi.stop().catch((error) => {
+      if (!isBenignVapiDisconnectError(error)) {
+        setVoiceError(error instanceof Error ? error.message : "Could not end voice session");
       }
-      const body: Record<string, unknown> = {
-        raw_text: english || sourceText,
-        current_card: (cardFamily?.parent ?? {}) as Record<string, unknown>,
-        card_type: "parent",
-        conversation_history,
-        card_family: cardFamily ? { parent: cardFamily.parent, children: cardFamily.children ?? [] } : undefined,
-        asked_history: history.length ? history : undefined,
-        last_question_target: last_question_target ?? undefined,
-      };
-      const parentId = cardFamily?.parent && typeof (cardFamily.parent as { id?: string }).id === "string"
-        ? (cardFamily.parent as { id: string }).id
-        : undefined;
-      if (parentId) body.card_id = parentId;
-      if (opts?.detectedExperiences?.length) {
-        body.detected_experiences = opts.detectedExperiences.map((e) => ({ index: e.index, label: e.label }));
+    });
+  }, [detachVoice]);
+
+  // Cleanup Vapi on unmount
+  useEffect(() => {
+    return () => {
+      if (vapiRef.current) {
+        stopVoice();
       }
-      return api<ClarifyResponse>("/experience-cards/clarify-experience", {
-        method: "POST",
-        body,
-      });
-    },
-    [currentExperienceText, translateRawText]
-  );
+    };
+  }, [stopVoice]);
 
-  const mergeFilledIntoCard = useCallback(
-    (filled: Record<string, unknown>) => {
-      setCurrentCardFamily((prev) => {
-        if (!prev) return prev;
-        const parent = { ...(prev.parent as Record<string, unknown>), ...filled };
-        return { ...prev, parent } as DraftCardFamily;
-      });
-    },
-    []
-  );
-
-  // Voice: toggle Vapi connection
-  const toggleVoice = useCallback(async () => {
-    if (voiceConnected && vapiRef.current) {
-      vapiRef.current.stop();
-      vapiRef.current = null;
-      setVoiceConnected(false);
-      setAiSpeaking(false);
-      setUserSpeaking(false);
-      return;
-    }
-
+  // Voice: start Vapi connection
+  const startVoice = useCallback(async () => {
+    if (vapiRef.current) return;
     setVoiceError(null);
     setVoiceConnecting(true);
+    let vapi: VapiClient | null = null;
 
     const token = typeof window !== "undefined" ? localStorage.getItem(AUTH_TOKEN_KEY) : null;
     if (!token) {
@@ -362,444 +241,242 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
     }
 
     try {
-      if (!Vapi) {
-        const mod = await import("@vapi-ai/web");
-        Vapi = mod.default;
-      }
       const proxyBase = `${API_BASE}/convai`;
-      const vapi = new Vapi(token, proxyBase);
+      vapi = await createPatchedVapiClient(token, proxyBase);
       vapiRef.current = vapi;
 
       vapi.on("call-start", () => {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'builder-chat.tsx:call-start',message:'Vapi call-start event fired',data:{},hypothesisId:'H1',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         setVoiceConnecting(false);
         setVoiceConnected(true);
         setVoiceError(null);
       });
 
       vapi.on("call-end", () => {
-        setVoiceConnected(false);
-        setAiSpeaking(false);
-        setUserSpeaking(false);
-        vapiRef.current = null;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'builder-chat.tsx:call-end',message:'Vapi call-end event fired',data:{},hypothesisId:'H1',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        detachVoice(vapi);
         queryClient.invalidateQueries({ queryKey: [EXPERIENCE_CARD_FAMILIES_QUERY_KEY] });
       });
 
       vapi.on("speech-start", () => {
         setAiSpeaking(true);
+        // New assistant speech segment begins; clear any previous "active" bubble.
+        activeAssistantMessageIdRef.current = null;
+        activeUserMessageIdRef.current = null;
         setUserSpeaking(false);
       });
       vapi.on("speech-end", () => {
         setAiSpeaking(false);
+        activeAssistantMessageIdRef.current = null;
       });
 
       vapi.on("message", (msg: unknown) => {
-        if (!isTranscriptMessage(msg)) return;
-        const transcriptType = String((msg as Record<string, unknown>).transcriptType ?? "").toLowerCase();
-        if (transcriptType && transcriptType !== "final") return;
-        const text = (msg.transcript ?? (msg as Record<string, unknown>).content) as string;
-        const role = (msg.role === "user" || msg.role === "assistant") ? msg.role : "assistant";
-        const t = (text ?? "").trim();
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'builder-chat.tsx:message',message:'Vapi message event',data:{msgType:(msg as Record<string,unknown>)?.type,role:(msg as Record<string,unknown>)?.role,hasTranscript:!!(msg as Record<string,unknown>)?.transcript},hypothesisId:'H5',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        const m = msg as Record<string, unknown>;
+        console.log("VAPI message (builder-chat)", m);
+        const transcriptType = String(m.transcriptType ?? "").toLowerCase();
+        const isPartial = transcriptType && transcriptType !== "final";
+        const rawText =
+          (m.transcript as string | undefined) ??
+          (m.content as string | undefined) ??
+          (m.text as string | undefined) ??
+          (Array.isArray((m as any).alternatives) && typeof (m as any).alternatives[0]?.text === "string"
+            ? (m as any).alternatives[0].text
+            : undefined);
+        const text = (rawText ?? "").toString();
+        // Treat any non-"assistant" transcript as coming from the user so user speech
+        // always appears on the right-hand side.
+        const role = m.role === "assistant" ? "assistant" : "user";
+        const t = text.trim();
         if (!t) return;
-        if (role === "user") setUserSpeaking(true);
-        setMessages((prev) => [
-          ...prev,
-          { id: `${Date.now()}-${prev.length}`, role, content: t },
-        ]);
+        if (role === "user") {
+          // User is speaking via STT.
+          setUserSpeaking(true);
+          // We are about to handle user chunks; don't merge into any active assistant bubble.
+          activeAssistantMessageIdRef.current = null;
+        } else {
+          // Assistant is speaking; don't merge into any active user bubble.
+          activeUserMessageIdRef.current = null;
+        }
+
+        // Transcripts can arrive as multiple events for both roles; update a single
+        // bubble per spoken turn. Partial chunks "stream" by replacing content,
+        // and final chunks append.
+        setMessages((prev) => {
+          const mergeText = (oldText: string, nextText: string) => {
+            const oldEndsWithSpace = /\s$/.test(oldText);
+            const nextStartsWithSpace = /^\s/.test(nextText);
+            if (oldText.length === 0) return nextText;
+            if (oldEndsWithSpace || nextStartsWithSpace) return oldText + nextText;
+            // Heuristic: avoid "wordword" when transcript chunk boundaries drop spaces.
+            return oldText + " " + nextText;
+          };
+
+          if (role === "user") {
+            const activeId = activeUserMessageIdRef.current;
+
+            if (activeId) {
+              return prev.map((m) =>
+                m.id === activeId
+                  ? {
+                      ...m,
+                      content: mergeText(m.content, t),
+                    }
+                  : m
+              );
+            }
+
+            const newId = `${Date.now()}-${prev.length}`;
+            activeUserMessageIdRef.current = newId;
+            return [...prev, { id: newId, role: "user", content: t }];
+          }
+
+          const activeId = activeAssistantMessageIdRef.current;
+
+          if (activeId) {
+            return prev.map((m) =>
+              m.id === activeId
+                ? {
+                    ...m,
+                    content: mergeText(m.content, t),
+                  }
+                : m
+            );
+          }
+
+          const newId = `${Date.now()}-${prev.length}`;
+          activeAssistantMessageIdRef.current = newId;
+          return [...prev, { id: newId, role: "assistant", content: t }];
+        });
       });
 
       vapi.on("error", (err) => {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'builder-chat.tsx:error',message:'Vapi error event',data:{errJSON:JSON.stringify(err).slice(0,800)},hypothesisId:'H1',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         const errObj = err as Record<string, unknown>;
         const errType = String(errObj?.type ?? "").toLowerCase();
-        const errMsg = (err?.message as string) || "";
+        const topMsg = (err?.message as string) || "";
+        const nested = errObj?.error as Record<string, unknown> | undefined;
+        const nestedMsg =
+          (typeof nested?.errorMsg === "string" && nested.errorMsg) ||
+          (nested?.message && typeof nested.message === "object" && typeof (nested.message as Record<string, unknown>)?.msg === "string" && (nested.message as Record<string, unknown>).msg) ||
+          (nested?.error && typeof nested.error === "object" && typeof (nested.error as Record<string, unknown>)?.msg === "string" && (nested.error as Record<string, unknown>).msg);
+        const errMsg = topMsg || (typeof nestedMsg === "string" ? nestedMsg : "");
         const isLocal = typeof window !== "undefined" && /localhost|127\.0\.0\.1/.test(API_BASE);
         const friendlyMsg =
           errType === "start-method-error" && isLocal
-            ? "Voice requires a tunnel for local development. Run ngrok http 8000 and set VAPI_CALLBACK_BASE_URL to the ngrok URL."
+            ? "Voice needs a tunnel. 1) Run ngrok (e.g. .\\scripts\\ngrok-tunnel.ps1 or ngrok http 8000). 2) In apps/api/.env set VAPI_CALLBACK_BASE_URL to the https URL ngrok shows. 3) Restart the API."
             : errMsg || "Voice connection error";
+        if (errType === "daily-error" && /meeting has ended/i.test(friendlyMsg)) {
+          setVoiceError(null);
+          detachVoice(vapi);
+          return;
+        }
+        detachVoice(vapi);
         setVoiceError(friendlyMsg);
-        setVoiceConnecting(false);
       });
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'builder-chat.tsx:pre-start',message:'About to call vapi.start()',data:{proxyBase},hypothesisId:'H1',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       await vapi.start({});
     } catch (e) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'builder-chat.tsx:catch',message:'vapi.start() threw',data:{error:e instanceof Error ? e.message : String(e)},hypothesisId:'H4',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      const isExpectedDisconnect = isBenignVapiDisconnectError(e);
+      if (isExpectedDisconnect) {
+        setVoiceError(null);
+        detachVoice(vapi);
+        return;
+      }
+      detachVoice(vapi);
       setVoiceError(e instanceof Error ? e.message : "Could not start voice session");
-      setVoiceConnecting(false);
     }
-  }, [voiceConnected, queryClient]);
+  }, [detachVoice, queryClient]);
+
+  const startVoiceRef = useRef(startVoice);
+
+  useEffect(() => {
+    startVoiceRef.current = startVoice;
+  }, [startVoice]);
+
+  // Voice: toggle connection from the sphere
+  const toggleVoice = useCallback(async () => {
+    if (voiceConnected && vapiRef.current) {
+      stopVoice();
+      return;
+    }
+    await startVoice();
+  }, [voiceConnected, startVoice, stopVoice]);
+
+  // Auto-start voice on initial load so the AI is on by default.
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void startVoiceRef.current();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
 
   const sendMessage = useCallback(async (overrideText?: string) => {
     const text = (overrideText !== undefined ? overrideText : input).trim();
     if (!text || loading) return;
     setInput("");
     addMessage({ role: "user", content: text });
+    setLoading(true);
+    try {
+      const res = await api<BuilderChatTurnResponse>("/builder/chat/turn", {
+        method: "POST",
+        body: {
+          session_id: sessionId,
+          message: text,
+          mode: "text",
+        },
+      });
 
-    if (stage === "awaiting_experience") {
-      setCurrentExperienceText(text);
-      setLoading(true);
-      try {
-        const english = await translateRawText(text);
-        const detect = await api<DetectExperiencesResponse>("/experience-cards/detect-experiences", {
-          method: "POST",
-          body: { raw_text: english || text },
-        });
-        const count = detect.count ?? 0;
-        const experiences = detect.experiences ?? [];
-        if (count === 0 || experiences.length === 0) {
-          addMessage({
-            role: "assistant",
-            content:
-              "I might be missing a bit—where were you, and what were you roughly responsible for there?",
-          });
-          setStage("awaiting_experience");
-          return;
-        }
-        if (count === 1) {
-          const result = await extractSingle(1, 1, text);
-          if (!result) {
-            addMessage({
-              role: "assistant",
-              content:
-                "Can you tell me a bit more—roughly when this was and where you were doing it? Even loose details help me capture it well.",
-            });
-            setLoading(false);
-            return;
-          }
-          const { summary, family } = result;
-          addMessage({
-            role: "assistant",
-            content: `Here's how I'd describe what you did—tell me if this feels right: **${summary}**\n\nI'm curious about a couple of things so I can really understand it.`,
-          });
-          const parent = family.parent as Record<string, unknown>;
-          const firstClarify = await askClarify(family, [], { rawTextOverride: text });
-          const firstEntry: ClarifyHistoryEntry | null = firstClarify.asked_history_entry ?? (firstClarify.clarifying_question ? {
-            role: "assistant",
-            kind: "clarify_question",
-            target_type: firstClarify.target_type ?? null,
-            target_field: firstClarify.target_field ?? null,
-            target_child_type: firstClarify.target_child_type ?? null,
-            text: firstClarify.clarifying_question,
-          } : null);
-          if (firstClarify.clarifying_question && firstEntry) {
-            if (firstClarify.canonical_family?.parent) {
-              setCurrentCardFamily((prev) =>
-                prev
-                  ? { ...prev, parent: firstClarify.canonical_family!.parent as DraftCardFamily["parent"], children: (firstClarify.canonical_family!.children as DraftCardFamily["children"]) ?? prev.children }
-                  : prev
-              );
-            }
-            setClarifyHistory([firstEntry]);
-            addAssistantReflection(firstClarify.profile_reflection);
-            addMessage({ role: "assistant", content: firstClarify.clarifying_question });
-            setStage("clarifying");
-          } else if (firstClarify.should_stop || (firstClarify.filled && Object.keys(firstClarify.filled).length > 0)) {
-            if (firstClarify.filled && Object.keys(firstClarify.filled).length > 0) mergeFilledIntoCard(firstClarify.filled);
-            const mergedParent = { ...parent, ...(firstClarify.filled || {}) } as DraftCardFamily["parent"];
-            const cardId = (mergedParent as { id?: string }).id;
-            if (cardId) {
-              try {
-                await api("/experience-cards/finalize", {
-                  method: "POST",
-                  body: { card_id: cardId },
-                });
-              } catch {
-                // Non-fatal
-              }
-            }
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
-          addAssistantReflection(firstClarify.profile_reflection);
-          addMessage({
-            role: "assistant",
-            content:
-              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nIf another chapter of your story pops into your head later, just tell me and I'll keep updating your profile.",
-            card: { ...family, parent: mergedParent },
-          });
-          setCurrentCardFamily(null);
-          setStage("awaiting_experience");
-          onCardsSaved?.();
-          } else {
-            const cardId = (parent as { id?: string }).id;
-            if (cardId) {
-              try {
-                await api("/experience-cards/finalize", {
-                  method: "POST",
-                  body: { card_id: cardId },
-                });
-              } catch {
-                // Non-fatal
-              }
-            }
-          addAssistantReflection(firstClarify.profile_reflection);
-          addMessage({
-            role: "assistant",
-            content:
-              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nWhenever you're ready, share another story and I'll weave it into the bigger picture of you.",
-            card: family,
-          });
-          setCurrentCardFamily(null);
-          setStage("awaiting_experience");
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
-          onCardsSaved?.();
-          }
-          setLoading(false);
-          return;
-        }
-        setDetectedExperiences({ count, experiences });
-        const chooseRes = await askClarify(null, [], { detectedExperiences: experiences, rawTextOverride: text });
-        if (chooseRes.action === "choose_focus" && chooseRes.message) {
-          const list = (chooseRes.options ?? experiences.map((e) => ({ parent_id: String(e.index), label: e.label })))
-            .map((o, i) => `**${i + 1}.** ${o.label}`)
-            .join("\n");
-          addMessage({
-            role: "assistant",
-            content: `${chooseRes.message}\n\n${list}\n\nReply with the number to pick one.`,
-          });
-        } else {
-          const list = experiences
-            .map((e) => `**${e.index}.** ${e.label}${e.suggested ? " (suggested)" : ""}`)
-            .join("\n");
-          addMessage({
-            role: "assistant",
-            content: `I found ${count} experiences. We'll build one card first—which one do you want to add? Reply with the number.\n\n${list}`,
-          });
-        }
-        setStage("awaiting_choice");
-      } catch (e) {
-        addMessage({
-          role: "assistant",
-          content: "Something went wrong. Please try again or rephrase your experience.",
-        });
-        setStage("awaiting_experience");
-      } finally {
-        setLoading(false);
+      setSessionId(res.session_id);
+      setSurfacedInsights(res.surfaced_insights ?? []);
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(BUILDER_SESSION_STORAGE_KEY, res.session_id);
       }
-      return;
-    }
 
-    if (stage === "awaiting_choice") {
-      const num = parseInt(text.replace(/\D/g, ""), 10);
-      const experiences = detectedExperiences?.experiences ?? [];
-      const exp = num >= 1 && num <= experiences.length ? experiences[num - 1] : undefined;
-      if (!exp || !detectedExperiences) {
-          addMessage({
-            role: "assistant",
-            content: "Which one do you want to add first? Just reply with the number.",
-          });
-        return;
-      }
-      setLoading(true);
-      setDetectedExperiences(null);
-      try {
-        const result = await extractSingle(exp.index, detectedExperiences.count, currentExperienceText);
-        if (!result) {
-          addMessage({
-            role: "assistant",
-            content:
-              "Can you tell me a bit more—where you were and roughly when this was happening? That helps me pin it down.",
-          });
-          setStage("awaiting_experience");
-          setLoading(false);
-          return;
-        }
-        const { summary, family } = result;
-        addMessage({
-          role: "assistant",
-          content: `Here's how I'd sum that up—see if this fits: **${summary}**\n\nI've got a couple of quick questions so I can get the nuances right:`,
-        });
-        const parent = family.parent as Record<string, unknown>;
-        const firstClarify = await askClarify(family, [], { rawTextOverride: currentExperienceText });
-        const firstEntryChoice: ClarifyHistoryEntry | null = firstClarify.asked_history_entry ?? (firstClarify.clarifying_question ? {
-          role: "assistant",
-          kind: "clarify_question",
-          target_type: firstClarify.target_type ?? null,
-          target_field: firstClarify.target_field ?? null,
-          target_child_type: firstClarify.target_child_type ?? null,
-          text: firstClarify.clarifying_question,
-        } : null);
-        if (firstClarify.clarifying_question && firstEntryChoice) {
-          if (firstClarify.canonical_family?.parent) {
-            setCurrentCardFamily((prev) =>
-              prev
-                ? { ...prev, parent: firstClarify.canonical_family!.parent as DraftCardFamily["parent"], children: (firstClarify.canonical_family!.children as DraftCardFamily["children"]) ?? prev.children }
-                : prev
-            );
-          }
-          setClarifyHistory([firstEntryChoice]);
-          addAssistantReflection(firstClarify.profile_reflection);
-          addMessage({ role: "assistant", content: firstClarify.clarifying_question });
-          setStage("clarifying");
-        } else if (firstClarify.should_stop || (firstClarify.filled && Object.keys(firstClarify.filled).length > 0)) {
-          if (firstClarify.filled && Object.keys(firstClarify.filled).length > 0) mergeFilledIntoCard(firstClarify.filled);
-          const mergedParent = { ...parent, ...(firstClarify.filled || {}) } as DraftCardFamily["parent"];
-          const cardId = (mergedParent as { id?: string }).id;
-          if (cardId) {
-            try {
-              await api("/experience-cards/finalize", {
-                method: "POST",
-                body: { card_id: cardId },
-              });
-            } catch {
-              // Non-fatal
-            }
-          }
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
-          addAssistantReflection(firstClarify.profile_reflection);
-          addMessage({
-            role: "assistant",
-            content:
-              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nThis is really helpful—if another story or project comes to mind, tell me about it and I'll keep building up your profile.",
-            card: { ...family, parent: mergedParent },
-          });
-          setCurrentCardFamily(null);
-          setStage("awaiting_experience");
-          onCardsSaved?.();
-        } else {
-          const cardId = (parent as { id?: string }).id;
-          if (cardId) {
-            try {
-              await api("/experience-cards/finalize", {
-                method: "POST",
-                body: { card_id: cardId },
-              });
-            } catch {
-              // Non-fatal
-            }
-            }
-            addAssistantReflection(firstClarify.profile_reflection);
-            addMessage({
-              role: "assistant",
-              content:
-                "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nIf you think of another story—big or small—share it and I'll fold it into how I understand you.",
-              card: family,
-            });
-            setCurrentCardFamily(null);
-            setStage("awaiting_experience");
-            queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
-            queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
-            onCardsSaved?.();
-        }
-      } catch (e) {
-        addMessage({
-          role: "assistant",
-          content:
-            "I got a bit tangled up processing that. Mind trying it again in your own words so I can do it justice?",
-        });
-        setStage("awaiting_experience");
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
+      addMessage({
+        role: "assistant",
+        content: res.assistant_message || "Tell me a little more about that.",
+      });
 
-    if (stage === "clarifying") {
-      const userEntry: ClarifyHistoryEntry = { role: "user", kind: "clarify_answer", text };
-      const history = [...clarifyHistory, userEntry];
-      setClarifyHistory(history);
-      setLoading(true);
-      try {
-        const res = await askClarify(currentCardFamily, history);
-        const nextEntry: ClarifyHistoryEntry | null = res.asked_history_entry ?? (res.clarifying_question ? {
-          role: "assistant",
-          kind: "clarify_question",
-          target_type: res.target_type ?? null,
-          target_field: res.target_field ?? null,
-          target_child_type: res.target_child_type ?? null,
-          text: res.clarifying_question,
-        } : null);
-        if (res.clarifying_question && nextEntry) {
-          if (res.canonical_family?.parent) {
-            setCurrentCardFamily((prev) =>
-              prev
-                ? { ...prev, parent: res.canonical_family!.parent as DraftCardFamily["parent"], children: (res.canonical_family!.children as DraftCardFamily["children"]) ?? prev.children }
-                : prev
-            );
-          }
-          setClarifyHistory((h) => [...h, nextEntry]);
-          addAssistantReflection(res.profile_reflection);
-          addMessage({ role: "assistant", content: res.clarifying_question });
-        } else if (res.should_stop || (res.filled && Object.keys(res.filled).length > 0)) {
-          if (res.filled && Object.keys(res.filled).length > 0) mergeFilledIntoCard(res.filled);
-          setClarifyHistory([]);
-          const parent = (currentCardFamily?.parent ?? {}) as Record<string, unknown>;
-          const mergedParent = { ...parent, ...(res.filled || {}) } as DraftCardFamily["parent"];
-          const cardId = (mergedParent as { id?: string }).id;
-          if (cardId) {
-            try {
-              await api("/experience-cards/finalize", {
-                method: "POST",
-                body: { card_id: cardId },
-              });
-            } catch {
-              // Non-fatal
-            }
-          }
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
-          const finalFamily: DraftCardFamily = currentCardFamily
-            ? { ...currentCardFamily, parent: mergedParent }
-            : { parent: mergedParent, children: [] };
-          addAssistantReflection(res.profile_reflection);
-          addMessage({
-            role: "assistant",
-            content:
-              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nThis already says a lot about you—if another example comes to mind later, tell me and I'll keep deepening your profile.",
-            card: finalFamily,
-          });
-          setCurrentCardFamily(null);
-          setStage("awaiting_experience");
-          onCardsSaved?.();
-        } else {
-          const parent = (currentCardFamily?.parent ?? {}) as Record<string, unknown>;
-          const cardId = (parent as { id?: string }).id;
-          if (cardId) {
-            try {
-              await api("/experience-cards/finalize", {
-                method: "POST",
-                body: { card_id: cardId },
-              });
-            } catch {
-              // Non-fatal
-            }
-          }
-          addAssistantReflection(res.profile_reflection);
-          addMessage({
-            role: "assistant",
-            content:
-              "Your experience card is ready. You can edit it anytime in **Your Cards**.\n\nWhenever you feel like it, share another story and I'll keep connecting the dots on your skills and interests.",
-            card: currentCardFamily ?? undefined,
-          });
-          setCurrentCardFamily(null);
-          setStage("awaiting_experience");
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
-          onCardsSaved?.();
+      if (res.session_status === "committed") {
+        queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
+        queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem(BUILDER_SESSION_STORAGE_KEY);
         }
-      } catch (e) {
-        addMessage({
-          role: "assistant",
-          content: "I had trouble with that. You can edit the card later in Your Cards.",
-        });
-        setStage("awaiting_experience");
-      } finally {
-        setLoading(false);
+        setSessionId(null);
+        onCardsSaved?.();
       }
+    } catch {
+      addMessage({
+        role: "assistant",
+        content: "I lost the thread for a second. Try saying that again in your own words.",
+      });
+    } finally {
+      setLoading(false);
     }
   }, [
     input,
     loading,
-    stage,
-    currentExperienceText,
-    currentCardFamily,
-    detectedExperiences,
-    clarifyHistory,
+    sessionId,
     addMessage,
-    addAssistantReflection,
-    translateRawText,
-    extractSingle,
-    askClarify,
-    mergeFilledIntoCard,
     queryClient,
     onCardsSaved,
   ]);
@@ -829,64 +506,8 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
                 )}
               >
                 <p className="whitespace-pre-wrap break-words">
-                  {msg.id === "0" && loadingFirstMessage ? (
-                    <span className="flex items-center gap-2 text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
-                      Thinking…
-                    </span>
-                  ) : (
-                    msg.content.replace(/\*\*(.*?)\*\*/g, "$1")
-                  )}
+                  {msg.content}
                 </p>
-                {msg.card && (
-                  <>
-                    <div className="mt-3 pt-3 border-t border-border/50">
-                      <CardDetails
-                        card={msg.card.parent as Record<string, unknown>}
-                        compact
-                        hideInternalFields
-                      />
-                    </div>
-                    {(() => {
-                      const visibleChildren = (msg.card.children ?? []).filter(
-                        (c: Record<string, unknown>) => !isPlaceholderChildCard(c)
-                      );
-                      if (visibleChildren.length === 0) return null;
-                      return (
-                        <div className="mt-2 pt-2 border-t border-border/40 space-y-1.5">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            {visibleChildren.length} thread{visibleChildren.length !== 1 ? "s" : ""}
-                          </p>
-                          <ul className="space-y-1">
-                            {visibleChildren.map((child: Record<string, unknown>, i: number) => {
-                              const headline = getChildDisplayTitle(child) || "Detail";
-                              const summary = getChildDisplaySummary(child);
-                              return (
-                                <li
-                                  key={i}
-                                  className="text-xs rounded-md border border-border/40 bg-muted/30 px-2 py-1.5"
-                                >
-                                  <span className="font-medium text-foreground">{headline}</span>
-                                  {summary && headline !== summary && (
-                                    <p className="mt-0.5 text-muted-foreground line-clamp-2">
-                                      {summary}
-                                    </p>
-                                  )}
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        </div>
-                      );
-                    })()}
-                    <Link
-                      href="/cards"
-                      className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-primary hover:underline rounded-md bg-primary/5 px-2 py-1 border border-primary/20 transition-colors hover:bg-primary/10"
-                    >
-                      View in Your Cards
-                    </Link>
-                  </>
-                )}
               </div>
             </motion.div>
           ))}
@@ -918,6 +539,21 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
 
       {/* Footer: text input + send (no sphere here) */}
       <div className="flex flex-col gap-1.5 px-3 py-2 border-t border-border flex-shrink-0">
+        {surfacedInsights.length > 0 && (
+          <div className="rounded-xl border border-border bg-muted/30 px-3 py-2">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">What I’m noticing</p>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {surfacedInsights.map((insight) => (
+                <span
+                  key={insight}
+                  className="rounded-full bg-background px-2 py-1 text-xs text-foreground border border-border/60"
+                >
+                  {insight}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {voiceError && (
           <p className="text-xs text-destructive text-center" role="alert">
             {voiceError}
@@ -951,12 +587,12 @@ export function BuilderChat({ translateRawText, onCardsSaved }: BuilderChatProps
         </div>
         {voiceConnected && (
           <p className="text-[11px] text-center text-muted-foreground mb-0">
-            Voice connected — speak naturally or type. Tap the orb to disconnect.
+            Voice connected — speak naturally or type. Tap the orb to turn voice off.
           </p>
         )}
         {!voiceConnected && (
           <p className="text-[11px] text-center text-muted-foreground mb-0">
-            Tap the orb to start voice, or just type
+            Voice is off — tap the orb to turn it back on, or just type.
           </p>
         )}
       </div>

@@ -1,14 +1,9 @@
 "use client";
 
-import { useCallback } from "react";
 import { motion } from "framer-motion";
 import { BuilderChat } from "@/components/builder";
 
 export default function BuilderPage() {
-  const translateToEnglishForBackend = useCallback(async (text: string): Promise<string> => {
-    return text.trim() || "";
-  }, []);
-
   return (
     <motion.div
       className="flex flex-col min-h-0 h-[calc(100vh-6rem)] max-h-[calc(100vh-6rem)] overflow-hidden -mt-2 sm:-mt-3"
@@ -22,7 +17,7 @@ export default function BuilderPage() {
         </h1>
       </div>
       <div className="flex-1 min-h-0 flex flex-col">
-        <BuilderChat translateRawText={translateToEnglishForBackend} />
+        <BuilderChat />
       </div>
     </motion.div>
   );

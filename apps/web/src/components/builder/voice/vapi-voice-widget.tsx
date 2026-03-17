@@ -5,10 +5,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, MicOff, Loader2, PhoneOff, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import Vapi from "@vapi-ai/web";
 import { API_BASE } from "@/lib/constants";
 import { AUTH_TOKEN_KEY } from "@/lib/auth-flow";
 import { EXPERIENCE_CARD_FAMILIES_QUERY_KEY } from "@/hooks";
+import { createPatchedVapiClient, isBenignVapiDisconnectError, type VapiClient } from "@/lib/vapi-client";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +33,9 @@ export function VapiVoiceWidget() {
   const [isConnected, setIsConnected] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [messages, setMessages] = useState<VoiceTranscriptMessage[]>([]);
-  const vapiRef = useRef<Vapi | null>(null);
+  const vapiRef = useRef<VapiClient | null>(null);
+  const activeAssistantMessageIdRef = useRef<string | null>(null);
+  const activeUserMessageIdRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const getToken = () => {
@@ -41,13 +43,55 @@ export function VapiVoiceWidget() {
     return localStorage.getItem(AUTH_TOKEN_KEY);
   };
 
+  const resetCallState = useCallback(() => {
+    setConnecting(false);
+    setIsConnected(false);
+    setIsSpeaking(false);
+    activeAssistantMessageIdRef.current = null;
+    activeUserMessageIdRef.current = null;
+  }, []);
+
+  const detachCall = useCallback((target?: VapiClient | null) => {
+    if (!target || vapiRef.current === target) {
+      vapiRef.current = null;
+    }
+    resetCallState();
+  }, [resetCallState]);
+
   const addTranscriptMessage = useCallback((role: "user" | "assistant", text: string) => {
     const t = (text ?? "").trim();
     if (!t) return;
-    setMessages((prev) => [
-      ...prev,
-      { id: `${Date.now()}-${prev.length}`, role, content: t },
-    ]);
+    setMessages((prev) => {
+      const mergeText = (oldText: string, nextText: string) => {
+        const oldEndsWithSpace = /\s$/.test(oldText);
+        const nextStartsWithSpace = /^\s/.test(nextText);
+        if (oldText.length === 0) return nextText;
+        if (oldEndsWithSpace || nextStartsWithSpace) return oldText + nextText;
+        return oldText + " " + nextText;
+      };
+
+      if (role === "user") {
+        const activeId = activeUserMessageIdRef.current;
+        if (activeId) {
+          return prev.map((m) =>
+            m.id === activeId ? { ...m, content: mergeText(m.content, t) } : m
+          );
+        }
+        const newId = `${Date.now()}-${prev.length}`;
+        activeUserMessageIdRef.current = newId;
+        return [...prev, { id: newId, role, content: t }];
+      }
+
+      const activeId = activeAssistantMessageIdRef.current;
+      if (activeId) {
+        return prev.map((m) =>
+          m.id === activeId ? { ...m, content: mergeText(m.content, t) } : m
+        );
+      }
+      const newId = `${Date.now()}-${prev.length}`;
+      activeAssistantMessageIdRef.current = newId;
+      return [...prev, { id: newId, role, content: t }];
+    });
   }, []);
 
   useEffect(() => {
@@ -58,6 +102,7 @@ export function VapiVoiceWidget() {
     setError(null);
     setMessages([]);
     setConnecting(true);
+    let vapi: VapiClient | null = null;
     const token = getToken();
     if (!token) {
       setError("Please sign in to use voice");
@@ -71,18 +116,18 @@ export function VapiVoiceWidget() {
     }
     const proxyBase = `${API_BASE}/convai`;
     try {
-      const vapi = new Vapi(token, proxyBase);
+      vapi = await createPatchedVapiClient(token, proxyBase);
       vapiRef.current = vapi;
 
       vapi.on("call-start", () => {
         setError(null);
         setIsConnected(true);
+        activeAssistantMessageIdRef.current = null;
+        activeUserMessageIdRef.current = null;
       });
 
       vapi.on("call-end", () => {
-        setIsConnected(false);
-        setIsSpeaking(false);
-        vapiRef.current = null;
+        detachCall(vapi);
         queryClient.invalidateQueries({ queryKey: [EXPERIENCE_CARD_FAMILIES_QUERY_KEY] });
       });
 
@@ -91,11 +136,58 @@ export function VapiVoiceWidget() {
 
       vapi.on("message", (msg: unknown) => {
         if (!isTranscriptMessage(msg)) return;
-        const transcriptType = String((msg as Record<string, unknown>).transcriptType ?? "").toLowerCase();
-        if (transcriptType && transcriptType !== "final") return;
+        const transcriptType = String(
+          (msg as Record<string, unknown>).transcriptType ?? ""
+        ).toLowerCase();
+        const isPartial = transcriptType && transcriptType !== "final";
         const text = (msg.transcript ?? (msg as Record<string, unknown>).content) as string;
-        const role = (msg.role === "user" || msg.role === "assistant") ? msg.role : "assistant";
-        addTranscriptMessage(role, text);
+        const role =
+          msg.role === "user" || msg.role === "assistant" ? msg.role : "assistant";
+
+        const t = (text ?? "").trim();
+        if (!t) return;
+
+        setMessages((prev) => {
+          const mergeText = (oldText: string, nextText: string) => {
+            const oldEndsWithSpace = /\s$/.test(oldText);
+            const nextStartsWithSpace = /^\s/.test(nextText);
+            if (oldText.length === 0) return nextText;
+            if (oldEndsWithSpace || nextStartsWithSpace) return oldText + nextText;
+            return oldText + " " + nextText;
+          };
+
+          if (role === "user") {
+            const activeId = activeUserMessageIdRef.current;
+            if (activeId) {
+              return prev.map((m) =>
+                m.id === activeId
+                  ? {
+                      ...m,
+                      content: isPartial ? t : mergeText(m.content, t),
+                    }
+                  : m
+              );
+            }
+            const newId = `${Date.now()}-${prev.length}`;
+            activeUserMessageIdRef.current = newId;
+            return [...prev, { id: newId, role, content: t }];
+          }
+
+          const activeId = activeAssistantMessageIdRef.current;
+          if (activeId) {
+            return prev.map((m) =>
+              m.id === activeId
+                ? {
+                    ...m,
+                    content: isPartial ? t : mergeText(m.content, t),
+                  }
+                : m
+            );
+          }
+          const newId = `${Date.now()}-${prev.length}`;
+          activeAssistantMessageIdRef.current = newId;
+          return [...prev, { id: newId, role, content: t }];
+        });
       });
 
       vapi.on("error", (err) => {
@@ -106,39 +198,50 @@ export function VapiVoiceWidget() {
         const isLocal = typeof window !== "undefined" && /localhost|127\.0\.0\.1/.test(API_BASE);
         const friendlyMsg =
           errType === "start-method-error" && isLocal
-            ? "Voice requires a tunnel for local development. Run ngrok http 8000 and set VAPI_CALLBACK_BASE_URL to the ngrok URL."
+            ? "Voice needs a tunnel. 1) Run ngrok (e.g. .\\scripts\\ngrok-tunnel.ps1 or ngrok http 8000). 2) In apps/api/.env set VAPI_CALLBACK_BASE_URL to the https URL ngrok shows. 3) Restart the API."
             : errMsg || "Voice connection error";
+        if (errType === "daily-error" && /meeting has ended/i.test(friendlyMsg)) {
+          setError(null);
+          detachCall(vapi);
+          return;
+        }
+        detachCall(vapi);
         setError(friendlyMsg);
       });
 
       await vapi.start({}); // Assistant config comes from our backend proxy
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not start voice session";
+      const isExpectedDisconnect = isBenignVapiDisconnectError(e);
+      detachCall(vapi);
+      if (isExpectedDisconnect) {
+        setError(null);
+        return;
+      }
       setError(msg);
     } finally {
       setConnecting(false);
     }
-  }, [queryClient, addTranscriptMessage]);
+  }, [detachCall, queryClient, addTranscriptMessage]);
 
   const handleEnd = useCallback(async () => {
-    try {
-      if (vapiRef.current) {
-        vapiRef.current.stop();
-        vapiRef.current = null;
+    const vapi = vapiRef.current;
+    detachCall(vapi);
+    if (!vapi) return;
+    void vapi.stop().catch((error) => {
+      if (!isBenignVapiDisconnectError(error)) {
+        setError("Could not end session");
       }
-    } catch {
-      setError("Could not end session");
-    }
-  }, []);
+    });
+  }, [detachCall]);
 
   useEffect(() => {
     return () => {
       if (vapiRef.current) {
-        vapiRef.current.stop();
-        vapiRef.current = null;
+        handleEnd();
       }
     };
-  }, []);
+  }, [handleEnd]);
 
   return (
     <div className="flex flex-col h-full min-h-0 rounded-xl border border-border bg-card overflow-hidden">

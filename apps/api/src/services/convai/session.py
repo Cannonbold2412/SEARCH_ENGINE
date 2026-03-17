@@ -2,14 +2,13 @@
 In-memory session store for Vapi ConvAI conversations.
 
 Maps conversation_id -> (user_id, ConvaiSessionState).
-For production with multiple instances, use Redis.
+For production with multiple instances, use Redis or a durable store.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -19,29 +18,10 @@ _sessions: dict[str, tuple[str, "ConvaiSessionState"]] = {}
 
 @dataclass
 class ConvaiSessionState:
-    """State for one voice conversation (clarify flow)."""
+    """State for one voice conversation."""
 
-    # Accumulated raw experience text (user's initial + follow-ups)
-    raw_experience_text: str = ""
-
-    # Clarify flow stage
-    stage: str = "awaiting_experience"  # awaiting_experience | awaiting_choice | clarifying | card_ready
-
-    # Detected experiences (from detect_experiences)
-    detected_experiences: list[dict] = field(default_factory=list)
-
-    # User's chosen focus (experience index as string, e.g. "1")
-    focus_parent_id: str | None = None
-
-    # Current card family (parent + children) for clarify
-    card_family: dict = field(default_factory=dict)
-
-    # Structured clarify history (role, kind, target_type, target_field, text, etc.)
-    asked_history: list[dict] = field(default_factory=list)
-
-    # Draft set / raw experience IDs (for run_draft_single)
-    draft_set_id: str | None = None
-    raw_experience_id: str | None = None
+    builder_session_id: str | None = None
+    last_reply: str | None = None
 
 
 def create_session(conversation_id: str, user_id: str) -> ConvaiSessionState:

@@ -194,60 +194,80 @@ function PersonProfilePageContent() {
     >
       <Link
         href={backHref}
-        className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1.5 group"
+        className="inline-flex items-center gap-2 py-1.5 -my-1.5 px-1 -mx-1 rounded-md text-sm text-muted-foreground hover:text-foreground transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
-        <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" />
-        {backLabel}
+        <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5 shrink-0" />
+        <span>{backLabel}</span>
       </Link>
 
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader className="pb-4">
-          <div className="flex items-center gap-3">
-            {profilePhotoSrc ? (
-              <div className="h-12 w-12 rounded-full bg-muted overflow-hidden flex-shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={profilePhotoSrc}
-                  alt={profile.display_name || "Profile photo"}
-                  className="h-full w-full object-cover"
-                />
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col space-y-2 min-w-0">
+              <div className="flex items-center gap-4">
+                {profilePhotoSrc ? (
+                  <div className="h-14 w-14 rounded-full bg-muted overflow-hidden flex-shrink-0 ring-2 ring-border/50">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={profilePhotoSrc}
+                      alt={profile.display_name || "Profile photo"}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center flex-shrink-0 ring-2 ring-border/50 text-lg font-medium text-muted-foreground">
+                    {(profile.display_name || "A").charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <CardTitle className="text-xl tracking-tight">{profile.display_name || "Anonymous"}</CardTitle>
+                  {profile.open_to_work && profile.work_preferred_locations?.length > 0 && (
+                    <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 shrink-0" />
+                      <span>{profile.work_preferred_locations.join(", ")}</span>
+                    </p>
+                  )}
+                </div>
               </div>
-            ) : (
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                <span className="text-base font-medium text-muted-foreground">
-                  {(profile.display_name || "A").charAt(0).toUpperCase()}
-                </span>
+              <div className="flex flex-wrap gap-2">
+                {profile.open_to_work && (
+                  <span className="inline-flex items-center rounded-full bg-success/10 px-3 py-1 text-xs font-medium text-success ring-1 ring-inset ring-success/20">
+                    Open to work
+                  </span>
+                )}
+                {profile.open_to_contact && (
+                  <span className="inline-flex items-center rounded-full bg-info/10 px-3 py-1 text-xs font-medium text-info ring-1 ring-inset ring-info/20">
+                    Open to contact
+                  </span>
+                )}
               </div>
-            )}
-            <div className="min-w-0">
-              <CardTitle className="text-lg">{profile.display_name || "Anonymous"}</CardTitle>
-              {profile.open_to_work && profile.work_preferred_locations?.length > 0 && (
-                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {profile.work_preferred_locations.join(", ")}
-                </p>
-              )}
             </div>
-          </div>
-          <div className="flex flex-wrap gap-2 mt-3">
-            {profile.open_to_work && (
-              <span className="inline-flex items-center rounded-md bg-success/10 px-2.5 py-1 text-xs font-medium text-success ring-1 ring-inset ring-success/20">
-                Open to work
-              </span>
-            )}
-            {profile.open_to_contact && (
-              <span className="inline-flex items-center rounded-md bg-info/10 px-2.5 py-1 text-xs font-medium text-info ring-1 ring-inset ring-info/20">
-                Open to contact
-              </span>
-            )}
+            <Button
+              size="icon"
+              variant="outline"
+              className="shrink-0 h-10 w-10 rounded-full border-2"
+              onClick={() => startChatMutation.mutate()}
+              disabled={startChatMutation.isPending}
+              title="Start chat (1 credit)"
+              aria-label="Start chat"
+            >
+              {startChatMutation.isPending ? (
+                <span className="h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+              ) : (
+                <MessageCircle className="h-4 w-4" />
+              )}
+            </Button>
           </div>
         </CardHeader>
       </Card>
 
       {profile.bio && <BioSection bio={profile.bio} />}
 
-      <section>
-        <h2 className="text-sm font-medium text-muted-foreground mb-3">Experience</h2>
+      <section className="pt-1">
+        <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+          <Briefcase className="h-4 w-4 shrink-0" />
+          Experience
+        </h2>
         {profile.card_families && profile.card_families.length > 0 ? (
           <div className="space-y-6">
             {profile.card_families.map((family) => (
@@ -318,50 +338,32 @@ function PersonProfilePageContent() {
                 )}
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                      <Lock className="h-3.5 w-3.5" />
-                      <span>Unlock contact details (1 credit)</span>
-                    </div>
-                    <Button size="sm" onClick={() => unlockMutation.mutate()} disabled={unlockMutation.isPending}>
-                      {unlockMutation.isPending ? "Unlocking..." : "Unlock contact"}
-                    </Button>
-                    {unlockMutation.isError && (
-                      <div className="mt-2">
-                        <ErrorMessage
-                          message={unlockMutation.error instanceof Error ? unlockMutation.error.message : "Failed"}
-                        />
-                      </div>
-                    )}
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+                  <div className="h-8 w-8 rounded-lg bg-background flex items-center justify-center shrink-0">
+                    <Lock className="h-4 w-4 text-muted-foreground" />
                   </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                      <MessageCircle className="h-3.5 w-3.5" />
-                      <span>Start an in-app chat (1 credit)</span>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => startChatMutation.mutate()}
-                      disabled={startChatMutation.isPending}
-                    >
-                      {startChatMutation.isPending ? "Starting..." : "Start chat"}
-                    </Button>
-                    {startChatMutation.isError && (
-                      <div className="mt-2">
-                        <ErrorMessage
-                          message={
-                            startChatMutation.error instanceof Error
-                              ? startChatMutation.error.message
-                              : "Failed to start chat"
-                          }
-                        />
-                      </div>
-                    )}
-                  </div>
+                  <span>Unlock email, phone, and links (1 credit)</span>
                 </div>
+                <Button
+                  size="default"
+                  onClick={() => unlockMutation.mutate()}
+                  disabled={unlockMutation.isPending}
+                  className="gap-2"
+                >
+                  {unlockMutation.isPending ? (
+                    <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                  ) : null}
+                  {unlockMutation.isPending ? "Unlocking..." : "Unlock contact"}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">One-time use per search. Credits apply.</p>
+                {unlockMutation.isError && (
+                  <div className="mt-3">
+                    <ErrorMessage
+                      message={unlockMutation.error instanceof Error ? unlockMutation.error.message : "Failed"}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

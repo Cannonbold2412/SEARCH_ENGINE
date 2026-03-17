@@ -11,6 +11,7 @@ apps/web/out/
 # Build / output
 dist/
 build/
+scripts/ngrok/
 *.tsbuildinfo
 
 # Python

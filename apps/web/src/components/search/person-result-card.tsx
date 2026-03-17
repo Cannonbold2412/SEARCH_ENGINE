@@ -41,12 +41,12 @@ export function PersonResultCard({ person, searchId, index = 0 }: PersonResultCa
     >
       <Link
         href={`/people/${person.id}?search_id=${searchId}`}
-        className="flex h-full min-h-[44px] items-start justify-between gap-4 rounded-xl border border-border p-4 sm:p-6 transition-colors hover:bg-accent group active:bg-accent/80"
+        className="flex h-full min-h-[44px] items-start justify-between gap-4 rounded-xl border border-border bg-card p-4 sm:p-5 transition-all duration-200 hover:bg-accent/50 hover:border-border hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group active:bg-accent/70"
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3 min-w-0">
             {profilePhotoSrc ? (
-              <div className="h-10 w-10 rounded-full bg-muted overflow-hidden flex-shrink-0">
+              <div className="h-11 w-11 rounded-full bg-muted overflow-hidden flex-shrink-0 ring-1 ring-border/50">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={profilePhotoSrc}
@@ -55,10 +55,8 @@ export function PersonResultCard({ person, searchId, index = 0 }: PersonResultCa
                 />
               </div>
             ) : (
-              <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                <span className="text-sm font-medium text-muted-foreground">
-                  {(person.name || "A").charAt(0).toUpperCase()}
-                </span>
+              <div className="h-11 w-11 rounded-full bg-muted flex items-center justify-center flex-shrink-0 ring-1 ring-border/50 text-sm font-medium text-muted-foreground">
+                {(person.name || "A").charAt(0).toUpperCase()}
               </div>
             )}
             <div className="min-w-0">
@@ -66,21 +64,24 @@ export function PersonResultCard({ person, searchId, index = 0 }: PersonResultCa
                 {person.name || "Anonymous"}
               </p>
               {person.headline && (
-                <p className="text-sm text-muted-foreground truncate mt-0.5">{person.headline}</p>
+                <p className="text-sm text-muted-foreground line-clamp-2 mt-0.5">{person.headline}</p>
               )}
             </div>
           </div>
-          <div className="mt-3 border-t border-border/60 pt-3 space-y-1">
+          <div className="mt-3 border-t border-border/60 pt-3 space-y-1.5">
             <div className="text-xs text-muted-foreground">
               <p className="font-medium text-foreground/90 flex justify-between items-center gap-2">
-                <span>Match reasons</span>
+                <span>Why matched</span>
                 {similarityPercent != null && (
-                  <span className="flex-shrink-0 text-foreground font-semibold">{similarityPercent}%</span>
+                  <span className="flex-shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-foreground font-semibold text-[11px]">
+                    {similarityPercent}%
+                  </span>
                 )}
               </p>
-              <ul className="mt-1 list-disc pl-4 space-y-0.5">
+              <ul className="mt-1.5 space-y-1">
                 {whyShown.map((reason, idx) => (
-                  <li key={`${person.id}-why-${idx}`} className="leading-snug">
+                  <li key={`${person.id}-why-${idx}`} className="leading-snug pl-0 flex items-start gap-1.5">
+                    <span className="text-primary/60 mt-1.5 shrink-0 size-1 rounded-full bg-current" aria-hidden />
                     {reason}
                   </li>
                 ))}
@@ -88,7 +89,10 @@ export function PersonResultCard({ person, searchId, index = 0 }: PersonResultCa
             </div>
           </div>
         </div>
-        <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0 mt-1" />
+        <span className="flex shrink-0 items-center gap-1 mt-1 text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+          <span className="hidden sm:inline">View</span>
+          <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 transition-transform group-hover:translate-x-0.5" />
+        </span>
       </Link>
     </motion.li>
   );

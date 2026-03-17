@@ -29,6 +29,10 @@ from src.schemas import (
     FillFromTextResponse,
     ClarifyExperienceRequest,
     ClarifyExperienceResponse,
+    BuilderChatTurnRequest,
+    BuilderChatTurnResponse,
+    BuilderSessionResponse,
+    BuilderSessionCommitResponse,
     DraftCardFamily,
     ExperienceCardCreate,
     ExperienceCardPatch,
@@ -36,6 +40,11 @@ from src.schemas import (
     ExperienceCardChildPatch,
     ExperienceCardChildResponse,
     FinalizeExperienceCardRequest,
+)
+from src.services.builder import (
+    commit_builder_session,
+    get_builder_session_state,
+    process_builder_turn,
 )
 from src.providers import (
     ChatServiceError,
@@ -345,6 +354,75 @@ async def clarify_experience(
         asked_history_entry=result.get("asked_history_entry"),
         canonical_family=result.get("canonical_family"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Conversation-first Builder
+# ---------------------------------------------------------------------------
+
+@router.post("/builder/chat/turn", response_model=BuilderChatTurnResponse)
+async def builder_chat_turn(
+    body: BuilderChatTurnRequest,
+    current_user: Person = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Single conversation endpoint for the redesigned Builder experience."""
+    try:
+        result = await process_builder_turn(
+            db,
+            person_id=current_user.id,
+            message=body.message,
+            session_id=body.session_id,
+            mode=body.mode,
+        )
+        return BuilderChatTurnResponse(**result)
+    except HTTPException:
+        raise
+    except (ChatServiceError, EmbeddingServiceError, PipelineError) as e:
+        logger.exception("builder chat turn failed: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Builder conversation temporarily unavailable. Please try again.",
+        ) from e
+
+
+@router.get("/builder/session/{session_id}", response_model=BuilderSessionResponse)
+async def get_builder_session(
+    session_id: str,
+    current_user: Person = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the current visible state of a Builder session."""
+    result = await get_builder_session_state(
+        db,
+        person_id=current_user.id,
+        session_id=session_id,
+    )
+    return BuilderSessionResponse(**result)
+
+
+@router.post("/builder/session/{session_id}/commit", response_model=BuilderSessionCommitResponse)
+async def commit_builder_session_endpoint(
+    session_id: str,
+    current_user: Person = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Project a Builder session into the existing experience-card schema."""
+    try:
+        result = await commit_builder_session(
+            db,
+            person_id=current_user.id,
+            session_id=session_id,
+        )
+        return BuilderSessionCommitResponse(**result)
+    except HTTPException:
+        raise
+    except (ChatServiceError, EmbeddingServiceError, PipelineError) as e:
+        logger.exception("builder session commit failed: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Builder commit temporarily unavailable. Please try again.",
+        ) from e
 
 
 # ---------------------------------------------------------------------------

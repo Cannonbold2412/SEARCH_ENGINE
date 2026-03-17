@@ -181,6 +181,68 @@ class ClarifyExperienceResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Conversation-first Builder
+# ---------------------------------------------------------------------------
+
+class BuilderChatTurnRequest(BaseModel):
+    """One conversation turn for the new Builder engine."""
+
+    session_id: Optional[str] = None
+    person_id: Optional[str] = None
+    message: str
+    mode: Literal["text", "voice"] = "text"
+
+
+class BuilderTurnResponse(BaseModel):
+    """One visible Builder turn."""
+
+    id: str
+    role: Literal["user", "assistant"]
+    content: str
+    turn_index: int
+    message_type: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class BuilderChatTurnResponse(BaseModel):
+    """Frontend-safe response for one Builder conversation turn."""
+
+    session_id: str
+    assistant_message: str
+    working_narrative: Optional[str] = None
+    surfaced_insights: list[str] = []
+    should_continue: bool = True
+    session_status: str
+    ready_to_commit: bool = False
+
+
+class BuilderSessionResponse(BaseModel):
+    """Current state of a Builder session."""
+
+    session_id: str
+    mode: Literal["text", "voice"]
+    session_status: str
+    current_focus: Optional[str] = None
+    working_narrative: Optional[str] = None
+    turn_count: int = 0
+    stop_confidence: float = 0.0
+    surfaced_insights: list[str] = []
+    should_continue: bool = True
+    ready_to_commit: bool = False
+    turns: list[BuilderTurnResponse] = []
+
+
+class BuilderSessionCommitResponse(BaseModel):
+    """Commit response for projecting a Builder session into experience cards."""
+
+    session_id: str
+    session_status: str
+    working_narrative: Optional[str] = None
+    committed_card_ids: list[str] = []
+    committed_card_count: int = 0
+
+
+# ---------------------------------------------------------------------------
 # Finalize / commit
 # ---------------------------------------------------------------------------
 
