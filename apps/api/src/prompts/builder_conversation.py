@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime
 from typing import Any
 
 
+def _json_default(obj: Any) -> Any:
+    # Prompt builders embed JSON directly into the prompt string; ensure
+    # non-JSON-native types like datetime serialize deterministically.
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    return str(obj)
+
+
 def _json(data: Any) -> str:
-    return json.dumps(data, indent=2, ensure_ascii=True)
+    return json.dumps(data, indent=2, ensure_ascii=True, default=_json_default)
 
 
 def build_narrative_updater_prompt(

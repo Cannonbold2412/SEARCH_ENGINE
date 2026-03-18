@@ -81,6 +81,20 @@ export function patchVapiClient(client: VapiClient): VapiClient {
 let ejectionListenerInstalled = false;
 
 /**
+ * Preload the Vapi Web SDK chunk so the first `startVoice()` call
+ * doesn't pay the dynamic-import cost.
+ *
+ * Safe to call multiple times (module import is cached by the bundler).
+ */
+export async function preloadVapiWeb(): Promise<void> {
+  installEjectionSilencer();
+
+  if (VapiCtor) return;
+  const mod = await import("@vapi-ai/web");
+  VapiCtor = mod.default;
+}
+
+/**
  * Install a one-time global handler that prevents the benign Daily.co
  * "meeting ended due to ejection" rejection from reaching the console.
  * Safe to call multiple times — only installs once.
@@ -99,12 +113,7 @@ export async function createPatchedVapiClient(
   apiToken: string,
   apiBaseUrl?: string
 ): Promise<VapiClient> {
-  installEjectionSilencer();
-
-  if (!VapiCtor) {
-    const mod = await import("@vapi-ai/web");
-    VapiCtor = mod.default;
-  }
-
-  return patchVapiClient(new VapiCtor(apiToken, apiBaseUrl));
+  await preloadVapiWeb();
+  // `preloadVapiWeb()` guarantees this is populated.
+  return patchVapiClient(new VapiCtor!(apiToken, apiBaseUrl));
 }

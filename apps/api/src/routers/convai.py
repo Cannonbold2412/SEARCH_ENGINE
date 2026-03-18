@@ -9,8 +9,10 @@ Vapi AI integration for conversational voice.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from typing import Any
 from urllib.parse import urlencode, urlparse
 
 import httpx
@@ -31,7 +33,6 @@ from src.services.convai import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/convai", tags=["convai"])
-
 
 async def _get_user_from_token(token: str | None) -> Person | None:
     """Decode JWT and load user. Returns None if invalid."""
@@ -176,29 +177,6 @@ async def vapi_call_proxy(request: Request):
     # Session key for lookup when Vapi calls our custom LLM with ?user_id=X
     create_session(str(user.id), user.id)
 
-    # region agent log
-    try:
-        with open("c:\\Users\\Lenovo\\Desktop\\Search_Engine\\.cursor\\debug.log", "a", encoding="utf-8") as f:
-            f.write(
-                json.dumps(
-                    {
-                        "id": "log_vapi_call_proxy",
-                        "timestamp": int(__import__("time").time() * 1000),
-                        "location": "convai.py:vapi_call_proxy",
-                        "message": "Vapi call proxy created session",
-                        "data": {
-                            "has_body": isinstance(body, dict),
-                        },
-                        "runId": "run1",
-                        "hypothesisId": "H_backend_1",
-                    }
-                )
-                + "\n"
-            )
-    except Exception:
-        pass
-    # endregion
-
     return data
 
 
@@ -291,32 +269,6 @@ async def chat_completions(request: Request):
     if not isinstance(messages, list):
         raise HTTPException(status_code=400, detail="messages array required")
     stream = body.get("stream", True)
-
-    # region agent log
-    try:
-        with open("c:\\Users\\Lenovo\\Desktop\\Search_Engine\\.cursor\\debug.log", "a", encoding="utf-8") as f:
-            f.write(
-                json.dumps(
-                    {
-                        "id": "log_convai_chat_completions",
-                        "timestamp": int(__import__("time").time() * 1000),
-                        "location": "convai.py:chat_completions",
-                        "message": "Convai chat_completions called",
-                        "data": {
-                            "has_conversation": bool(conversation_id),
-                            "has_session": bool(session_data),
-                            "message_count": len(messages) if isinstance(messages, list) else None,
-                            "stream": bool(stream),
-                        },
-                        "runId": "run1",
-                        "hypothesisId": "H_backend_2",
-                    }
-                )
-                + "\n"
-            )
-    except Exception:
-        pass
-    # endregion
 
     async with async_session() as db:
         try:

@@ -30,35 +30,6 @@ async def convai_chat_turn(
             user_content = content
             break
 
-    # region agent log
-    try:
-        with open("c:\\Users\\Lenovo\\Desktop\\Search_Engine\\.cursor\\debug.log", "a", encoding="utf-8") as f:
-            f.write(
-                json.dumps(
-                    {
-                        "id": "log_convai_chat_turn",
-                        "timestamp": int(__import__("time").time() * 1000),
-                        "location": "adapter.py:convai_chat_turn",
-                        "message": "convai_chat_turn invoked",
-                        "data": {
-                            "has_user_content": bool(user_content),
-                            "messages_count": len(messages),
-                            "roles": [str(m.get("role") or "") for m in messages[:5]],
-                            "types": [str(m.get("type") or "") for m in messages[:5]],
-                            "snippets": [
-                                (str(m.get("content") or "")[:60]) for m in messages[:5]
-                            ],
-                        },
-                        "runId": "run1",
-                        "hypothesisId": "H_backend_3",
-                    }
-                )
-                + "\n"
-            )
-    except Exception:
-        pass
-    # endregion
-
     if not user_content:
         return "Tell me about something you've worked on or spent real energy on lately. I'll help make sense of what stands out."
 

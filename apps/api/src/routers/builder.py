@@ -5,6 +5,7 @@ Thin HTTP layer: validates input, delegates to services, returns responses.
 All business logic (form merging, patch building) lives in the service layer.
 """
 
+import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status

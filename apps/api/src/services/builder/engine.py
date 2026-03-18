@@ -75,6 +75,13 @@ def _session_status_for(*, turn_count: int, stop_ready: bool, committed: bool) -
 
 
 def _visible_turns_to_payload(turns: list[BuilderTurn]) -> list[dict[str, Any]]:
+    def _serialize_datetime(value: Any) -> Any:
+        # Prompt builders embed visible turns as JSON; ensure datetimes are serializable.
+        if value is None:
+            return None
+        iso = getattr(value, "isoformat", None)
+        return iso() if callable(iso) else str(value)
+
     return [
         {
             "id": turn.id,
@@ -82,7 +89,7 @@ def _visible_turns_to_payload(turns: list[BuilderTurn]) -> list[dict[str, Any]]:
             "content": turn.content,
             "turn_index": turn.turn_index,
             "message_type": turn.message_type,
-            "created_at": turn.created_at,
+            "created_at": _serialize_datetime(turn.created_at),
         }
         for turn in turns
         if turn.role in {"user", "assistant"}
@@ -108,6 +115,15 @@ def _derive_surfaced_insights(hidden_state: dict[str, Any], explicit: list[str] 
 
 
 async def _next_turn_index(db: AsyncSession, session_id: str) -> int:
+    # Serialize turn-index allocation per session.
+    # Without this, two concurrent requests can both compute the same
+    # `max(turn_index) + 1` and then collide on the unique constraint for
+    # `(builder_turns.session_id, builder_turns.turn_index)`.
+    await db.execute(
+        select(BuilderSession)
+        .where(BuilderSession.id == session_id)
+        .with_for_update()
+    )
     result = await db.execute(
         select(func.max(BuilderTurn.turn_index)).where(BuilderTurn.session_id == session_id)
     )
@@ -163,7 +179,7 @@ async def _load_session_with_state(
             select(BuilderSession).where(
                 BuilderSession.id == session_id,
                 BuilderSession.person_id == person_id,
-            )
+            ).with_for_update()
         )
         session = result.scalar_one_or_none()
         if session and session.status in {"committed", "archived"}:

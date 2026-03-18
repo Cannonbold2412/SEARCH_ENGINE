@@ -9,7 +9,7 @@ import { EXPERIENCE_CARD_FAMILIES_QUERY_KEY, EXPERIENCE_CARDS_QUERY_KEY } from "
 import { AUTH_TOKEN_KEY } from "@/lib/auth-flow";
 import { API_BASE } from "@/lib/constants";
 import { api } from "@/lib/api";
-import { createPatchedVapiClient, isBenignVapiDisconnectError, type VapiClient } from "@/lib/vapi-client";
+import { createPatchedVapiClient, isBenignVapiDisconnectError, preloadVapiWeb, type VapiClient } from "@/lib/vapi-client";
 import { cn } from "@/lib/utils";
 import { AiSphere } from "../ai-sphere";
 
@@ -114,9 +114,11 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
   // Used to merge multiple transcript "chunks" into one assistant bubble
   // during a single speech segment.
   const activeAssistantMessageIdRef = useRef<string | null>(null);
+  const committedAssistantTextRef = useRef("");
   // Used to merge multiple transcript "chunks" into one user bubble
   // during a single spoken turn.
   const activeUserMessageIdRef = useRef<string | null>(null);
+  const committedUserTextRef = useRef("");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [surfacedInsights, setSurfacedInsights] = useState<string[]>([]);
   const [input, setInput] = useState("");
@@ -186,7 +188,9 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
     setAiSpeaking(false);
     setUserSpeaking(false);
     activeAssistantMessageIdRef.current = null;
+    committedAssistantTextRef.current = "";
     activeUserMessageIdRef.current = null;
+    committedUserTextRef.current = "";
   }, []);
 
   const detachVoice = useCallback((target?: VapiClient | null) => {
@@ -246,64 +250,110 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
       vapiRef.current = vapi;
 
       vapi.on("call-start", () => {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'builder-chat.tsx:call-start',message:'Vapi call-start event fired',data:{},hypothesisId:'H1',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         setVoiceConnecting(false);
         setVoiceConnected(true);
         setVoiceError(null);
       });
 
       vapi.on("call-end", () => {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'builder-chat.tsx:call-end',message:'Vapi call-end event fired',data:{},hypothesisId:'H1',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         detachVoice(vapi);
         queryClient.invalidateQueries({ queryKey: [EXPERIENCE_CARD_FAMILIES_QUERY_KEY] });
       });
 
       vapi.on("speech-start", () => {
         setAiSpeaking(true);
-        // New assistant speech segment begins; clear any previous "active" bubble.
         activeAssistantMessageIdRef.current = null;
+        committedAssistantTextRef.current = "";
         activeUserMessageIdRef.current = null;
+        committedUserTextRef.current = "";
         setUserSpeaking(false);
       });
       vapi.on("speech-end", () => {
         setAiSpeaking(false);
         activeAssistantMessageIdRef.current = null;
+        committedAssistantTextRef.current = "";
       });
 
       vapi.on("message", (msg: unknown) => {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'builder-chat.tsx:message',message:'Vapi message event',data:{msgType:(msg as Record<string,unknown>)?.type,role:(msg as Record<string,unknown>)?.role,hasTranscript:!!(msg as Record<string,unknown>)?.transcript},hypothesisId:'H5',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         const m = msg as Record<string, unknown>;
-        console.log("VAPI message (builder-chat)", m);
         const transcriptType = String(m.transcriptType ?? "").toLowerCase();
         const isPartial = transcriptType && transcriptType !== "final";
-        const rawText =
-          (m.transcript as string | undefined) ??
-          (m.content as string | undefined) ??
-          (m.text as string | undefined) ??
-          (Array.isArray((m as any).alternatives) && typeof (m as any).alternatives[0]?.text === "string"
-            ? (m as any).alternatives[0].text
-            : undefined);
+        const transcriptAny = m.transcript as unknown;
+        const transcriptFieldType =
+          transcriptAny == null ? "null" : Array.isArray(transcriptAny) ? "array" : typeof transcriptAny;
+
+        // Transcript may be a string or an object (provider-dependent). We only use lengths/metadata in logs, never speech text.
+        let rawTextSource: string | null = null;
+        let rawText: string | undefined;
+
+        const assignIfString = (candidate: unknown, source: string) => {
+          if (typeof candidate === "string" && candidate.trim().length > 0) {
+            rawTextSource = source;
+            rawText = candidate;
+            return true;
+          }
+          return false;
+        };
+
+        if (assignIfString(m.transcript, "transcript")) {
+          // assigned
+        } else if (transcriptAny && typeof transcriptAny === "object") {
+          const ta = transcriptAny as any;
+          assignIfString(ta.text, "transcript.text") ||
+            assignIfString(ta.transcript, "transcript.transcript") ||
+            assignIfString(ta.value, "transcript.value");
+
+          const scanArray = (arr: unknown, sourcePrefix: string) => {
+            if (!Array.isArray(arr)) return false;
+            for (let i = 0; i < arr.length; i++) {
+              const item = arr[i] as any;
+              if (typeof item === "string" && item.trim().length > 0) {
+                rawTextSource = `${sourcePrefix}[${i}]`;
+                rawText = item;
+                return true;
+              }
+              if (item && typeof item === "object") {
+                if (typeof item.text === "string" && item.text.trim().length > 0) {
+                  rawTextSource = `${sourcePrefix}[${i}].text`;
+                  rawText = item.text;
+                  return true;
+                }
+                if (typeof item.transcript === "string" && item.transcript.trim().length > 0) {
+                  rawTextSource = `${sourcePrefix}[${i}].transcript`;
+                  rawText = item.transcript;
+                  return true;
+                }
+              }
+            }
+            return false;
+          };
+
+          if (!rawText) {
+            scanArray(ta.chunks, "transcript.chunks") ||
+              scanArray(ta.segments, "transcript.segments") ||
+              scanArray(ta.alternatives, "transcript.alternatives");
+          }
+        }
+
+        if (!rawText) {
+          assignIfString(m.content, "content") ||
+            assignIfString(m.text, "text") ||
+            (Array.isArray((m as any).alternatives) && typeof (m as any).alternatives[0]?.text === "string"
+              ? assignIfString((m as any).alternatives[0]?.text, "alternatives[0].text")
+              : false);
+        }
+
         const text = (rawText ?? "").toString();
         // Treat any non-"assistant" transcript as coming from the user so user speech
         // always appears on the right-hand side.
         const role = m.role === "assistant" ? "assistant" : "user";
         const t = text.trim();
-        if (!t) return;
-        if (role === "user") {
-          // User is speaking via STT.
-          setUserSpeaking(true);
-          // We are about to handle user chunks; don't merge into any active assistant bubble.
-          activeAssistantMessageIdRef.current = null;
-        } else {
-          // Assistant is speaking; don't merge into any active user bubble.
-          activeUserMessageIdRef.current = null;
+        if (!t) {
+          return;
         }
+        // IMPORTANT: Do not mutate active bubble IDs on transcript-less/status events.
+        // Those events are common mid-call and clearing them can make bubbles "disappear".
+        if (role === "user") setUserSpeaking(true);
 
         // Transcripts can arrive as multiple events for both roles; update a single
         // bubble per spoken turn. Partial chunks "stream" by replacing content,
@@ -320,46 +370,63 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
 
           if (role === "user") {
             const activeId = activeUserMessageIdRef.current;
+            const activeMsg = activeId ? prev.find((m) => m.id === activeId) : undefined;
 
-            if (activeId) {
+            if (activeId && activeMsg) {
+              let newContent: string;
+              if (isPartial) {
+                newContent = committedUserTextRef.current
+                  ? mergeText(committedUserTextRef.current, t)
+                  : t;
+              } else {
+                committedUserTextRef.current = committedUserTextRef.current
+                  ? mergeText(committedUserTextRef.current, t)
+                  : t;
+                newContent = committedUserTextRef.current;
+              }
+              const prevLen = activeMsg.content?.length ?? 0;
+              void prevLen;
               return prev.map((m) =>
-                m.id === activeId
-                  ? {
-                      ...m,
-                      content: mergeText(m.content, t),
-                    }
-                  : m
+                m.id === activeId ? { ...m, content: newContent } : m
               );
             }
 
             const newId = `${Date.now()}-${prev.length}`;
             activeUserMessageIdRef.current = newId;
+            committedUserTextRef.current = isPartial ? "" : t;
             return [...prev, { id: newId, role: "user", content: t }];
           }
 
           const activeId = activeAssistantMessageIdRef.current;
+          const activeMsg = activeId ? prev.find((m) => m.id === activeId) : undefined;
 
-          if (activeId) {
+          if (activeId && activeMsg) {
+            let newContent: string;
+            if (isPartial) {
+              newContent = committedAssistantTextRef.current
+                ? mergeText(committedAssistantTextRef.current, t)
+                : t;
+            } else {
+              committedAssistantTextRef.current = committedAssistantTextRef.current
+                ? mergeText(committedAssistantTextRef.current, t)
+                : t;
+              newContent = committedAssistantTextRef.current;
+            }
+            const prevLen = activeMsg.content?.length ?? 0;
+            void prevLen;
             return prev.map((m) =>
-              m.id === activeId
-                ? {
-                    ...m,
-                    content: mergeText(m.content, t),
-                  }
-                : m
+              m.id === activeId ? { ...m, content: newContent } : m
             );
           }
 
           const newId = `${Date.now()}-${prev.length}`;
           activeAssistantMessageIdRef.current = newId;
+          committedAssistantTextRef.current = isPartial ? "" : t;
           return [...prev, { id: newId, role: "assistant", content: t }];
         });
       });
 
       vapi.on("error", (err) => {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'builder-chat.tsx:error',message:'Vapi error event',data:{errJSON:JSON.stringify(err).slice(0,800)},hypothesisId:'H1',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         const errObj = err as Record<string, unknown>;
         const errType = String(errObj?.type ?? "").toLowerCase();
         const topMsg = (err?.message as string) || "";
@@ -383,14 +450,8 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
         setVoiceError(friendlyMsg);
       });
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'builder-chat.tsx:pre-start',message:'About to call vapi.start()',data:{proxyBase},hypothesisId:'H1',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       await vapi.start({});
     } catch (e) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'builder-chat.tsx:catch',message:'vapi.start() threw',data:{error:e instanceof Error ? e.message : String(e)},hypothesisId:'H4',runId:'run1',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const isExpectedDisconnect = isBenignVapiDisconnectError(e);
       if (isExpectedDisconnect) {
         setVoiceError(null);
@@ -420,7 +481,16 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
   // Auto-start voice on initial load so the AI is on by default.
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      void startVoiceRef.current();
+      void (async () => {
+        // Reduce time-to-`call-start` by ensuring the Vapi Web SDK is loaded
+        // before we invoke the existing `startVoice()` flow.
+        try {
+          await preloadVapiWeb();
+        } catch {
+          // If preload fails, we still want the normal voice start path to run.
+        }
+        void startVoiceRef.current();
+      })();
     }, 0);
 
     return () => {
