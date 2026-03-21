@@ -289,6 +289,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messagesRef = useRef<ChatMessage[]>([]);
   // Used to merge multiple transcript "chunks" into one assistant bubble
   // during a single speech segment.
   const activeAssistantMessageIdRef = useRef<string | null>(null);
@@ -358,6 +359,10 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   const resetVoiceState = useCallback(() => {
     setVoiceConnecting(false);
     setVoiceConnected(false);
@@ -381,14 +386,14 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
 
   const commitVoiceTranscript = useCallback(async (callId: string | null, transcriptFallback: string) => {
     // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"pre-fix",hypothesisId:"H1-H4",location:"builder-chat.tsx:commitVoiceTranscript:start",message:"commitVoiceTranscript invoked",data:{hasCallId:Boolean(callId?.trim()),fallbackLength:transcriptFallback.trim().length,messagesCount:messages.length},timestamp:Date.now()})}).catch(()=>{});
+    fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"post-fix",hypothesisId:"H1-H4",location:"builder-chat.tsx:commitVoiceTranscript:start",message:"commitVoiceTranscript invoked",data:{hasCallId:Boolean(callId?.trim()),fallbackLength:transcriptFallback.trim().length,messagesCount:messages.length,messagesRefCount:messagesRef.current.length},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     if (transcriptCommitInFlightRef.current) return;
     const resolvedCallId = callId?.trim() || null;
     const resolvedTranscript = transcriptFallback.trim();
     if (!resolvedCallId && !resolvedTranscript) {
       // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"pre-fix",hypothesisId:"H1-H3",location:"builder-chat.tsx:commitVoiceTranscript:emptyGuard",message:"empty callId and transcript fallback",data:{resolvedCallId:resolvedCallId,resolvedTranscriptLength:resolvedTranscript.length,messagesCount:messages.length},timestamp:Date.now()})}).catch(()=>{});
+      fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"post-fix",hypothesisId:"H1-H3",location:"builder-chat.tsx:commitVoiceTranscript:emptyGuard",message:"empty callId and transcript fallback",data:{resolvedCallId:resolvedCallId,resolvedTranscriptLength:resolvedTranscript.length,messagesCount:messages.length,messagesRefCount:messagesRef.current.length},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       addMessage({
         role: "assistant",
@@ -399,6 +404,9 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
     transcriptCommitInFlightRef.current = true;
     setLoading(true);
     try {
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"post-fix-2",hypothesisId:"H6-H8",location:"builder-chat.tsx:commitVoiceTranscript:apiRequest",message:"posting transcript commit request",data:{hasCallId:Boolean(resolvedCallId),resolvedTranscriptLength:resolvedTranscript.length,sessionId:sessionId ?? null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const res = await api<BuilderSessionCommitResponse>("/builder/transcript/commit", {
         method: "POST",
         body: {
@@ -408,6 +416,9 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
           transcript: resolvedTranscript,
         },
       });
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"post-fix-2",hypothesisId:"H6-H8",location:"builder-chat.tsx:commitVoiceTranscript:apiSuccess",message:"transcript commit response received",data:{committedCardCount:res.committed_card_count,sessionStatus:res.session_status},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (res.committed_card_count > 0) {
         addMessage({
           role: "assistant",
@@ -422,7 +433,11 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
       queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
       onCardsSaved?.();
-    } catch {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error ?? "unknown");
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"post-fix-2",hypothesisId:"H6-H8",location:"builder-chat.tsx:commitVoiceTranscript:apiError",message:"transcript commit request failed",data:{errorMessage,hasCallId:Boolean(resolvedCallId),resolvedTranscriptLength:resolvedTranscript.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       addMessage({
         role: "assistant",
         content: "Conversation ended, but saving cards failed. Please try again.",
@@ -501,9 +516,9 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
 
       vapi.on("call-end", () => {
         const callId = activeVapiCallIdRef.current ?? getCurrentVapiCallId(vapi);
-        const transcriptFallback = serializeTranscriptFromMessages(messages);
+        const transcriptFallback = serializeTranscriptFromMessages(messagesRef.current);
         // #region agent log
-        fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"pre-fix",hypothesisId:"H1-H3",location:"builder-chat.tsx:vapi:call-end",message:"call ended and commit requested",data:{hasCallId:Boolean(callId),fallbackLength:transcriptFallback.length,capturedMessagesInCallEndClosure:messages.length},timestamp:Date.now()})}).catch(()=>{});
+        fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"post-fix",hypothesisId:"H1-H3",location:"builder-chat.tsx:vapi:call-end",message:"call ended and commit requested",data:{hasCallId:Boolean(callId),fallbackLength:transcriptFallback.length,capturedMessagesInCallEndClosure:messages.length,messagesRefCount:messagesRef.current.length},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
         void commitVoiceTranscript(callId, transcriptFallback);
         detachVoice(vapi);
