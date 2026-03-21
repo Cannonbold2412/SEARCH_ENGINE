@@ -20,4 +20,4 @@ RUN pip install --no-cache-dir -e .
 ENV PYTHONPATH=/app
 EXPOSE 8080
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh", "-c", "alembic -c /app/alembic.ini upgrade head && uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
