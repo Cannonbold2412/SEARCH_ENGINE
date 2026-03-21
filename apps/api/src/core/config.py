@@ -27,18 +27,8 @@ class Settings(BaseSettings):
     embed_dimension: int = 324  # match DB (migration 018)
 
     openai_api_key: str | None = None
-
-    # Vapi AI (real-time voice with custom LLM)
-    # Get keys from https://dashboard.vapi.ai
     vapi_api_key: str | None = None
-    # Public base URL for our API (e.g. https://api.yourapp.com) - Vapi calls {this}/convai/v1/chat/completions
-    vapi_callback_base_url: str | None = None
-    # Voice: 11labs, playht, cartesia, etc. Add provider keys in Vapi Dashboard for BYOK (lower cost).
-    vapi_voice_provider: str = "11labs"
-    vapi_voice_id: str = "fEJqMD6Jp1JFP8T1BZpd"
-    # Transcriber: deepgram, gladia, etc. Add provider keys in Vapi Dashboard for BYOK (lower cost).
-    vapi_transcriber_provider: str = "deepgram"
-    vapi_transcriber_model: str = "nova-2"
+    vapi_api_base_url: str = "https://api.vapi.ai"
 
     # Rate limiting (per-user when key_func uses user id; multi-instance needs Redis later)
     search_rate_limit: str = "10/minute"

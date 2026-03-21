@@ -57,9 +57,8 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from src.db.models import RawExperience, DraftSet, ExperienceCard, ExperienceCardChild
+from src.db.models import ExperienceCard, ExperienceCardChild
 from src.domain import ALLOWED_CHILD_TYPES
-from src.schemas import RawExperienceCreate
 from src.providers import get_chat_provider, ChatServiceError
 from src.utils import extract_json_from_llm_response as _extract_json_from_text
 from src.prompts.experience_card import (
@@ -926,8 +925,6 @@ def card_to_experience_card_fields(
     card: Card,
     *,
     person_id: str,
-    raw_experience_id: str,
-    draft_set_id: str,
 ) -> dict:
     """Convert Card to ExperienceCard column values."""
     time_text, start_date, end_date, is_ongoing = extract_time_fields(card)
@@ -982,8 +979,6 @@ def card_to_child_fields(
     card: Card,
     *,
     person_id: str,
-    raw_experience_id: str,
-    draft_set_id: str,
     parent_id: str,
 ) -> dict:
     """Convert Card to ExperienceCardChild column values. Value uses { raw_text, items: [{ title, description }] }."""
@@ -1007,8 +1002,6 @@ def card_to_child_fields(
     return {
         "parent_experience_id": parent_id,
         "person_id": person_id,
-        "raw_experience_id": raw_experience_id,
-        "draft_set_id": draft_set_id,
         "child_type": child_type,
         "value": dimension_container,
         "confidence_score": None,
@@ -1025,8 +1018,6 @@ async def persist_families(
     families: list[Family],
     *,
     person_id: str,
-    raw_experience_id: str,
-    draft_set_id: str,
 ) -> tuple[list[ExperienceCard], list[ExperienceCardChild]]:
     """
     Persist all families to database.
@@ -1046,8 +1037,6 @@ async def persist_families(
             parent_fields = card_to_experience_card_fields(
                 family.parent,
                 person_id=person_id,
-                raw_experience_id=raw_experience_id,
-                draft_set_id=draft_set_id,
             )
             parent_ec = ExperienceCard(**parent_fields)
             db.add(parent_ec)
@@ -1060,8 +1049,6 @@ async def persist_families(
                 child_fields = card_to_child_fields(
                     child_card,
                     person_id=person_id,
-                    raw_experience_id=raw_experience_id,
-                    draft_set_id=draft_set_id,
                     parent_id=parent_ec.id,
                 )
                 val = child_fields.get("value") or {}
@@ -1890,28 +1877,18 @@ async def detect_experiences(raw_text: str) -> dict:
         return {"count": 0, "experiences": []}
 
 
-async def next_draft_run_version(db: AsyncSession, raw_experience_id: str, person_id: str) -> int:
-    """Get next run version for draft set."""
-    result = await db.execute(
-        select(func.max(DraftSet.run_version)).where(
-            DraftSet.raw_experience_id == raw_experience_id,
-            DraftSet.person_id == person_id,
-        )
-    )
-    max_version = result.scalar_one_or_none()
-    return (max_version or 0) + 1
-
-
 async def run_draft_single(
     db: AsyncSession,
     person_id: str,
     raw_text: str,
     experience_index: int,
     experience_count: int,
-) -> tuple[str, str, list[dict]]:
+) -> list[dict]:
     """
     Run draft pipeline for ONE experience only (by 1-based index).
-    Returns (draft_set_id, raw_experience_id, card_families) with at most one family.
+
+    Persists exactly one draft family into `experience_cards` + `experience_card_children`
+    (cards start non-visible; builder chat finalization enables search visibility).
     """
     raw_text_original = (raw_text or "").strip()
     if not raw_text_original:
@@ -1925,24 +1902,6 @@ async def run_draft_single(
     logger.info(f"Starting single-experience pipeline person_id={person_id}, index={idx}/{total}")
 
     raw_text_cleaned = await rewrite_raw_text(raw_text_original)
-    raw = RawExperience(
-        person_id=person_id,
-        raw_text=raw_text_original,
-        raw_text_original=raw_text_original,
-        raw_text_cleaned=raw_text_cleaned,
-    )
-    db.add(raw)
-    await db.flush()
-    raw_experience_id = str(raw.id)
-    run_version = await next_draft_run_version(db, raw_experience_id, person_id)
-    draft_set = DraftSet(
-        person_id=person_id,
-        raw_experience_id=raw.id,
-        run_version=run_version,
-    )
-    db.add(draft_set)
-    await db.flush()
-    draft_set_id = str(draft_set.id)
 
     chat = get_chat_provider()
     extract_prompt = fill_prompt(
@@ -1971,8 +1930,6 @@ async def run_draft_single(
         db,
         extracted_families,
         person_id=person_id,
-        raw_experience_id=raw_experience_id,
-        draft_set_id=draft_set_id,
     )
     # NOTE: We intentionally do NOT embed cards here. Embedding (and making cards
     # visible/searchable) is deferred until the builder chat flow completes and
@@ -1989,4 +1946,4 @@ async def run_draft_single(
         }
         for parent in parents
     ]
-    return draft_set_id, raw_experience_id, card_families
+    return card_families

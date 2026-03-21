@@ -9,6 +9,7 @@ type VapiClientWithInternals = Record<string, unknown> & {
 };
 
 let VapiCtor: typeof import("@vapi-ai/web").default | null = null;
+let VapiCtorPromise: Promise<typeof import("@vapi-ai/web").default> | null = null;
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -90,8 +91,18 @@ export async function preloadVapiWeb(): Promise<void> {
   installEjectionSilencer();
 
   if (VapiCtor) return;
-  const mod = await import("@vapi-ai/web");
-  VapiCtor = mod.default;
+  if (!VapiCtorPromise) {
+    VapiCtorPromise = import("@vapi-ai/web")
+      .then((mod) => {
+        VapiCtor = mod.default;
+        return mod.default;
+      })
+      .catch((err) => {
+        VapiCtorPromise = null;
+        throw err;
+      });
+  }
+  await VapiCtorPromise;
 }
 
 /**
@@ -109,11 +120,11 @@ export function installEjectionSilencer(): void {
   });
 }
 
-export async function createPatchedVapiClient(
-  apiToken: string,
-  apiBaseUrl?: string
-): Promise<VapiClient> {
+/**
+ * Vapi Web SDK with your dashboard **public** key (not the private API key).
+ * Second arg was removed: we no longer proxy through our API for custom LLM.
+ */
+export async function createPatchedVapiClient(publicKey: string): Promise<VapiClient> {
   await preloadVapiWeb();
-  // `preloadVapiWeb()` guarantees this is populated.
-  return patchVapiClient(new VapiCtor!(apiToken, apiBaseUrl));
+  return patchVapiClient(new VapiCtor!(publicKey));
 }

@@ -499,8 +499,6 @@ async def seed_demo_profiles() -> None:
                     child = ExperienceCardChild(
                         parent_experience_id=card.id,
                         person_id=person.id,
-                        raw_experience_id=None,
-                        draft_set_id=None,
                         child_type=child_type,
                         value=child_value,
                         confidence_score=None,

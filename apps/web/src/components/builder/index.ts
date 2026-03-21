@@ -13,8 +13,6 @@ export { ChildCardEditForm } from "./forms";
 
 export { BuilderChat } from "./chat";
 export type { ChatMessage, ClarifyHistoryEntry, ClarifyOption } from "./chat";
-export { ExperienceClarifyChat } from "./chat";
-export type { ClarifyMessage, ClarifyExperienceResponse } from "./chat";
 
 export { AiSphere } from "./ai-sphere";
 

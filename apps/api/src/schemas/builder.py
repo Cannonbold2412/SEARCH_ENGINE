@@ -7,72 +7,6 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 
 # ---------------------------------------------------------------------------
-# Raw experience
-# ---------------------------------------------------------------------------
-
-class RawExperienceCreate(BaseModel):
-    raw_text: str
-
-
-class RawExperienceResponse(BaseModel):
-    id: str
-    raw_text: str
-    created_at: Optional[datetime] = None
-
-
-# ---------------------------------------------------------------------------
-# Rewrite
-# ---------------------------------------------------------------------------
-
-class RewriteTextResponse(BaseModel):
-    """Result of POST /experiences/rewrite: cleaned English text."""
-
-    rewritten_text: str
-
-
-# ---------------------------------------------------------------------------
-# Draft pipeline
-# ---------------------------------------------------------------------------
-
-class DraftCardFamily(BaseModel):
-    """One parent experience card + its child cards (from draft pipeline)."""
-
-    parent: dict[str, Any]
-    children: list[dict[str, Any]] = []
-
-
-class DraftSetResponse(BaseModel):
-    """Result of single-experience pipeline: rewrite → extract one → validate → persist."""
-
-    draft_set_id: str
-    raw_experience_id: str
-    card_families: list[DraftCardFamily]
-
-
-class DetectedExperienceItem(BaseModel):
-    """One detected experience for user to choose."""
-
-    index: int
-    label: str
-    suggested: bool = False
-
-
-class DetectExperiencesResponse(BaseModel):
-    """Result of POST /experience-cards/detect-experiences."""
-
-    count: int = 0
-    experiences: list[DetectedExperienceItem] = []
-
-
-class DraftSingleRequest(BaseModel):
-    """Request to extract and draft a single experience by index (1-based)."""
-
-    raw_text: str
-    experience_index: int = 1
-    experience_count: int = 1  # total from detect-experiences; used so LLM knows context
-
-
-# ---------------------------------------------------------------------------
 # Fill-missing-from-text
 # ---------------------------------------------------------------------------
 
@@ -90,94 +24,6 @@ class FillFromTextResponse(BaseModel):
     """Response: only the fields the LLM filled (merge into form on frontend)."""
 
     filled: dict[str, Any] = {}
-
-
-# ---------------------------------------------------------------------------
-# Clarify flow
-# ---------------------------------------------------------------------------
-
-class ClarifyMessage(BaseModel):
-    """One message in the clarification conversation."""
-
-    role: str  # "assistant" | "user"
-    content: str
-
-
-class ClarifyHistoryMessage(BaseModel):
-    """Structured clarify history entry (target-aware)."""
-
-    role: str  # "assistant" | "user"
-    kind: str  # "clarify_question" | "clarify_answer"
-    target_type: Optional[str] = None         # "parent" | "child"
-    target_field: Optional[str] = None
-    target_child_type: Optional[str] = None
-    profile_axes: Optional[list[str]] = None
-    text: str = ""
-
-
-class LastQuestionTarget(BaseModel):
-    """Target of the last asked question (so backend can apply user answer correctly)."""
-
-    target_type: Optional[str] = None    # "parent" | "child"
-    target_field: Optional[str] = None
-    target_child_type: Optional[str] = None
-
-
-class ClarifyExperienceRequest(BaseModel):
-    """Request for interactive clarification: LLM asks questions or returns filled fields."""
-
-    raw_text: str
-    card_type: Literal["parent", "child"] = "parent"
-    current_card: dict[str, Any] = {}
-    conversation_history: list[ClarifyMessage] = []  # past Q&A (legacy)
-    card_id: Optional[str] = None   # if set and filled returned, merge and PATCH parent
-    child_id: Optional[str] = None  # if set and filled returned, merge and PATCH child
-    card_family: Optional[dict[str, Any]] = None
-    card_families: Optional[list[dict[str, Any]]] = None
-    detected_experiences: Optional[list[dict[str, Any]]] = None  # [{ "index": int, "label": str }, ...]
-    focus_parent_id: Optional[str] = None
-    asked_history: Optional[list[dict[str, Any]]] = None
-    last_question_target: Optional[dict[str, Any]] = None
-    max_parent_questions: Optional[int] = None
-    max_child_questions: Optional[int] = None
-
-
-class ClarifyProgress(BaseModel):
-    """Progress counters for clarify loop."""
-
-    parent_asked: int = 0
-    child_asked: int = 0
-    max_parent: int = 2
-    max_child: int = 2
-
-
-class ClarifyOption(BaseModel):
-    """One option for choose_focus action."""
-
-    parent_id: str
-    label: str
-
-
-class ClarifyExperienceResponse(BaseModel):
-    """Response: either a clarifying question or filled fields (or both empty when done)."""
-
-    clarifying_question: Optional[str] = None
-    filled: dict[str, Any] = {}
-    profile_update: Optional[dict[str, Any]] = None
-    profile_reflection: Optional[str] = None
-    action: Optional[str] = None          # "choose_focus" | null
-    message: Optional[str] = None
-    options: Optional[list[dict[str, Any]]] = None  # [{ parent_id, label }] for choose_focus
-    focus_parent_id: Optional[str] = None
-    should_stop: Optional[bool] = None
-    stop_reason: Optional[str] = None
-    target_type: Optional[str] = None     # "parent" | "child"
-    target_field: Optional[str] = None
-    target_child_type: Optional[str] = None
-    progress: Optional[dict[str, Any]] = None
-    missing_fields: Optional[dict[str, Any]] = None
-    asked_history_entry: Optional[dict[str, Any]] = None
-    canonical_family: Optional[dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +59,10 @@ class BuilderChatTurnResponse(BaseModel):
     surfaced_insights: list[str] = []
     should_continue: bool = True
     session_status: str
+    # When true, the chat agent ended and extraction can be queued/committed.
     ready_to_commit: bool = False
+    # True when backend queued background schema extraction/commit for this session.
+    extract_schema_queued: bool = False
 
 
 class BuilderSessionResponse(BaseModel):
@@ -240,6 +89,15 @@ class BuilderSessionCommitResponse(BaseModel):
     working_narrative: Optional[str] = None
     committed_card_ids: list[str] = []
     committed_card_count: int = 0
+
+
+class BuilderTranscriptCommitRequest(BaseModel):
+    """Commit cards from a completed Vapi conversation transcript."""
+
+    call_id: Optional[str] = None
+    transcript: Optional[str] = None
+    session_id: Optional[str] = None
+    mode: Literal["text", "voice"] = "voice"
 
 
 # ---------------------------------------------------------------------------

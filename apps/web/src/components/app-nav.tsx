@@ -14,6 +14,7 @@ import { CreditsBadge } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { SavedSearchesResponse } from "@/types";
+import { preloadVapiWeb } from "@/lib/vapi-client";
 
 function truncateQuery(text: string, maxLen = 40): string {
   if (text.length <= maxLen) return text;
@@ -115,6 +116,11 @@ export function AppNav() {
     if (isMobile) closeMobileSidebar();
   };
 
+  // Start downloading the Vapi web SDK as early as possible so Builder voice starts instantly.
+  useEffect(() => {
+    void preloadVapiWeb().catch(() => {});
+  }, []);
+
   return (
     <>
       {/* Mobile backdrop - close drawer when tapping outside */}
@@ -198,7 +204,20 @@ export function AppNav() {
                 <Link
                   key={href}
                   href={href}
-                  onClick={handleNavClick}
+                  onClick={() => {
+                    if (href === "/builder") {
+                      void preloadVapiWeb().catch(() => {});
+                    }
+                    handleNavClick();
+                  }}
+                  onPointerEnter={() => {
+                    if (href !== "/builder") return;
+                    void preloadVapiWeb().catch(() => {});
+                  }}
+                  onFocus={() => {
+                    if (href !== "/builder") return;
+                    void preloadVapiWeb().catch(() => {});
+                  }}
                   className={navLinkClass(isActive)}
                   title={collapsed && !isMobile ? label : undefined}
                 >

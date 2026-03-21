@@ -1,13 +1,11 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, MicOff, Loader2, PhoneOff, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { API_BASE } from "@/lib/constants";
 import { AUTH_TOKEN_KEY } from "@/lib/auth-flow";
-import { EXPERIENCE_CARD_FAMILIES_QUERY_KEY } from "@/hooks";
+import { getVapiAssistantId, getVapiPublicKey, isVapiVoiceConfigured } from "@/lib/vapi-config";
 import { createPatchedVapiClient, isBenignVapiDisconnectError, type VapiClient } from "@/lib/vapi-client";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -27,7 +25,6 @@ function isTranscriptMessage(msg: unknown): msg is { type: string; role?: string
 }
 
 export function VapiVoiceWidget() {
-  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -58,42 +55,6 @@ export function VapiVoiceWidget() {
     resetCallState();
   }, [resetCallState]);
 
-  const addTranscriptMessage = useCallback((role: "user" | "assistant", text: string) => {
-    const t = (text ?? "").trim();
-    if (!t) return;
-    setMessages((prev) => {
-      const mergeText = (oldText: string, nextText: string) => {
-        const oldEndsWithSpace = /\s$/.test(oldText);
-        const nextStartsWithSpace = /^\s/.test(nextText);
-        if (oldText.length === 0) return nextText;
-        if (oldEndsWithSpace || nextStartsWithSpace) return oldText + nextText;
-        return oldText + " " + nextText;
-      };
-
-      if (role === "user") {
-        const activeId = activeUserMessageIdRef.current;
-        if (activeId) {
-          return prev.map((m) =>
-            m.id === activeId ? { ...m, content: mergeText(m.content, t) } : m
-          );
-        }
-        const newId = `${Date.now()}-${prev.length}`;
-        activeUserMessageIdRef.current = newId;
-        return [...prev, { id: newId, role, content: t }];
-      }
-
-      const activeId = activeAssistantMessageIdRef.current;
-      if (activeId) {
-        return prev.map((m) =>
-          m.id === activeId ? { ...m, content: mergeText(m.content, t) } : m
-        );
-      }
-      const newId = `${Date.now()}-${prev.length}`;
-      activeAssistantMessageIdRef.current = newId;
-      return [...prev, { id: newId, role, content: t }];
-    });
-  }, []);
-
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -109,14 +70,18 @@ export function VapiVoiceWidget() {
       setConnecting(false);
       return;
     }
-    if (!API_BASE || !API_BASE.startsWith("http")) {
-      setError("API not configured");
+    if (!isVapiVoiceConfigured()) {
+      setError(
+        "Set NEXT_PUBLIC_VAPI_PUBLIC_KEY and NEXT_PUBLIC_VAPI_ASSISTANT_ID (Vapi dashboard)."
+      );
       setConnecting(false);
       return;
     }
-    const proxyBase = `${API_BASE}/convai`;
+
     try {
-      vapi = await createPatchedVapiClient(token, proxyBase);
+      const publicKey = getVapiPublicKey();
+      const assistantId = getVapiAssistantId();
+      vapi = await createPatchedVapiClient(publicKey);
       vapiRef.current = vapi;
 
       vapi.on("call-start", () => {
@@ -128,7 +93,6 @@ export function VapiVoiceWidget() {
 
       vapi.on("call-end", () => {
         detachCall(vapi);
-        queryClient.invalidateQueries({ queryKey: [EXPERIENCE_CARD_FAMILIES_QUERY_KEY] });
       });
 
       vapi.on("speech-start", () => setIsSpeaking(true));
@@ -194,22 +158,16 @@ export function VapiVoiceWidget() {
         const errObj = err as Record<string, unknown>;
         const errType = String(errObj?.type ?? "").toLowerCase();
         const errMsg = (err?.message as string) || "";
-        // start-method-error = our proxy returned 503 (e.g. local/callback mismatch)
-        const isLocal = typeof window !== "undefined" && /localhost|127\.0\.0\.1/.test(API_BASE);
-        const friendlyMsg =
-          errType === "start-method-error" && isLocal
-            ? "Voice needs a tunnel. 1) Run ngrok (e.g. .\\scripts\\ngrok-tunnel.ps1 or ngrok http 8000). 2) In apps/api/.env set VAPI_CALLBACK_BASE_URL to the https URL ngrok shows. 3) Restart the API."
-            : errMsg || "Voice connection error";
-        if (errType === "daily-error" && /meeting has ended/i.test(friendlyMsg)) {
+        if (errType === "daily-error" && /meeting has ended/i.test(errMsg)) {
           setError(null);
           detachCall(vapi);
           return;
         }
         detachCall(vapi);
-        setError(friendlyMsg);
+        setError(errMsg || "Voice connection error");
       });
 
-      await vapi.start({}); // Assistant config comes from our backend proxy
+      await vapi.start(assistantId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not start voice session";
       const isExpectedDisconnect = isBenignVapiDisconnectError(e);
@@ -222,7 +180,7 @@ export function VapiVoiceWidget() {
     } finally {
       setConnecting(false);
     }
-  }, [detachCall, queryClient, addTranscriptMessage]);
+  }, [detachCall]);
 
   const handleEnd = useCallback(async () => {
     const vapi = vapiRef.current;
@@ -245,12 +203,12 @@ export function VapiVoiceWidget() {
 
   return (
     <div className="flex flex-col h-full min-h-0 rounded-xl border border-border bg-card overflow-hidden">
-      {/* Transcript area - same layout as Type mode */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {!isConnected && messages.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-4">
-            Use real-time voice to add an experience. Speak naturally—the AI will ask follow-up questions
-            and build your card. Your cards will appear when you&apos;re done.
+            Real-time voice uses your Vapi dashboard assistant. Configure{" "}
+            <code className="text-xs">NEXT_PUBLIC_VAPI_PUBLIC_KEY</code> and{" "}
+            <code className="text-xs">NEXT_PUBLIC_VAPI_ASSISTANT_ID</code>.
           </p>
         )}
         <AnimatePresence initial={false}>
@@ -281,7 +239,6 @@ export function VapiVoiceWidget() {
         <div ref={scrollRef} />
       </div>
 
-      {/* Footer - voice controls */}
       <div className="flex flex-col gap-2 p-3 border-t border-border flex-shrink-0">
         {error && (
           <p className="text-sm text-destructive text-center" role="alert">

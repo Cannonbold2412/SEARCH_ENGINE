@@ -4,16 +4,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowDown, Loader2, Send } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { EXPERIENCE_CARD_FAMILIES_QUERY_KEY, EXPERIENCE_CARDS_QUERY_KEY } from "@/hooks";
 import { AUTH_TOKEN_KEY } from "@/lib/auth-flow";
 import { API_BASE } from "@/lib/constants";
 import { api } from "@/lib/api";
+import { isVapiVoiceConfigured, getVapiAssistantId, getVapiPublicKey } from "@/lib/vapi-config";
 import { createPatchedVapiClient, isBenignVapiDisconnectError, preloadVapiWeb, type VapiClient } from "@/lib/vapi-client";
 import { cn } from "@/lib/utils";
 import { AiSphere } from "../ai-sphere";
 
-const BUILDER_SESSION_STORAGE_KEY = "builder-session-id";
+const BUILDER_CHAT_STORAGE_KEY = "builder-chat-state";
 
 export type ChatMessage = {
   id: string;
@@ -41,38 +43,213 @@ type BuilderTurn = {
   message_type?: string | null;
 };
 
-type BuilderChatTurnResponse = {
+type BuilderSessionCommitResponse = {
   session_id: string;
-  assistant_message: string;
-  working_narrative?: string | null;
-  surfaced_insights?: string[];
-  should_continue: boolean;
   session_status: string;
-  ready_to_commit: boolean;
+  working_narrative?: string | null;
+  committed_card_ids: string[];
+  committed_card_count: number;
 };
 
-type BuilderSessionResponse = {
-  session_id: string;
-  mode: "text" | "voice";
-  session_status: string;
-  current_focus?: string | null;
-  working_narrative?: string | null;
-  turn_count: number;
-  stop_confidence: number;
-  surfaced_insights: string[];
-  should_continue: boolean;
-  ready_to_commit: boolean;
-  turns: BuilderTurn[];
+type PersistedBuilderChatState = {
+  messages: ChatMessage[];
+  surfacedInsights: string[];
 };
 
-function isTranscriptMessage(msg: unknown): msg is { type?: string; role?: string; transcriptType?: string; transcript?: string } {
-  if (!msg || typeof msg !== "object") return false;
-  const m = msg as Record<string, unknown>;
-  const type = String(m.type ?? "").toLowerCase();
-  const hasText = typeof (m.transcript ?? m.content) === "string";
-  // Vapi may use different type strings for transcripts; accept anything that
-  // clearly contains transcript text and whose type either is empty or mentions "transcript".
-  return hasText && (!type || type.includes("transcript"));
+function serializeTranscriptFromMessages(messages: ChatMessage[]): string {
+  return messages
+    .map((msg) => {
+      const text = String(msg.content ?? "").trim();
+      if (!text) return "";
+      const role = msg.role === "assistant" ? "Assistant" : "User";
+      return `${role}: ${text}`;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function collapseAdjacentDuplicatePhrases(text: string): string {
+  const tokens = text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length < 2) return text.trim();
+
+  const normalized = (token: string) => token.toLowerCase().replace(/^[^\w]+|[^\w]+$/g, "");
+  const maxWindow = Math.min(12, Math.floor(tokens.length / 2));
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < tokens.length - 1; i++) {
+      let removed = false;
+      for (let size = maxWindow; size >= 1; size--) {
+        if (i + size * 2 > tokens.length) continue;
+        let equal = true;
+        for (let j = 0; j < size; j++) {
+          if (normalized(tokens[i + j]) !== normalized(tokens[i + size + j])) {
+            equal = false;
+            break;
+          }
+        }
+        if (!equal) continue;
+        tokens.splice(i + size, size);
+        changed = true;
+        removed = true;
+        break;
+      }
+      if (removed) break;
+    }
+  }
+
+  return tokens.join(" ").trim();
+}
+
+function mergeTranscriptText(oldText: string, nextText: string): string {
+  const oldEndsWithSpace = /\s$/.test(oldText);
+  const nextStartsWithSpace = /^\s/.test(nextText);
+  if (oldText.length === 0) return collapseAdjacentDuplicatePhrases(nextText);
+  const merged = oldEndsWithSpace || nextStartsWithSpace ? oldText + nextText : oldText + " " + nextText;
+  // Normalize adjacent duplicated phrases caused by overlapping transcript chunks.
+  return collapseAdjacentDuplicatePhrases(merged);
+}
+
+type TranscriptRole = "assistant" | "user";
+
+function extractTranscriptText(m: Record<string, unknown>): string {
+  let rawText: string | undefined;
+  const transcriptAny = m.transcript as unknown;
+
+  const assignIfString = (candidate: unknown): boolean => {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      rawText = candidate;
+      return true;
+    }
+    return false;
+  };
+
+  const scanArray = (arr: unknown): boolean => {
+    if (!Array.isArray(arr)) return false;
+    for (const item of arr) {
+      if (assignIfString(item)) return true;
+      if (item && typeof item === "object") {
+        const typed = item as Record<string, unknown>;
+        if (assignIfString(typed.text)) return true;
+        if (assignIfString(typed.transcript)) return true;
+      }
+    }
+    return false;
+  };
+
+  if (!assignIfString(m.transcript) && transcriptAny && typeof transcriptAny === "object") {
+    const transcriptObj = transcriptAny as Record<string, unknown>;
+    assignIfString(transcriptObj.text) ||
+      assignIfString(transcriptObj.transcript) ||
+      assignIfString(transcriptObj.value) ||
+      scanArray(transcriptObj.chunks) ||
+      scanArray(transcriptObj.segments) ||
+      scanArray(transcriptObj.alternatives);
+  }
+
+  if (!rawText) {
+    const alternatives = m.alternatives as unknown;
+    assignIfString(m.content) ||
+      assignIfString(m.text) ||
+      (Array.isArray(alternatives)
+        ? assignIfString((alternatives[0] as Record<string, unknown> | undefined)?.text)
+        : false);
+  }
+
+  return collapseAdjacentDuplicatePhrases(String(rawText ?? ""));
+}
+
+function upsertStreamingTranscriptMessage(
+  prev: ChatMessage[],
+  role: TranscriptRole,
+  text: string,
+  isPartial: boolean,
+  activeIdRef: React.MutableRefObject<string | null>,
+  committedTextRef: React.MutableRefObject<string>
+): ChatMessage[] {
+  const activeId = activeIdRef.current;
+  const activeMessage = activeId ? prev.find((msg) => msg.id === activeId) : undefined;
+
+  if (activeId && activeMessage) {
+    let newContent: string;
+    if (isPartial) {
+      newContent = committedTextRef.current
+        ? mergeTranscriptText(committedTextRef.current, text)
+        : text;
+    } else {
+      committedTextRef.current = committedTextRef.current
+        ? mergeTranscriptText(committedTextRef.current, text)
+        : text;
+      newContent = committedTextRef.current;
+    }
+    return prev.map((msg) => (msg.id === activeId ? { ...msg, content: newContent } : msg));
+  }
+
+  const newId = `${Date.now()}-${prev.length}`;
+  activeIdRef.current = newId;
+  committedTextRef.current = isPartial ? "" : text;
+  return [...prev, { id: newId, role, content: text }];
+}
+
+function resolveVoiceErrorMessage(error: unknown): string {
+  const errObj = error as Record<string, unknown>;
+  const topMsg = (error as { message?: string })?.message ?? "";
+  const nested = errObj?.error as Record<string, unknown> | undefined;
+  const nestedMessageObject = nested?.message as Record<string, unknown> | undefined;
+  const nestedErrorObject = nested?.error as Record<string, unknown> | undefined;
+  const nestedMsg =
+    (typeof nested?.errorMsg === "string" && nested.errorMsg) ||
+    (typeof nestedMessageObject?.msg === "string" && nestedMessageObject.msg) ||
+    (typeof nestedErrorObject?.msg === "string" && nestedErrorObject.msg);
+  const errMsg = topMsg || (typeof nestedMsg === "string" ? nestedMsg : "");
+  return errMsg || "Voice connection error";
+}
+
+function isAssistantWrapUpTranscript(text: string): boolean {
+  const normalized = text.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!normalized) return false;
+
+  const hasClearPicture =
+    normalized.includes("clear picture of that experience") ||
+    normalized.includes("clear picture of that") ||
+    normalized.includes("i've got a clear picture") ||
+    normalized.includes("ive got a clear picture");
+  const hasThanks =
+    normalized.includes("thank you") ||
+    normalized.includes("thanks") ||
+    normalized.includes("good luck");
+
+  return hasClearPicture || (hasThanks && normalized.length < 220);
+}
+
+function extractVapiCallId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const obj = payload as Record<string, unknown>;
+
+  const directCandidates = [obj.callId, obj.call_id, obj.id];
+  for (const candidate of directCandidates) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+  }
+
+  const call = obj.call;
+  if (call && typeof call === "object") {
+    const callObj = call as Record<string, unknown>;
+    const nestedCandidates = [callObj.id, callObj.callId, callObj.call_id];
+    for (const candidate of nestedCandidates) {
+      if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    }
+  }
+  return null;
+}
+
+function getCurrentVapiCallId(client: VapiClient | null): string | null {
+  if (!client) return null;
+  const internal = client as unknown as Record<string, unknown>;
+  return extractVapiCallId(internal.call);
 }
 
 function ScrollToBottomButton({ scrollRef }: { scrollRef: React.RefObject<HTMLDivElement | null> }) {
@@ -109,6 +286,7 @@ interface BuilderChatProps {
 }
 
 export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
+  const pathname = usePathname();
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Used to merge multiple transcript "chunks" into one assistant bubble
@@ -119,7 +297,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
   // during a single spoken turn.
   const activeUserMessageIdRef = useRef<string | null>(null);
   const committedUserTextRef = useRef("");
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId] = useState<string | null>(null);
   const [surfacedInsights, setSurfacedInsights] = useState<string[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -133,6 +311,10 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
   const [aiSpeaking, setAiSpeaking] = useState(true);
   const [userSpeaking, setUserSpeaking] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const pendingAutoEndRef = useRef(false);
+  const autoEndTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transcriptCommitInFlightRef = useRef(false);
+  const activeVapiCallIdRef = useRef<string | null>(null);
 
   // Sphere intensity derived from voice state
   const sphereActive = voiceConnecting
@@ -145,38 +327,32 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
 
   const sphereIntensity = aiSpeaking ? 0.85 : userSpeaking ? 0.7 : voiceConnected ? 0.25 : 0;
 
+  // Restore local chat UI state so switching pages doesn't feel like a reset.
   useEffect(() => {
-    let cancelled = false;
-    const storedSessionId =
-      typeof window !== "undefined" ? sessionStorage.getItem(BUILDER_SESSION_STORAGE_KEY) : null;
-    if (!storedSessionId) return;
-
-    (async () => {
-      try {
-        const session = await api<BuilderSessionResponse>(`/builder/session/${storedSessionId}`);
-        if (cancelled) return;
-        setSessionId(session.session_id);
-        setSurfacedInsights(session.surfaced_insights ?? []);
-        if (session.turns.length > 0) {
-          setMessages(
-            session.turns.map((turn) => ({
-              id: turn.id,
-              role: turn.role,
-              content: turn.content,
-            }))
-          );
-        }
-      } catch {
-        if (typeof window !== "undefined") {
-          sessionStorage.removeItem(BUILDER_SESSION_STORAGE_KEY);
-        }
+    if (typeof window === "undefined") return;
+    const raw = sessionStorage.getItem(BUILDER_CHAT_STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as PersistedBuilderChatState;
+      if (Array.isArray(parsed.messages)) {
+        setMessages(parsed.messages);
       }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+      if (Array.isArray(parsed.surfacedInsights)) {
+        setSurfacedInsights(parsed.surfacedInsights);
+      }
+    } catch {
+      sessionStorage.removeItem(BUILDER_CHAT_STORAGE_KEY);
+    }
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const state: PersistedBuilderChatState = {
+      messages,
+      surfacedInsights,
+    };
+    sessionStorage.setItem(BUILDER_CHAT_STORAGE_KEY, JSON.stringify(state));
+  }, [messages, surfacedInsights]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -191,7 +367,71 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
     committedAssistantTextRef.current = "";
     activeUserMessageIdRef.current = null;
     committedUserTextRef.current = "";
+    pendingAutoEndRef.current = false;
+    if (autoEndTimeoutRef.current) {
+      clearTimeout(autoEndTimeoutRef.current);
+      autoEndTimeoutRef.current = null;
+    }
+    activeVapiCallIdRef.current = null;
   }, []);
+
+  const addMessage = useCallback((msg: Omit<ChatMessage, "id">) => {
+    setMessages((prev) => [...prev, { ...msg, id: String(prev.length + Date.now()) }]);
+  }, []);
+
+  const commitVoiceTranscript = useCallback(async (callId: string | null, transcriptFallback: string) => {
+    // #region agent log
+    fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"pre-fix",hypothesisId:"H1-H4",location:"builder-chat.tsx:commitVoiceTranscript:start",message:"commitVoiceTranscript invoked",data:{hasCallId:Boolean(callId?.trim()),fallbackLength:transcriptFallback.trim().length,messagesCount:messages.length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (transcriptCommitInFlightRef.current) return;
+    const resolvedCallId = callId?.trim() || null;
+    const resolvedTranscript = transcriptFallback.trim();
+    if (!resolvedCallId && !resolvedTranscript) {
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"pre-fix",hypothesisId:"H1-H3",location:"builder-chat.tsx:commitVoiceTranscript:emptyGuard",message:"empty callId and transcript fallback",data:{resolvedCallId:resolvedCallId,resolvedTranscriptLength:resolvedTranscript.length,messagesCount:messages.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      addMessage({
+        role: "assistant",
+        content: "Conversation ended, but I could not capture enough transcript data to save cards.",
+      });
+      return;
+    }
+    transcriptCommitInFlightRef.current = true;
+    setLoading(true);
+    try {
+      const res = await api<BuilderSessionCommitResponse>("/builder/transcript/commit", {
+        method: "POST",
+        body: {
+          session_id: sessionId,
+          mode: "voice",
+          call_id: resolvedCallId,
+          transcript: resolvedTranscript,
+        },
+      });
+      if (res.committed_card_count > 0) {
+        addMessage({
+          role: "assistant",
+          content: `Saved ${res.committed_card_count} experience ${res.committed_card_count === 1 ? "card" : "cards"} from this conversation.`,
+        });
+      } else {
+        addMessage({
+          role: "assistant",
+          content: "I could not extract a clear experience card from this conversation yet.",
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
+      onCardsSaved?.();
+    } catch {
+      addMessage({
+        role: "assistant",
+        content: "Conversation ended, but saving cards failed. Please try again.",
+      });
+    } finally {
+      setLoading(false);
+      transcriptCommitInFlightRef.current = false;
+    }
+  }, [addMessage, onCardsSaved, queryClient, sessionId]);
 
   const detachVoice = useCallback((target?: VapiClient | null) => {
     if (!target || vapiRef.current === target) {
@@ -199,10 +439,6 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
     }
     resetVoiceState();
   }, [resetVoiceState]);
-
-  const addMessage = useCallback((msg: Omit<ChatMessage, "id">) => {
-    setMessages((prev) => [...prev, { ...msg, id: String(prev.length + Date.now()) }]);
-  }, []);
 
   // Voice: stop existing Vapi connection
   const stopVoice = useCallback(() => {
@@ -238,26 +474,40 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
       setVoiceConnecting(false);
       return;
     }
-    if (!API_BASE || !API_BASE.startsWith("http")) {
-      setVoiceError("API not configured");
+    if (!isVapiVoiceConfigured()) {
+      setVoiceError(
+        "Voice is not configured. Set NEXT_PUBLIC_VAPI_PUBLIC_KEY and NEXT_PUBLIC_VAPI_ASSISTANT_ID in apps/web/.env.local (Vapi dashboard → API keys)."
+      );
       setVoiceConnecting(false);
       return;
     }
 
     try {
-      const proxyBase = `${API_BASE}/convai`;
-      vapi = await createPatchedVapiClient(token, proxyBase);
+      const publicKey = getVapiPublicKey();
+      const assistantId = getVapiAssistantId();
+      vapi = await createPatchedVapiClient(publicKey);
       vapiRef.current = vapi;
 
       vapi.on("call-start", () => {
         setVoiceConnecting(false);
         setVoiceConnected(true);
         setVoiceError(null);
+        const callId = getCurrentVapiCallId(vapi);
+        if (callId) activeVapiCallIdRef.current = callId;
+        // #region agent log
+        fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"pre-fix",hypothesisId:"H2",location:"builder-chat.tsx:vapi:call-start",message:"voice call started",data:{hasCallId:Boolean(callId),capturedMessagesAtStartVoice:messages.length},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
       });
 
       vapi.on("call-end", () => {
+        const callId = activeVapiCallIdRef.current ?? getCurrentVapiCallId(vapi);
+        const transcriptFallback = serializeTranscriptFromMessages(messages);
+        // #region agent log
+        fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"pre-fix",hypothesisId:"H1-H3",location:"builder-chat.tsx:vapi:call-end",message:"call ended and commit requested",data:{hasCallId:Boolean(callId),fallbackLength:transcriptFallback.length,capturedMessagesInCallEndClosure:messages.length},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        void commitVoiceTranscript(callId, transcriptFallback);
         detachVoice(vapi);
-        queryClient.invalidateQueries({ queryKey: [EXPERIENCE_CARD_FAMILIES_QUERY_KEY] });
+        activeVapiCallIdRef.current = null;
       });
 
       vapi.on("speech-start", () => {
@@ -272,185 +522,84 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
         setAiSpeaking(false);
         activeAssistantMessageIdRef.current = null;
         committedAssistantTextRef.current = "";
+        if (pendingAutoEndRef.current) {
+          pendingAutoEndRef.current = false;
+          stopVoice();
+        }
       });
 
       vapi.on("message", (msg: unknown) => {
         const m = msg as Record<string, unknown>;
         const transcriptType = String(m.transcriptType ?? "").toLowerCase();
-        const isPartial = transcriptType && transcriptType !== "final";
-        const transcriptAny = m.transcript as unknown;
-        const transcriptFieldType =
-          transcriptAny == null ? "null" : Array.isArray(transcriptAny) ? "array" : typeof transcriptAny;
-
-        // Transcript may be a string or an object (provider-dependent). We only use lengths/metadata in logs, never speech text.
-        let rawTextSource: string | null = null;
-        let rawText: string | undefined;
-
-        const assignIfString = (candidate: unknown, source: string) => {
-          if (typeof candidate === "string" && candidate.trim().length > 0) {
-            rawTextSource = source;
-            rawText = candidate;
-            return true;
-          }
-          return false;
-        };
-
-        if (assignIfString(m.transcript, "transcript")) {
-          // assigned
-        } else if (transcriptAny && typeof transcriptAny === "object") {
-          const ta = transcriptAny as any;
-          assignIfString(ta.text, "transcript.text") ||
-            assignIfString(ta.transcript, "transcript.transcript") ||
-            assignIfString(ta.value, "transcript.value");
-
-          const scanArray = (arr: unknown, sourcePrefix: string) => {
-            if (!Array.isArray(arr)) return false;
-            for (let i = 0; i < arr.length; i++) {
-              const item = arr[i] as any;
-              if (typeof item === "string" && item.trim().length > 0) {
-                rawTextSource = `${sourcePrefix}[${i}]`;
-                rawText = item;
-                return true;
-              }
-              if (item && typeof item === "object") {
-                if (typeof item.text === "string" && item.text.trim().length > 0) {
-                  rawTextSource = `${sourcePrefix}[${i}].text`;
-                  rawText = item.text;
-                  return true;
-                }
-                if (typeof item.transcript === "string" && item.transcript.trim().length > 0) {
-                  rawTextSource = `${sourcePrefix}[${i}].transcript`;
-                  rawText = item.transcript;
-                  return true;
-                }
-              }
-            }
-            return false;
-          };
-
-          if (!rawText) {
-            scanArray(ta.chunks, "transcript.chunks") ||
-              scanArray(ta.segments, "transcript.segments") ||
-              scanArray(ta.alternatives, "transcript.alternatives");
-          }
-        }
-
-        if (!rawText) {
-          assignIfString(m.content, "content") ||
-            assignIfString(m.text, "text") ||
-            (Array.isArray((m as any).alternatives) && typeof (m as any).alternatives[0]?.text === "string"
-              ? assignIfString((m as any).alternatives[0]?.text, "alternatives[0].text")
-              : false);
-        }
-
-        const text = (rawText ?? "").toString();
+        const isPartial = Boolean(transcriptType && transcriptType !== "final");
+        const text = extractTranscriptText(m);
         // Treat any non-"assistant" transcript as coming from the user so user speech
         // always appears on the right-hand side.
-        const role = m.role === "assistant" ? "assistant" : "user";
-        const t = text.trim();
-        if (!t) {
+        const role: TranscriptRole = m.role === "assistant" ? "assistant" : "user";
+        const eventCallId = extractVapiCallId(m);
+        if (eventCallId) activeVapiCallIdRef.current = eventCallId;
+        if (!text) {
           return;
         }
+        // #region agent log
+        fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"pre-fix",hypothesisId:"H2-H5",location:"builder-chat.tsx:vapi:message",message:"transcript chunk received",data:{role,isPartial,textLength:text.length,hasEventCallId:Boolean(eventCallId),activeCallIdKnown:Boolean(activeVapiCallIdRef.current)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         // IMPORTANT: Do not mutate active bubble IDs on transcript-less/status events.
         // Those events are common mid-call and clearing them can make bubbles "disappear".
         if (role === "user") setUserSpeaking(true);
+        if (role === "assistant" && isAssistantWrapUpTranscript(text)) {
+          pendingAutoEndRef.current = true;
+          if (autoEndTimeoutRef.current) {
+            clearTimeout(autoEndTimeoutRef.current);
+          }
+          // Fallback if speech-end is not emitted.
+          autoEndTimeoutRef.current = setTimeout(() => {
+            if (!pendingAutoEndRef.current) return;
+            pendingAutoEndRef.current = false;
+            stopVoice();
+          }, 2200);
+        }
 
         // Transcripts can arrive as multiple events for both roles; update a single
         // bubble per spoken turn. Partial chunks "stream" by replacing content,
         // and final chunks append.
-        setMessages((prev) => {
-          const mergeText = (oldText: string, nextText: string) => {
-            const oldEndsWithSpace = /\s$/.test(oldText);
-            const nextStartsWithSpace = /^\s/.test(nextText);
-            if (oldText.length === 0) return nextText;
-            if (oldEndsWithSpace || nextStartsWithSpace) return oldText + nextText;
-            // Heuristic: avoid "wordword" when transcript chunk boundaries drop spaces.
-            return oldText + " " + nextText;
-          };
-
-          if (role === "user") {
-            const activeId = activeUserMessageIdRef.current;
-            const activeMsg = activeId ? prev.find((m) => m.id === activeId) : undefined;
-
-            if (activeId && activeMsg) {
-              let newContent: string;
-              if (isPartial) {
-                newContent = committedUserTextRef.current
-                  ? mergeText(committedUserTextRef.current, t)
-                  : t;
-              } else {
-                committedUserTextRef.current = committedUserTextRef.current
-                  ? mergeText(committedUserTextRef.current, t)
-                  : t;
-                newContent = committedUserTextRef.current;
-              }
-              const prevLen = activeMsg.content?.length ?? 0;
-              void prevLen;
-              return prev.map((m) =>
-                m.id === activeId ? { ...m, content: newContent } : m
-              );
-            }
-
-            const newId = `${Date.now()}-${prev.length}`;
-            activeUserMessageIdRef.current = newId;
-            committedUserTextRef.current = isPartial ? "" : t;
-            return [...prev, { id: newId, role: "user", content: t }];
-          }
-
-          const activeId = activeAssistantMessageIdRef.current;
-          const activeMsg = activeId ? prev.find((m) => m.id === activeId) : undefined;
-
-          if (activeId && activeMsg) {
-            let newContent: string;
-            if (isPartial) {
-              newContent = committedAssistantTextRef.current
-                ? mergeText(committedAssistantTextRef.current, t)
-                : t;
-            } else {
-              committedAssistantTextRef.current = committedAssistantTextRef.current
-                ? mergeText(committedAssistantTextRef.current, t)
-                : t;
-              newContent = committedAssistantTextRef.current;
-            }
-            const prevLen = activeMsg.content?.length ?? 0;
-            void prevLen;
-            return prev.map((m) =>
-              m.id === activeId ? { ...m, content: newContent } : m
-            );
-          }
-
-          const newId = `${Date.now()}-${prev.length}`;
-          activeAssistantMessageIdRef.current = newId;
-          committedAssistantTextRef.current = isPartial ? "" : t;
-          return [...prev, { id: newId, role: "assistant", content: t }];
-        });
+        setMessages((prev) =>
+          role === "user"
+            ? upsertStreamingTranscriptMessage(
+                prev,
+                "user",
+                text,
+                isPartial,
+                activeUserMessageIdRef,
+                committedUserTextRef
+              )
+            : upsertStreamingTranscriptMessage(
+                prev,
+                "assistant",
+                text,
+                isPartial,
+                activeAssistantMessageIdRef,
+                committedAssistantTextRef
+              )
+        );
       });
 
       vapi.on("error", (err) => {
         const errObj = err as Record<string, unknown>;
         const errType = String(errObj?.type ?? "").toLowerCase();
-        const topMsg = (err?.message as string) || "";
-        const nested = errObj?.error as Record<string, unknown> | undefined;
-        const nestedMsg =
-          (typeof nested?.errorMsg === "string" && nested.errorMsg) ||
-          (nested?.message && typeof nested.message === "object" && typeof (nested.message as Record<string, unknown>)?.msg === "string" && (nested.message as Record<string, unknown>).msg) ||
-          (nested?.error && typeof nested.error === "object" && typeof (nested.error as Record<string, unknown>)?.msg === "string" && (nested.error as Record<string, unknown>).msg);
-        const errMsg = topMsg || (typeof nestedMsg === "string" ? nestedMsg : "");
-        const isLocal = typeof window !== "undefined" && /localhost|127\.0\.0\.1/.test(API_BASE);
-        const friendlyMsg =
-          errType === "start-method-error" && isLocal
-            ? "Voice needs a tunnel. 1) Run ngrok (e.g. .\\scripts\\ngrok-tunnel.ps1 or ngrok http 8000). 2) In apps/api/.env set VAPI_CALLBACK_BASE_URL to the https URL ngrok shows. 3) Restart the API."
-            : errMsg || "Voice connection error";
-        if (errType === "daily-error" && /meeting has ended/i.test(friendlyMsg)) {
+        const friendlyMsg = resolveVoiceErrorMessage(err);
+        const meetingEnded = errType === "daily-error" && /meeting has ended/i.test(friendlyMsg);
+        if (meetingEnded) {
           setVoiceError(null);
-          detachVoice(vapi);
+          // Don't detach immediately; allow any final assistant transcript chunks
+          // to arrive. Cleanup will happen on `call-end`.
           return;
         }
         detachVoice(vapi);
         setVoiceError(friendlyMsg);
       });
 
-      await vapi.start({});
+      await vapi.start(assistantId);
     } catch (e) {
       const isExpectedDisconnect = isBenignVapiDisconnectError(e);
       if (isExpectedDisconnect) {
@@ -461,7 +610,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
       detachVoice(vapi);
       setVoiceError(e instanceof Error ? e.message : "Could not start voice session");
     }
-  }, [detachVoice, queryClient]);
+  }, [commitVoiceTranscript, detachVoice, messages, stopVoice]);
 
   const startVoiceRef = useRef(startVoice);
 
@@ -480,81 +629,41 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
 
   // Auto-start voice on initial load so the AI is on by default.
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void (async () => {
-        // Reduce time-to-`call-start` by ensuring the Vapi Web SDK is loaded
-        // before we invoke the existing `startVoice()` flow.
-        try {
-          await preloadVapiWeb();
-        } catch {
-          // If preload fails, we still want the normal voice start path to run.
-        }
-        void startVoiceRef.current();
-      })();
-    }, 0);
+    if (pathname !== "/builder") return;
+    // Kick off preload and start voice immediately.
+    // `startVoice()` will still wait for preload if needed, but the UI state
+    // (e.g. "connecting") flips right away for a more "instant" feel.
+    void preloadVapiWeb().catch(() => {});
+    void startVoiceRef.current();
+  }, [pathname]);
 
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, []);
+  // Enforce voice scope to /builder only: stop immediately when route changes.
+  useEffect(() => {
+    if (pathname === "/builder") return;
+    if (vapiRef.current) {
+      stopVoice();
+    }
+  }, [pathname, stopVoice]);
 
   const sendMessage = useCallback(async (overrideText?: string) => {
-    const text = (overrideText !== undefined ? overrideText : input).trim();
+    const text = collapseAdjacentDuplicatePhrases(overrideText !== undefined ? overrideText : input);
     if (!text || loading) return;
     setInput("");
     addMessage({ role: "user", content: text });
-    setLoading(true);
-    try {
-      const res = await api<BuilderChatTurnResponse>("/builder/chat/turn", {
-        method: "POST",
-        body: {
-          session_id: sessionId,
-          message: text,
-          mode: "text",
-        },
-      });
-
-      setSessionId(res.session_id);
-      setSurfacedInsights(res.surfaced_insights ?? []);
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem(BUILDER_SESSION_STORAGE_KEY, res.session_id);
-      }
-
-      addMessage({
-        role: "assistant",
-        content: res.assistant_message || "Tell me a little more about that.",
-      });
-
-      if (res.session_status === "committed") {
-        queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
-        queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
-        if (typeof window !== "undefined") {
-          sessionStorage.removeItem(BUILDER_SESSION_STORAGE_KEY);
-        }
-        setSessionId(null);
-        onCardsSaved?.();
-      }
-    } catch {
-      addMessage({
-        role: "assistant",
-        content: "I lost the thread for a second. Try saying that again in your own words.",
-      });
-    } finally {
-      setLoading(false);
-    }
+    addMessage({
+      role: "assistant",
+      content: "Got it. Keep going — I'll create cards when the voice conversation ends.",
+    });
   }, [
     input,
     loading,
-    sessionId,
     addMessage,
-    queryClient,
-    onCardsSaved,
   ]);
 
   return (
     <div className="relative flex flex-col h-full min-h-0 rounded-xl border border-border bg-card overflow-hidden">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scrollbar-thin scrollbar-theme">
         <AnimatePresence initial={false}>
           {messages.map((msg) => (
             <motion.div

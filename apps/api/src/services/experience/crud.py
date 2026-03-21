@@ -6,13 +6,12 @@ from collections import defaultdict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import ExperienceCard, ExperienceCardChild, RawExperience
+from src.db.models import ExperienceCard, ExperienceCardChild
 from src.services.experience.child_value import normalize_child_items
 from src.schemas import (
     ExperienceCardChildPatch,
     ExperienceCardCreate,
     ExperienceCardPatch,
-    RawExperienceCreate,
 )
 
 # -----------------------------------------------------------------------------
@@ -42,29 +41,6 @@ _CARD_PATCH_FIELDS = (
     "confidence_score",
     "experience_card_visibility",
 )
-
-
-# -----------------------------------------------------------------------------
-# Raw experience
-# -----------------------------------------------------------------------------
-
-
-async def create_raw_experience(
-    db: AsyncSession,
-    person_id: str,
-    body: RawExperienceCreate,
-) -> RawExperience:
-    """Create a raw experience record."""
-    raw = RawExperience(
-        person_id=person_id,
-        raw_text=body.raw_text,
-        raw_text_original=body.raw_text,
-        raw_text_cleaned=body.raw_text,
-    )
-    db.add(raw)
-    await db.flush()
-    await db.refresh(raw)
-    return raw
 
 
 # -----------------------------------------------------------------------------
@@ -197,12 +173,6 @@ async def list_my_card_families(
 
 class ExperienceCardService:
     """Facade for experience card operations."""
-
-    @staticmethod
-    async def create_raw(
-        db: AsyncSession, person_id: str, body: RawExperienceCreate
-    ) -> RawExperience:
-        return await create_raw_experience(db, person_id, body)
 
     @staticmethod
     async def create_card(

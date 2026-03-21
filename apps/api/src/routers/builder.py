@@ -5,7 +5,6 @@ Thin HTTP layer: validates input, delegates to services, returns responses.
 All business logic (form merging, patch building) lives in the service layer.
 """
 
-import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,21 +19,10 @@ from src.dependencies import (
     get_experience_card_child_or_404,
 )
 from src.schemas import (
-    RawExperienceCreate,
-    RawExperienceResponse,
-    RewriteTextResponse,
-    DraftSetResponse,
-    DetectExperiencesResponse,
-    DraftSingleRequest,
     FillFromTextRequest,
     FillFromTextResponse,
-    ClarifyExperienceRequest,
-    ClarifyExperienceResponse,
-    BuilderChatTurnRequest,
-    BuilderChatTurnResponse,
-    BuilderSessionResponse,
     BuilderSessionCommitResponse,
-    DraftCardFamily,
+    BuilderTranscriptCommitRequest,
     ExperienceCardCreate,
     ExperienceCardPatch,
     ExperienceCardResponse,
@@ -43,13 +31,10 @@ from src.schemas import (
     FinalizeExperienceCardRequest,
 )
 from src.services.builder import (
-    commit_builder_session,
-    get_builder_session_state,
-    process_builder_turn,
+    commit_builder_transcript,
 )
 from src.providers import (
     ChatServiceError,
-    ChatRateLimitError,
     EmbeddingServiceError,
 )
 from src.serializers import experience_card_to_response, experience_card_child_to_response
@@ -58,13 +43,7 @@ from src.services.experience import (
     apply_card_patch,
     apply_child_patch,
     embed_experience_cards,
-    rewrite_raw_text,
-    run_draft_single,
     fill_missing_fields_from_text,
-    clarify_experience_interactive,
-    detect_experiences,
-    DEFAULT_MAX_PARENT_CLARIFY,
-    DEFAULT_MAX_CHILD_CLARIFY,
     PipelineError,
 )
 from src.services.experience.form_merge import (
@@ -112,117 +91,6 @@ async def _reembed_cards_after_update(
 
 
 # ---------------------------------------------------------------------------
-# Raw experience
-# ---------------------------------------------------------------------------
-
-@router.post("/experiences/raw", response_model=RawExperienceResponse)
-async def create_raw_experience(
-    body: RawExperienceCreate,
-    current_user: Person = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Save raw experience text for the current user (no AI processing)."""
-    raw = await experience_card_service.create_raw(db, current_user.id, body)
-    return RawExperienceResponse(id=raw.id, raw_text=raw.raw_text, created_at=raw.created_at)
-
-
-# ---------------------------------------------------------------------------
-# Rewrite
-# ---------------------------------------------------------------------------
-
-@router.post("/experiences/rewrite", response_model=RewriteTextResponse)
-async def rewrite_experience_text(
-    body: RawExperienceCreate,
-    current_user: Person = Depends(get_current_user),
-):
-    """Rewrite messy input into clear English for easier extraction. No persistence."""
-    try:
-        rewritten = await rewrite_raw_text(body.raw_text)
-        return RewriteTextResponse(rewritten_text=rewritten)
-    except ChatRateLimitError as e:
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
-    except ChatServiceError as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI service temporarily unavailable. Please try again.",
-        )
-
-
-# ---------------------------------------------------------------------------
-# Detect experiences
-# ---------------------------------------------------------------------------
-
-@router.post("/experience-cards/detect-experiences", response_model=DetectExperiencesResponse)
-async def detect_experiences_endpoint(
-    body: RawExperienceCreate,
-    current_user: Person = Depends(get_current_user),
-):
-    """Analyse text and return the count + list of distinct experiences for the user to choose from."""
-    try:
-        result = await detect_experiences(body.raw_text or "")
-        return DetectExperiencesResponse(
-            count=result.get("count", 0),
-            experiences=[
-                {
-                    "index": e["index"],
-                    "label": e["label"],
-                    "suggested": e.get("suggested", False),
-                }
-                for e in result.get("experiences", [])
-            ],
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("detect-experiences failed: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Experience detection temporarily unavailable. Please try again.",
-        )
-
-
-# ---------------------------------------------------------------------------
-# Draft single experience
-# ---------------------------------------------------------------------------
-
-@router.post("/experience-cards/draft-single", response_model=DraftSetResponse)
-async def create_draft_single_experience(
-    body: DraftSingleRequest,
-    current_user: Person = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Extract and draft ONE experience by index (1-based). Process one experience at a time."""
-    try:
-        draft_set_id, raw_experience_id, card_families = await run_draft_single(
-            db,
-            current_user.id,
-            body.raw_text or "",
-            body.experience_index,
-            body.experience_count or 1,
-        )
-        return DraftSetResponse(
-            draft_set_id=draft_set_id,
-            raw_experience_id=raw_experience_id,
-            card_families=[
-                DraftCardFamily(parent=f["parent"], children=f["children"])
-                for f in card_families
-            ],
-        )
-    except (ChatServiceError, EmbeddingServiceError, PipelineError) as e:
-        logger.exception("draft-single pipeline failed: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Draft pipeline temporarily unavailable. Please try again.",
-        )
-    except RuntimeError as e:
-        logger.warning("draft-single pipeline config error: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service configuration error. Please try again.",
-        )
-
-
-# ---------------------------------------------------------------------------
 # Fill missing fields from text
 # ---------------------------------------------------------------------------
 
@@ -262,167 +130,30 @@ async def fill_missing_from_text(
 
     return FillFromTextResponse(filled=filled)
 
-
-# ---------------------------------------------------------------------------
-# Clarify experience
-# ---------------------------------------------------------------------------
-
-@router.post("/experience-cards/clarify-experience", response_model=ClarifyExperienceResponse)
-async def clarify_experience(
-    body: ClarifyExperienceRequest,
+@router.post("/builder/transcript/commit", response_model=BuilderSessionCommitResponse)
+async def commit_builder_transcript_endpoint(
+    body: BuilderTranscriptCommitRequest,
     current_user: Person = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Interactive clarification: planner → validate → question writer / answer applier.
-
-    When the LLM returns filled fields and a ``card_id`` / ``child_id`` is
-    provided, the merged result is persisted to the DB and re-embedded.
-    """
-    conv = [{"role": m.role, "content": m.content} for m in body.conversation_history]
-    max_parent = (
-        body.max_parent_questions
-        if body.max_parent_questions is not None
-        else DEFAULT_MAX_PARENT_CLARIFY
-    )
-    max_child = (
-        body.max_child_questions
-        if body.max_child_questions is not None
-        else DEFAULT_MAX_CHILD_CLARIFY
-    )
-
+    """Commit one completed Vapi transcript into experience cards."""
     try:
-        result = await clarify_experience_interactive(
-            raw_text=body.raw_text,
-            current_card=body.current_card or {},
-            card_type=body.card_type or "parent",
-            conversation_history=conv,
-            card_family=body.card_family,
-            asked_history_structured=body.asked_history,
-            last_question_target=body.last_question_target,
-            max_parent=max_parent,
-            max_child=max_child,
-            card_families=body.card_families,
-            focus_parent_id=body.focus_parent_id,
-            detected_experiences=body.detected_experiences,
-        )
-    except HTTPException:
-        raise
-
-    filled = result.get("filled") or {}
-    current = body.current_card or {}
-
-    if filled and body.card_id and body.card_type == "parent":
-        merged = merged_form(current, filled, PARENT_MERGE_KEYS)
-        card = await experience_card_service.get_card(db, body.card_id, current_user.id)
-        if card:
-            patch = parent_merged_to_patch(merged)
-            apply_card_patch(card, patch)
-            await db.flush()
-            await _reembed_cards_after_update(db, parents=[card], context="clarify (parent)")
-
-    if filled and body.child_id and body.card_type == "child":
-        merged = merged_form(current, filled, CHILD_MERGE_KEYS)
-        child_result = await db.execute(
-            select(ExperienceCardChild).where(
-                ExperienceCardChild.id == body.child_id,
-                ExperienceCardChild.person_id == current_user.id,
-            )
-        )
-        child = child_result.scalar_one_or_none()
-        if child:
-            patch = child_merged_to_patch(merged)
-            apply_child_patch(child, patch)
-            await db.flush()
-            await _reembed_cards_after_update(db, children=[child], context="clarify (child)")
-
-    return ClarifyExperienceResponse(
-        clarifying_question=result.get("clarifying_question") or None,
-        filled=filled,
-        profile_update=result.get("profile_update"),
-        profile_reflection=result.get("profile_reflection"),
-        action=result.get("action"),
-        message=result.get("message"),
-        options=result.get("options"),
-        focus_parent_id=result.get("focus_parent_id"),
-        should_stop=result.get("should_stop"),
-        stop_reason=result.get("stop_reason"),
-        target_type=result.get("target_type"),
-        target_field=result.get("target_field"),
-        target_child_type=result.get("target_child_type"),
-        progress=result.get("progress"),
-        missing_fields=result.get("missing_fields"),
-        asked_history_entry=result.get("asked_history_entry"),
-        canonical_family=result.get("canonical_family"),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Conversation-first Builder
-# ---------------------------------------------------------------------------
-
-@router.post("/builder/chat/turn", response_model=BuilderChatTurnResponse)
-async def builder_chat_turn(
-    body: BuilderChatTurnRequest,
-    current_user: Person = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Single conversation endpoint for the redesigned Builder experience."""
-    try:
-        result = await process_builder_turn(
+        result = await commit_builder_transcript(
             db,
             person_id=current_user.id,
-            message=body.message,
+            call_id=body.call_id,
+            transcript=body.transcript,
             session_id=body.session_id,
             mode=body.mode,
-        )
-        return BuilderChatTurnResponse(**result)
-    except HTTPException:
-        raise
-    except (ChatServiceError, EmbeddingServiceError, PipelineError) as e:
-        logger.exception("builder chat turn failed: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Builder conversation temporarily unavailable. Please try again.",
-        ) from e
-
-
-@router.get("/builder/session/{session_id}", response_model=BuilderSessionResponse)
-async def get_builder_session(
-    session_id: str,
-    current_user: Person = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Return the current visible state of a Builder session."""
-    result = await get_builder_session_state(
-        db,
-        person_id=current_user.id,
-        session_id=session_id,
-    )
-    return BuilderSessionResponse(**result)
-
-
-@router.post("/builder/session/{session_id}/commit", response_model=BuilderSessionCommitResponse)
-async def commit_builder_session_endpoint(
-    session_id: str,
-    current_user: Person = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Project a Builder session into the existing experience-card schema."""
-    try:
-        result = await commit_builder_session(
-            db,
-            person_id=current_user.id,
-            session_id=session_id,
         )
         return BuilderSessionCommitResponse(**result)
     except HTTPException:
         raise
     except (ChatServiceError, EmbeddingServiceError, PipelineError) as e:
-        logger.exception("builder session commit failed: %s", e)
+        logger.exception("builder transcript commit failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Builder commit temporarily unavailable. Please try again.",
+            detail="Builder transcript commit temporarily unavailable. Please try again.",
         ) from e
 
 

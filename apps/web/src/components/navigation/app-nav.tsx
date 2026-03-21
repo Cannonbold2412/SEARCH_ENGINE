@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { LockOpen, Settings, Compass, LayoutGrid, Hammer, Globe, PanelLeftClose, PanelLeft, Menu, MessageSquare, Search } from "lucide-react";
 import { useSidebarWidth, MOBILE_DRAWER_WIDTH } from "@/contexts/sidebar-width-context";
@@ -8,6 +9,7 @@ import { useProfilePhoto } from "@/hooks/use-profile-photo";
 import { cn } from "@/lib/utils";
 import { apiAssetUrl } from "@/lib/constants";
 import { CreditsBadge } from "@/components/common";
+import { preloadVapiWeb } from "@/lib/vapi-client";
 
 export function AppNav() {
   const logoSrc = apiAssetUrl("/img/kana_icon_512.png");
@@ -48,6 +50,14 @@ export function AppNav() {
   const handleNavClick = () => {
     if (isMobile) closeMobileSidebar();
   };
+
+  // Start downloading the Vapi web SDK as early as possible so Builder voice starts instantly.
+  // This is safe due to internal caching/guards in `preloadVapiWeb()`.
+  useEffect(() => {
+    void preloadVapiWeb().catch(() => {
+      // Ignore preload failures; BuilderChat will still attempt to start normally.
+    });
+  }, []);
 
   return (
     <>
@@ -136,7 +146,20 @@ export function AppNav() {
                 <Link
                   key={href}
                   href={href}
-                  onClick={handleNavClick}
+                  onClick={() => {
+                    if (href === "/builder") {
+                      void preloadVapiWeb().catch(() => {});
+                    }
+                    handleNavClick();
+                  }}
+                  onPointerEnter={() => {
+                    if (href !== "/builder") return;
+                    void preloadVapiWeb().catch(() => {});
+                  }}
+                  onFocus={() => {
+                    if (href !== "/builder") return;
+                    void preloadVapiWeb().catch(() => {});
+                  }}
                   className={navLinkClass(isActive)}
                   title={collapsed && !isMobile ? label : undefined}
                 >

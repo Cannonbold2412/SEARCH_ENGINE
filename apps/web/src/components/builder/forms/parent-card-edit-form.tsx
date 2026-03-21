@@ -1,10 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Check } from "lucide-react";
-import { ExperienceClarifyChat } from "../chat/experience-clarify-chat";
 
 interface ParentCardEditFormProps {
   form: {
@@ -39,9 +38,7 @@ interface ParentCardEditFormProps {
   onUpdateFromMessyText?: (text: string) => Promise<void>;
   isUpdatingFromMessyText?: boolean;
   /** Optional: when set, clarify endpoint can persist filled fields to this saved card. */
-  clarifyCardId?: string | null;
-  /** Optional: translate raw text before sending to clarify API (e.g. to English). */
-  translateRawText?: (text: string) => Promise<string>;
+  // Legacy ExperienceClarifyChat integration removed.
 }
 
 export function ParentCardEditForm({
@@ -56,32 +53,8 @@ export function ParentCardEditForm({
   showDeleteButton = false,
   onUpdateFromMessyText,
   isUpdatingFromMessyText = false,
-  clarifyCardId = null,
-  translateRawText,
 }: ParentCardEditFormProps) {
   const [messyText, setMessyText] = useState("");
-
-  const handleClarifyFilled = useCallback(
-    (filled: Record<string, unknown>) => {
-      const updates: Partial<ParentCardEditFormProps["form"]> = {};
-      const formAny = form as Record<string, unknown>;
-      for (const key of Object.keys(filled)) {
-        const cur = formAny[key];
-        const val = filled[key];
-        const isEmpty =
-          cur === undefined ||
-          cur === null ||
-          (typeof cur === "string" && String(cur).trim() === "");
-        const hasValue =
-          val !== undefined &&
-          val !== null &&
-          (typeof val !== "string" || String(val).trim() !== "");
-        if (isEmpty && hasValue) (updates as Record<string, unknown>)[key] = val;
-      }
-      if (Object.keys(updates).length) onChange(updates);
-    },
-    [form, onChange]
-  );
 
   const handleUpdateFromMessy = async () => {
     if (!messyText.trim() || !onUpdateFromMessyText) return;
@@ -129,15 +102,6 @@ export function ParentCardEditForm({
               placeholder="Paste work history…"
               rows={2}
               className="text-sm resize-y bg-background"
-            />
-            <ExperienceClarifyChat
-              rawText={messyText}
-              currentCard={form as Record<string, unknown>}
-              cardType="parent"
-              cardId={clarifyCardId}
-              onFilled={handleClarifyFilled}
-              translateRawText={translateRawText}
-              className="mt-2"
             />
           </div>
         )}

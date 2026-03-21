@@ -39,7 +39,6 @@ interface SavedCardFamilyProps {
   onUpdateParentFromMessyText?: (text: string) => Promise<void>;
   onUpdateChildFromMessyText?: (text: string) => Promise<void>;
   isUpdatingFromMessyText?: boolean;
-  translateRawText?: (text: string) => Promise<string>;
 }
 
 export function SavedCardFamily({
@@ -65,7 +64,6 @@ export function SavedCardFamily({
   onUpdateParentFromMessyText,
   onUpdateChildFromMessyText,
   isUpdatingFromMessyText = false,
-  translateRawText,
 }: SavedCardFamilyProps) {
   const parentId = String(
     (parent as { id?: string })?.id ?? (parent as Record<string, unknown>)?.card_id ?? ""
@@ -414,8 +412,6 @@ export function SavedCardFamily({
                   showDeleteButton={false}
                   onUpdateFromMessyText={onUpdateParentFromMessyText}
                   isUpdatingFromMessyText={isUpdatingFromMessyText}
-                  clarifyCardId={parentId}
-                  translateRawText={translateRawText}
                 />
               ) : (
                 <ChildCardEditForm

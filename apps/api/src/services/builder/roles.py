@@ -8,11 +8,7 @@ from typing import Any
 
 from src.prompts.builder_conversation import (
     build_commit_synthesis_prompt,
-    build_conversation_director_prompt,
-    build_narrative_updater_prompt,
-    build_question_composer_prompt,
-    build_stop_evaluator_prompt,
-    build_talent_spotter_prompt,
+    build_fast_turn_prompt,
 )
 from src.providers import ChatServiceError, get_chat_provider
 from src.utils import extract_json_from_llm_response
@@ -57,141 +53,67 @@ def _coerce_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
-async def update_working_narrative(
+async def fast_turn(
     *,
     working_narrative: str,
-    visible_turns: list[dict[str, Any]],
     hidden_state: dict[str, Any],
-) -> dict[str, Any]:
-    prompt = build_narrative_updater_prompt(
-        working_narrative=working_narrative,
-        visible_turns=visible_turns,
-        hidden_state=hidden_state,
-    )
-    data = await _chat_json(prompt, max_tokens=900, temperature=0.15)
-    narrative = str(data.get("working_narrative") or "").strip() or working_narrative
-    return {
-        "working_narrative": narrative,
-        "known": _coerce_list(data.get("known")),
-        "distinctive": _coerce_list(data.get("distinctive")),
-        "uncertain": _coerce_list(data.get("uncertain")),
-    }
-
-
-async def spot_talent(
-    *,
-    working_narrative: str,
     visible_turns: list[dict[str, Any]],
-    hidden_state: dict[str, Any],
-) -> dict[str, Any]:
-    prompt = build_talent_spotter_prompt(
-        working_narrative=working_narrative,
-        visible_turns=visible_turns,
-        hidden_state=hidden_state,
-    )
-    data = await _chat_json(prompt, max_tokens=1400, temperature=0.2)
-    confidence = _coerce_dict(data.get("confidence"))
-    return {
-        "candidate_facts": _coerce_list(data.get("candidate_facts")),
-        "evidence_spans": _coerce_list(data.get("evidence_spans")),
-        "hidden_strengths": _coerce_list(data.get("hidden_strengths")),
-        "opportunity_hypotheses": _coerce_list(data.get("opportunity_hypotheses")),
-        "missing_high_value_signals": _coerce_list(data.get("missing_high_value_signals")),
-        "possible_experience_boundaries": _coerce_list(data.get("possible_experience_boundaries")),
-        "schema_patch": _coerce_dict(data.get("schema_patch")),
-        "confidence": {
-            "overall": _coerce_float(confidence.get("overall")),
-            "narrative_stability": _coerce_float(confidence.get("narrative_stability")),
-            "experience_clarity": _coerce_float(confidence.get("experience_clarity")),
-        },
-    }
-
-
-async def evaluate_stop(
-    *,
-    working_narrative: str,
-    visible_turns: list[dict[str, Any]],
-    hidden_state: dict[str, Any],
     turn_count: int,
+    mode: str = "text",
 ) -> dict[str, Any]:
-    prompt = build_stop_evaluator_prompt(
+    """Single-call replacement for the old 5-step Builder pipeline."""
+    prompt = build_fast_turn_prompt(
         working_narrative=working_narrative,
+        hidden_state=hidden_state,
         visible_turns=visible_turns,
-        hidden_state=hidden_state,
         turn_count=turn_count,
+        mode=mode,
     )
-    data = await _chat_json(prompt, max_tokens=500, temperature=0.1)
-    should_stop = _coerce_bool(data.get("should_stop"))
-    stop_confidence = _coerce_float(data.get("stop_confidence"))
-    ready_to_commit = _coerce_bool(data.get("ready_to_commit"), default=should_stop)
-    reasoning = str(data.get("reasoning") or "").strip()
-    return {
-        "should_stop": should_stop,
-        "stop_confidence": stop_confidence,
-        "ready_to_commit": ready_to_commit,
-        "reasoning": reasoning,
-    }
+    temperature = 0.5 if (mode or "").strip().lower() == "voice" else 0.6
+    data = await _chat_json(prompt, max_tokens=900, temperature=temperature)
 
+    updated_working_narrative = str(data.get("working_narrative") or "").strip() or working_narrative
 
-async def direct_conversation(
-    *,
-    working_narrative: str,
-    hidden_state: dict[str, Any],
-    stop_decision: dict[str, Any],
-    turn_count: int,
-) -> dict[str, Any]:
-    prompt = build_conversation_director_prompt(
-        working_narrative=working_narrative,
-        hidden_state=hidden_state,
-        stop_decision=stop_decision,
-        turn_count=turn_count,
-    )
-    data = await _chat_json(prompt, max_tokens=500, temperature=0.2)
-    next_move = str(data.get("next_move") or "ask_high_value_question").strip()
-    if next_move not in {
-        "reflect_pattern",
-        "ask_high_value_question",
-        "test_hypothesis",
-        "summarize_progress",
-        "surface_strength",
-        "stop_conversation",
-        "prepare_commit",
-    }:
-        next_move = "ask_high_value_question"
-    return {
-        "next_move": next_move,
-        "reasoning": str(data.get("reasoning") or "").strip(),
-        "focus": str(data.get("focus") or "").strip() or None,
-        "question_goal": str(data.get("question_goal") or "").strip() or None,
-        "surface_strength": str(data.get("surface_strength") or "").strip() or None,
-    }
+    raw_hidden_state = data.get("hidden_state")
+    if raw_hidden_state and isinstance(raw_hidden_state, dict):
+        normalized_hidden_state = raw_hidden_state
+    else:
+        normalized_hidden_state = {}
 
+    raw_stop = data.get("stop_decision")
+    if raw_stop and isinstance(raw_stop, dict):
+        should_stop = _coerce_bool(raw_stop.get("should_stop"))
+        ready_to_commit = _coerce_bool(raw_stop.get("ready_to_commit"), default=should_stop)
+        stop_confidence = _coerce_float(raw_stop.get("stop_confidence"))
+        reasoning = str(raw_stop.get("reasoning") or "").strip()
+    else:
+        should_stop = False
+        ready_to_commit = False
+        stop_confidence = 0.0
+        reasoning = ""
 
-async def compose_reply(
-    *,
-    working_narrative: str,
-    hidden_state: dict[str, Any],
-    director_plan: dict[str, Any],
-    stop_decision: dict[str, Any],
-    visible_turns: list[dict[str, Any]],
-) -> dict[str, Any]:
-    prompt = build_question_composer_prompt(
-        working_narrative=working_narrative,
-        hidden_state=hidden_state,
-        director_plan=director_plan,
-        stop_decision=stop_decision,
-        visible_turns=visible_turns,
-    )
-    data = await _chat_json(prompt, max_tokens=700, temperature=0.35)
-    message = str(data.get("assistant_message") or "").strip()
-    message_type = str(data.get("message_type") or "").strip() or "question"
+    focus_val = data.get("focus")
+    focus = str(focus_val).strip() if isinstance(focus_val, str) and focus_val.strip() else None
+
+    assistant_message = str(data.get("assistant_message") or "").strip()
+    message_type = str(data.get("message_type") or "question").strip() or "question"
     surfaced_insights = [
         str(item).strip()
         for item in _coerce_list(data.get("surfaced_insights"))
         if str(item).strip()
     ]
+
     return {
-        "assistant_message": message,
+        "working_narrative": updated_working_narrative,
+        "hidden_state": normalized_hidden_state,
+        "stop_decision": {
+            "should_stop": should_stop,
+            "ready_to_commit": ready_to_commit,
+            "stop_confidence": stop_confidence,
+            "reasoning": reasoning,
+        },
+        "focus": focus,
+        "assistant_message": assistant_message,
         "message_type": message_type,
         "surfaced_insights": surfaced_insights,
     }
@@ -299,14 +221,10 @@ def safe_hidden_state_payload(hidden_state: dict[str, Any]) -> dict[str, Any]:
 
 __all__ = [
     "ChatServiceError",
-    "compose_reply",
-    "direct_conversation",
-    "evaluate_stop",
+    "fast_turn",
     "fallback_director",
     "fallback_reply",
     "fallback_stop_decision",
     "safe_hidden_state_payload",
-    "spot_talent",
     "synthesize_commit_input",
-    "update_working_narrative",
 ]

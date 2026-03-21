@@ -379,22 +379,14 @@ export default function YourCardsPage() {
       transition={{ duration: 0.3 }}
       className="max-w-3xl mx-auto space-y-8"
     >
-      {/* Header */}
-      <div className="flex items-center justify-end gap-4">
-        <Link href="/builder">
-          <Button variant="outline" size="sm" className="h-9 touch-manipulation rounded-full px-4">
-            <Plus className="h-3.5 w-3.5 mr-1.5" />
-            Add experience
-          </Button>
-        </Link>
-      </div>
+      {/* Header intentionally removed for empty state simplicity */}
 
       {!hasCards ? (
         <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.3 }}
-          className="flex flex-col items-center justify-center py-16 px-4 rounded-2xl border border-dashed border-border/50 gap-4"
+          className="flex flex-col items-center justify-center py-16 px-4 rounded-2xl border border-dashed border-zinc-700/60 gap-4"
         >
           <p className="text-sm text-muted-foreground text-center">
             No experience cards yet

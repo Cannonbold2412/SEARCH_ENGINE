@@ -70,11 +70,8 @@ class Person(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc))
 
     profile = relationship("PersonProfile", back_populates="person", uselist=False)
-    raw_experiences = relationship("RawExperience", back_populates="person")
-    draft_sets = relationship("DraftSet", back_populates="person")
     experience_cards = relationship("ExperienceCard", back_populates="person")
     experience_card_children = relationship("ExperienceCardChild", back_populates="person")
-    builder_sessions = relationship("BuilderSession", back_populates="person")
     searches_made = relationship("Search", back_populates="searcher", foreign_keys="Search.searcher_id")
 
 
@@ -212,53 +209,6 @@ class SignupSession(Base):
 # Experience pipeline
 # ---------------------------------------------------------------------------
 
-class RawExperience(Base):
-    """Raw text submitted by a user before AI processing."""
-
-    __tablename__ = "raw_experiences"
-
-    id = Column(UUID(as_uuid=False), primary_key=True, default=uuid4_str)
-    person_id = Column(
-        UUID(as_uuid=False),
-        ForeignKey("people.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    raw_text = Column(Text, nullable=False)
-    raw_text_original = Column(Text, nullable=True)
-    raw_text_cleaned = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    person = relationship("Person", back_populates="raw_experiences")
-    draft_sets = relationship("DraftSet", back_populates="raw_experience")
-
-
-class DraftSet(Base):
-    """Groups the experience cards produced from one pipeline run on a RawExperience."""
-
-    __tablename__ = "draft_sets"
-
-    id = Column(UUID(as_uuid=False), primary_key=True, default=uuid4_str)
-    person_id = Column(
-        UUID(as_uuid=False),
-        ForeignKey("people.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    raw_experience_id = Column(
-        UUID(as_uuid=False),
-        ForeignKey("raw_experiences.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    run_version = Column(Integer, nullable=False, default=1)
-    # Python attribute is `extra_metadata`; DB column is named `metadata` for historical reasons.
-    extra_metadata = Column("metadata", JSONB, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    person = relationship("Person", back_populates="draft_sets")
-    raw_experience = relationship("RawExperience", back_populates="draft_sets")
-    experience_card_children = relationship("ExperienceCardChild", back_populates="draft_set")
-    experience_cards = relationship("ExperienceCard", back_populates="draft_set")
-
-
 class ExperienceCard(Base):
     """
     Parent experience card — one structured experience entry per person.
@@ -274,11 +224,6 @@ class ExperienceCard(Base):
         UUID(as_uuid=False),
         ForeignKey("people.id", ondelete="CASCADE"),
         nullable=False,
-    )
-    draft_set_id = Column(
-        UUID(as_uuid=False),
-        ForeignKey("draft_sets.id", ondelete="SET NULL"),
-        nullable=True,
     )
     # Backward-compat alias so older code using `card.user_id` still works.
     user_id = synonym("person_id")
@@ -323,7 +268,6 @@ class ExperienceCard(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc))
 
     person = relationship("Person", back_populates="experience_cards")
-    draft_set = relationship("DraftSet", back_populates="experience_cards")
     children = relationship(
         "ExperienceCardChild",
         back_populates="experience",
@@ -354,17 +298,6 @@ class ExperienceCardChild(Base):
         ForeignKey("people.id", ondelete="CASCADE"),
         nullable=False,
     )
-    raw_experience_id = Column(
-        UUID(as_uuid=False),
-        ForeignKey("raw_experiences.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    draft_set_id = Column(
-        UUID(as_uuid=False),
-        ForeignKey("draft_sets.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-
     child_type = Column(String(_S50), nullable=False)
     value = Column(JSONB, nullable=False)  # { raw_text, items: [{ title, description }] }
 
@@ -376,7 +309,6 @@ class ExperienceCardChild(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc))
 
     person = relationship("Person", back_populates="experience_card_children")
-    draft_set = relationship("DraftSet", back_populates="experience_card_children")
     experience = relationship("ExperienceCard", back_populates="children")
 
     __table_args__ = (
@@ -386,97 +318,6 @@ class ExperienceCardChild(Base):
             unique=True,
         ),
     )
-
-
-# ---------------------------------------------------------------------------
-# Builder sessions
-# ---------------------------------------------------------------------------
-
-class BuilderSession(Base):
-    """Conversation-native Builder session before projection into experience cards."""
-
-    __tablename__ = "builder_sessions"
-
-    id = Column(UUID(as_uuid=False), primary_key=True, default=uuid4_str)
-    person_id = Column(
-        UUID(as_uuid=False),
-        ForeignKey("people.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    mode = Column(String(_S20), nullable=False, default="text")
-    status = Column(String(_S20), nullable=False, default="discovering")
-    current_focus = Column(Text, nullable=True)
-    working_narrative = Column(Text, nullable=True)
-    turn_count = Column(Integer, nullable=False, default=0)
-    stop_confidence = Column(Float, nullable=False, default=0.0)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc))
-
-    person = relationship("Person", back_populates="builder_sessions")
-    turns = relationship(
-        "BuilderTurn",
-        back_populates="session",
-        cascade="all, delete-orphan",
-    )
-    hidden_state = relationship(
-        "BuilderHiddenState",
-        back_populates="session",
-        uselist=False,
-        cascade="all, delete-orphan",
-    )
-
-    __table_args__ = (
-        Index("ix_builder_sessions_person_status", "person_id", "status"),
-    )
-
-
-class BuilderTurn(Base):
-    """One turn in a Builder session, including hidden system reasoning."""
-
-    __tablename__ = "builder_turns"
-
-    id = Column(UUID(as_uuid=False), primary_key=True, default=uuid4_str)
-    session_id = Column(
-        UUID(as_uuid=False),
-        ForeignKey("builder_sessions.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    role = Column(String(_S20), nullable=False)
-    content = Column(Text, nullable=False)
-    turn_index = Column(Integer, nullable=False)
-    message_type = Column(String(_S50), nullable=False, default="story")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    session = relationship("BuilderSession", back_populates="turns")
-
-    __table_args__ = (
-        Index("ix_builder_turns_session_turn", "session_id", "turn_index", unique=True),
-    )
-
-
-class BuilderHiddenState(Base):
-    """Hidden structured memory attached to a Builder session."""
-
-    __tablename__ = "builder_hidden_states"
-
-    id = Column(UUID(as_uuid=False), primary_key=True, default=uuid4_str)
-    session_id = Column(
-        UUID(as_uuid=False),
-        ForeignKey("builder_sessions.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-    )
-    candidate_facts_json = Column(JSONB, nullable=True)
-    evidence_spans_json = Column(JSONB, nullable=True)
-    hidden_strengths_json = Column(JSONB, nullable=True)
-    opportunity_hypotheses_json = Column(JSONB, nullable=True)
-    missing_high_value_signals_json = Column(JSONB, nullable=True)
-    possible_experience_boundaries_json = Column(JSONB, nullable=True)
-    schema_patch_json = Column(JSONB, nullable=True)
-    confidence_json = Column(JSONB, nullable=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc))
-
-    session = relationship("BuilderSession", back_populates="hidden_state")
 
 
 # ---------------------------------------------------------------------------

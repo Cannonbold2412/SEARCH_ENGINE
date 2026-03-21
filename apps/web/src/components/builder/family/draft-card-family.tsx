@@ -33,7 +33,6 @@ interface DraftCardFamilyProps {
   onUpdateParentFromMessyText?: (text: string) => Promise<void>;
   onUpdateChildFromMessyText?: (text: string) => Promise<void>;
   isUpdatingFromMessyText?: boolean;
-  translateRawText?: (text: string) => Promise<string>;
   isCardSubmitting: boolean;
   isCardDeleting: boolean;
   isChildSubmitting: boolean;
@@ -57,7 +56,6 @@ export function DraftCardFamily({
   onUpdateParentFromMessyText,
   onUpdateChildFromMessyText,
   isUpdatingFromMessyText = false,
-  translateRawText,
   isCardSubmitting,
   isCardDeleting,
   isChildSubmitting,
@@ -157,7 +155,6 @@ export function DraftCardFamily({
               showDeleteButton={false}
               onUpdateFromMessyText={onUpdateParentFromMessyText}
               isUpdatingFromMessyText={isUpdatingFromMessyText}
-              translateRawText={translateRawText}
             />
           ) : (
             <>

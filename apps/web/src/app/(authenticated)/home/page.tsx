@@ -116,7 +116,7 @@ export default function HomePage() {
                   key={s}
                   type="button"
                   onClick={() => handleSuggestionClick(s)}
-                  className="px-4 py-2 rounded-full text-sm bg-muted/80 hover:bg-muted text-foreground/90 hover:text-foreground border border-border/60 hover:border-border transition-colors"
+                  className="px-4 py-2 rounded-full text-sm bg-muted/80 hover:bg-muted text-foreground/90 hover:text-foreground border border-zinc-700/80 hover:border-zinc-700/100 transition-colors"
                 >
                   {s}
                 </button>
