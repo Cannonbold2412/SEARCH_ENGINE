@@ -136,7 +136,7 @@ export function AppNav() {
       {/* Left sidebar - overlay on mobile, permanent on desktop */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex-shrink-0 bg-background border-r border-border overflow-x-hidden min-w-0 transition-[transform] duration-200 ease-out",
+          "fixed inset-y-0 left-0 z-50 flex-shrink-0 bg-background border-r border-border/60 overflow-x-hidden min-w-0 transition-[transform] duration-200 ease-out",
           isMobile && "shadow-xl md:shadow-none",
           isMobile && !mobileSidebarOpen && "-translate-x-full"
         )}
@@ -149,7 +149,7 @@ export function AppNav() {
           {/* Logo at top + collapse toggle (desktop) / menu close (mobile) */}
           <div
             className={cn(
-              "flex-shrink-0 flex border-b border-border",
+              "flex-shrink-0 flex border-b border-border/60",
               collapsed && !isMobile ? "items-center justify-center py-2 min-h-[2.5rem]" : "flex-row items-center gap-1 px-2 py-4 min-h-[3.5rem]"
             )}
           >
@@ -294,7 +294,7 @@ export function AppNav() {
                           </Button>
                           {openDropdownId === search.id && (
                             <div
-                              className="absolute right-0 top-full z-50 mt-0.5 rounded-md border border-border bg-background px-1 py-1 shadow-md min-w-[8rem]"
+                              className="absolute right-0 top-full z-50 mt-0.5 rounded-md border border-border/60 bg-background px-1 py-1 shadow-md min-w-[8rem]"
                               role="menu"
                             >
                               <button
@@ -323,7 +323,7 @@ export function AppNav() {
           )}
 
           {/* Account + Settings at bottom */}
-          <div className="flex-shrink-0 border-t border-border px-2 py-3 space-y-0.5">
+          <div className="flex-shrink-0 border-t border-border/60 px-2 py-3 space-y-0.5">
             <Link
               href="/profile"
               onClick={handleNavClick}
@@ -360,7 +360,7 @@ export function AppNav() {
 
       {/* Top bar - hamburger on mobile, CONXA centered, credits on right */}
       <header
-        className="sticky top-0 z-40 flex h-14 min-h-[44px] items-center border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+        className="sticky top-0 z-40 flex h-14 min-h-[44px] items-center border-b border-border/60 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
         style={{ marginLeft: sidebarWidth }}
       >
         <div className="grid h-full w-full grid-cols-3 items-center px-3 sm:px-4 gap-2">

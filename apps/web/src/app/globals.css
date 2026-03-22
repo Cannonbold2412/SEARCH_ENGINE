@@ -44,8 +44,8 @@
     --accent: 240 20% 16%;
     --accent-foreground: 240 100% 97%;
     --destructive: 0 84% 60%;
-    --border: 0 0% 100% / 0.08;
-    --input: 0 0% 100% / 0.08;
+    --border: 240 5% 26%;
+    --input: 240 5% 26%;
     --ring: 244 95% 69%;
     --success: 160 84% 39%;
     --success-foreground: 0 0% 98%;
@@ -56,7 +56,7 @@
     --glow-teal: 166 100% 42%;
     --gold: 37 90% 55%;
     --card-glass: 0 0% 100% / 0.04;
-    --border-glass: 0 0% 100% / 0.08;
+    --border-glass: 240 5% 26% / 0.6;
   }
 }
 

@@ -28,7 +28,7 @@ export function ExpandableExperienceCard({ family, index }: ExpandableExperience
       {/* ── Parent card ── */}
       <div
         className={cn(
-          "relative rounded-xl border border-border bg-card p-4 transition-colors",
+          "relative rounded-xl border border-border/60 bg-card p-4 transition-colors",
           hasChildren && "cursor-pointer hover:bg-accent/50"
         )}
         onClick={hasChildren ? () => setIsExpanded((v) => !v) : undefined}

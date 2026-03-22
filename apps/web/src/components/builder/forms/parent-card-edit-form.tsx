@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 
 interface ParentCardEditFormProps {
   form: {
@@ -62,8 +62,8 @@ export function ParentCardEditForm({
   };
 
   return (
-    <div className="mt-3 rounded-xl border border-white/10 bg-zinc-950 shadow-sm">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+    <div className="mt-3 rounded-xl border border-zinc-700/60 bg-zinc-950 shadow-sm">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700/60">
         <p className="text-[10px] tracking-widest uppercase text-zinc-400">
           Editing Experience
         </p>
@@ -114,9 +114,16 @@ export function ParentCardEditForm({
                 size="sm"
                 variant="secondary"
                 onClick={handleUpdateFromMessy}
-                disabled={!messyText.trim()}
+                disabled={!messyText.trim() || isUpdatingFromMessyText}
               >
-                Update
+                {isUpdatingFromMessyText ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin [animation-duration:450ms]" />
+                    Updating...
+                  </>
+                ) : (
+                  "Update"
+                )}
               </Button>
             )}
           </div>

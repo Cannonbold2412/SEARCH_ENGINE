@@ -42,7 +42,7 @@ export function VisibilitySection({
               "flex items-start gap-3 cursor-pointer rounded-lg border p-3 transition-colors",
               visibilityMode === opt.value
                 ? "border-primary/60 bg-primary/5"
-                : "border-border hover:bg-muted/40"
+                : "border-border/60 hover:bg-muted/40"
             )}
           >
             <input
@@ -50,7 +50,7 @@ export function VisibilitySection({
               name="visibility_mode"
               checked={visibilityMode === opt.value}
               onChange={() => onVisibilityModeChange(opt.value)}
-              className="h-4 w-4 border-border mt-0.5"
+              className="h-4 w-4 border-border/60 mt-0.5"
             />
             <div>
               <span className="text-sm font-medium text-foreground">{opt.label}</span>
@@ -74,7 +74,7 @@ export function VisibilitySection({
                   }
                 }}
                 className={cn(
-                  "rounded-lg border border-input bg-background px-3 py-2 text-sm min-w-[160px]",
+                  "rounded-lg border border-input/60 bg-background px-3 py-2 text-sm min-w-[160px]",
                   "focus:outline-none focus:ring-1 focus:ring-ring/30 transition-colors"
                 )}
               >

@@ -22,7 +22,7 @@ export default function HowItWorks() {
         </motion.h2>
 
         <div className="grid md:grid-cols-3 gap-8 relative">
-          <div className="hidden md:block absolute top-16 left-[16.66%] right-[16.66%] h-px bg-border" />
+          <div className="hidden md:block absolute top-16 left-[16.66%] right-[16.66%] h-px bg-border/60" />
 
           {steps.map((step, i) => (
             <motion.div

@@ -41,7 +41,7 @@ export function PersonResultCard({ person, searchId, index = 0 }: PersonResultCa
     >
       <Link
         href={`/people/${person.id}?search_id=${searchId}`}
-        className="flex h-full min-h-[44px] items-start justify-between gap-4 rounded-xl border border-border bg-card p-4 sm:p-5 transition-all duration-200 hover:bg-accent/50 hover:border-border hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group active:bg-accent/70"
+        className="flex h-full min-h-[44px] items-start justify-between gap-4 rounded-xl border border-border/60 bg-card p-4 sm:p-5 transition-all duration-200 hover:bg-accent/50 hover:border-border/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group active:bg-accent/70"
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3 min-w-0">

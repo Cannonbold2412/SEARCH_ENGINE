@@ -68,7 +68,7 @@ export default function LandingHero() {
           </Link>
           <a
             href="#how-it-works"
-            className="flex items-center gap-2 text-muted-foreground font-body text-base border border-border rounded-full px-8 py-3.5 hover:text-foreground hover:border-foreground/20 transition-colors"
+            className="flex items-center gap-2 text-muted-foreground font-body text-base border border-border/60 rounded-full px-8 py-3.5 hover:text-foreground hover:border-foreground/20 transition-colors"
           >
             See how it works <ArrowRight className="w-4 h-4" />
           </a>

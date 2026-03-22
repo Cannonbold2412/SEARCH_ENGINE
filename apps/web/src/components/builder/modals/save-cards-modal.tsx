@@ -31,7 +31,7 @@ export function SaveCardsModal({
           onClick={onClose}
         >
           <motion.div
-            className="rounded-xl glass border border-border p-6 max-w-md w-full mx-4 shadow-xl glow-ring depth-shadow-lg"
+            className="rounded-xl glass border border-border/60 p-6 max-w-md w-full mx-4 shadow-xl glow-ring depth-shadow-lg"
             style={{ transformStyle: "preserve-3d", perspective: 1200 }}
             initial={{ opacity: 0, scale: 0.92, y: 24, rotateX: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0, rotateX: 0 }}

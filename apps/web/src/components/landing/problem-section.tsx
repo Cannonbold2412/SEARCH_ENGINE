@@ -25,7 +25,7 @@ export default function ProblemSection() {
 
 also some python stuff freelance 2022-23 did like 3 projects idk"`}
             </div>
-            <div className="absolute inset-0 border border-border rounded-2xl pointer-events-none" />
+            <div className="absolute inset-0 border border-border/60 rounded-2xl pointer-events-none" />
           </div>
 
           <div className="glass-card rounded-2xl p-8 relative overflow-hidden glow-violet-subtle">

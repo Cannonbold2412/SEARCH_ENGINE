@@ -202,7 +202,7 @@ export function VapiVoiceWidget() {
   }, [handleEnd]);
 
   return (
-    <div className="flex flex-col h-full min-h-0 rounded-xl border border-border bg-card overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 rounded-xl border border-border/60 bg-card overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
         {!isConnected && messages.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-4">
@@ -239,7 +239,7 @@ export function VapiVoiceWidget() {
         <div ref={scrollRef} />
       </div>
 
-      <div className="flex flex-col gap-2 p-3 border-t border-border flex-shrink-0">
+      <div className="flex flex-col gap-2 p-3 border-t border-border/60 flex-shrink-0">
         {error && (
           <p className="text-sm text-destructive text-center" role="alert">
             {error}

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowDown, Loader2, Send } from "lucide-react";
+import { ArrowDown, CheckCircle2, Loader2, Send } from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { EXPERIENCE_CARD_FAMILIES_QUERY_KEY, EXPERIENCE_CARDS_QUERY_KEY } from "@/hooks";
@@ -272,7 +273,7 @@ function ScrollToBottomButton({ scrollRef }: { scrollRef: React.RefObject<HTMLDi
     <button
       type="button"
       onClick={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
-      className="absolute bottom-24 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 rounded-full bg-background/90 border border-border shadow-md px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      className="absolute bottom-24 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 rounded-full bg-background/90 border border-border/60 shadow-md px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       aria-label="Scroll to bottom"
     >
       <ArrowDown className="h-3 w-3" />
@@ -302,6 +303,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
   const [surfacedInsights, setSurfacedInsights] = useState<string[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [commitStatus, setCommitStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Voice state (Vapi integration)
@@ -316,6 +318,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
   const autoEndTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transcriptCommitInFlightRef = useRef(false);
   const activeVapiCallIdRef = useRef<string | null>(null);
+  const callStartMessageCountRef = useRef(0);
 
   // Sphere intensity derived from voice state
   const sphereActive = voiceConnecting
@@ -363,6 +366,14 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
     messagesRef.current = messages;
   }, [messages]);
 
+  useEffect(() => {
+    if (commitStatus !== "success") return;
+    const timer = setTimeout(() => {
+      setCommitStatus("idle");
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [commitStatus]);
+
   const resetVoiceState = useCallback(() => {
     setVoiceConnecting(false);
     setVoiceConnected(false);
@@ -378,6 +389,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
       autoEndTimeoutRef.current = null;
     }
     activeVapiCallIdRef.current = null;
+    callStartMessageCountRef.current = 0;
   }, []);
 
   const addMessage = useCallback((msg: Omit<ChatMessage, "id">) => {
@@ -403,6 +415,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
     }
     transcriptCommitInFlightRef.current = true;
     setLoading(true);
+    setCommitStatus("saving");
     try {
       // #region agent log
       fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"post-fix-2",hypothesisId:"H6-H8",location:"builder-chat.tsx:commitVoiceTranscript:apiRequest",message:"posting transcript commit request",data:{hasCallId:Boolean(resolvedCallId),resolvedTranscriptLength:resolvedTranscript.length,sessionId:sessionId ?? null},timestamp:Date.now()})}).catch(()=>{});
@@ -420,11 +433,9 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
       fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"post-fix-2",hypothesisId:"H6-H8",location:"builder-chat.tsx:commitVoiceTranscript:apiSuccess",message:"transcript commit response received",data:{committedCardCount:res.committed_card_count,sessionStatus:res.session_status},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       if (res.committed_card_count > 0) {
-        addMessage({
-          role: "assistant",
-          content: `Saved ${res.committed_card_count} experience ${res.committed_card_count === 1 ? "card" : "cards"} from this conversation.`,
-        });
+        setCommitStatus("success");
       } else {
+        setCommitStatus("error");
         addMessage({
           role: "assistant",
           content: "I could not extract a clear experience card from this conversation yet.",
@@ -438,6 +449,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
       // #region agent log
       fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"post-fix-2",hypothesisId:"H6-H8",location:"builder-chat.tsx:commitVoiceTranscript:apiError",message:"transcript commit request failed",data:{errorMessage,hasCallId:Boolean(resolvedCallId),resolvedTranscriptLength:resolvedTranscript.length},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
+      setCommitStatus("error");
       addMessage({
         role: "assistant",
         content: "Conversation ended, but saving cards failed. Please try again.",
@@ -507,8 +519,11 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
         setVoiceConnecting(false);
         setVoiceConnected(true);
         setVoiceError(null);
+        setCommitStatus("idle");
         const callId = getCurrentVapiCallId(vapi);
         if (callId) activeVapiCallIdRef.current = callId;
+        // Scope transcript fallback to the current voice call only.
+        callStartMessageCountRef.current = messagesRef.current.length;
         // #region agent log
         fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"pre-fix",hypothesisId:"H2",location:"builder-chat.tsx:vapi:call-start",message:"voice call started",data:{hasCallId:Boolean(callId),capturedMessagesAtStartVoice:messages.length},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
@@ -516,13 +531,16 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
 
       vapi.on("call-end", () => {
         const callId = activeVapiCallIdRef.current ?? getCurrentVapiCallId(vapi);
-        const transcriptFallback = serializeTranscriptFromMessages(messagesRef.current);
+        const transcriptStartIndex = Math.max(0, callStartMessageCountRef.current);
+        const transcriptMessages = messagesRef.current.slice(transcriptStartIndex);
+        const transcriptFallback = serializeTranscriptFromMessages(transcriptMessages);
         // #region agent log
         fetch("http://127.0.0.1:7242/ingest/9cd54503-81ee-4381-aec3-f5256557b6dc",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({runId:"post-fix",hypothesisId:"H1-H3",location:"builder-chat.tsx:vapi:call-end",message:"call ended and commit requested",data:{hasCallId:Boolean(callId),fallbackLength:transcriptFallback.length,capturedMessagesInCallEndClosure:messages.length,messagesRefCount:messagesRef.current.length},timestamp:Date.now()})}).catch(()=>{});
         // #endregion
         void commitVoiceTranscript(callId, transcriptFallback);
         detachVoice(vapi);
         activeVapiCallIdRef.current = null;
+        callStartMessageCountRef.current = 0;
       });
 
       vapi.on("speech-start", () => {
@@ -676,7 +694,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
   ]);
 
   return (
-    <div className="relative flex flex-col h-full min-h-0 rounded-xl border border-border bg-card overflow-hidden">
+    <div className="relative flex flex-col h-full min-h-0 rounded-xl border border-border/60 bg-card overflow-hidden">
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scrollbar-thin scrollbar-theme">
         <AnimatePresence initial={false}>
@@ -710,7 +728,23 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
           <div className="flex justify-start">
             <div className="rounded-2xl px-4 py-2.5 bg-muted/60 flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Thinking…</span>
+              <span>Generating your card...</span>
+            </div>
+          </div>
+        )}
+        {commitStatus === "success" && (
+          <div className="flex justify-start">
+            <div className="rounded-2xl px-4 py-2.5 bg-muted/60 text-sm text-foreground">
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" />
+                <p className="whitespace-pre-wrap break-words">
+                  Your card is generated. You can edit it in{" "}
+                  <Link href="/cards" className="underline underline-offset-2 hover:text-primary transition-colors">
+                    Your cards
+                  </Link>{" "}
+                  section.
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -732,9 +766,9 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
       </div>
 
       {/* Footer: text input + send (no sphere here) */}
-      <div className="flex flex-col gap-1.5 px-3 py-2 border-t border-border flex-shrink-0">
+      <div className="flex flex-col gap-1.5 px-3 py-2 border-t border-border/60 flex-shrink-0">
         {surfacedInsights.length > 0 && (
-          <div className="rounded-xl border border-border bg-muted/30 px-3 py-2">
+          <div className="rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">What I’m noticing</p>
             <div className="mt-1 flex flex-wrap gap-1.5">
               {surfacedInsights.map((insight) => (
@@ -765,7 +799,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
               }
             }}
             rows={2}
-            className="flex-1 min-h-[44px] max-h-[120px] resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            className="flex-1 min-h-[44px] max-h-[120px] resize-none rounded-xl border border-input/60 bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             disabled={loading}
           />
           <Button

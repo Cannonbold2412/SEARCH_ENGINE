@@ -15,6 +15,10 @@ import { cn } from "@/lib/utils";
 import type { ExperienceCard, ExperienceCardChild } from "@/types";
 import type { ParentCardForm, ChildCardForm } from "@/hooks/use-card-forms";
 
+type DeleteTarget =
+  | { type: "parent"; id: string; label: string }
+  | { type: "child"; id: string; label: string };
+
 interface SavedCardFamilyProps {
   parent: ExperienceCard;
   children: ExperienceCardChild[];
@@ -73,11 +77,46 @@ export function SavedCardFamily({
   const hasChildren = visibleChildren.length > 0;
   const [isExpanded, setIsExpanded] = useState(false);
   const [viewingChildId, setViewingChildId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
   const handleParentClick = () => {
     if (!hasChildren || isEditingParent) return;
     if (editingSavedChildId && visibleChildren.some((c) => c.id === editingSavedChildId)) return;
     setIsExpanded((prev) => !prev);
+  };
+
+  const closeDeleteConfirmation = () => {
+    setDeleteTarget(null);
+  };
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    closeDeleteConfirmation();
+    if (deleteTarget.type === "parent") {
+      onDelete?.(deleteTarget.id);
+      return;
+    }
+    onDeleteChild?.(deleteTarget.id);
+  };
+
+  const openParentDeleteConfirmation = () => {
+    if (!parentId) return;
+    setDeleteTarget({
+      type: "parent",
+      id: parentId,
+      label: displayCardTitle(parent.title, parent.company_name || "Untitled"),
+    });
+  };
+
+  const openChildDeleteConfirmation = (child: ExperienceCardChild) => {
+    const relationType = (child.child_type ?? "").toString().trim().replace(/_/g, " ");
+    const firstItem = getChildDisplayItems(child)[0];
+    const label = firstItem?.title || firstItem?.summary || relationType || "this detail";
+    setDeleteTarget({
+      type: "child",
+      id: child.id,
+      label,
+    });
   };
 
   return (
@@ -91,7 +130,7 @@ export function SavedCardFamily({
       {/* Parent card - flat, open (no inset look) */}
       <div
         className={cn(
-          "group rounded-xl border border-border bg-card p-4 transition-colors",
+          "group rounded-xl border border-border/60 bg-card p-4 transition-colors",
           hasChildren && !isEditingParent && "cursor-pointer hover:bg-accent/30"
         )}
         onClick={handleParentClick}
@@ -144,7 +183,7 @@ export function SavedCardFamily({
                 </div>
               )}
               {!readOnly && (
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex gap-1">
                   <Button
                     type="button"
                     size="sm"
@@ -166,7 +205,7 @@ export function SavedCardFamily({
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (parentId) onDelete?.(parentId);
+                      openParentDeleteConfirmation();
                     }}
                     disabled={!parentId}
                   >
@@ -230,11 +269,11 @@ export function SavedCardFamily({
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
                             {relationDisplay && (
-                              <span className="inline-block text-sm text-left align-bottom text-foreground font-medium leading-snug mb-2.5 tracking-normal uppercase">
+                              <span className="inline-block text-sm text-left align-bottom text-foreground/60 font-medium leading-snug mb-1 tracking-normal uppercase">
                                 {relationDisplay}
                               </span>
                             )}
-                            <p className="flex flex-wrap text-sm font-medium text-foreground/60 leading-snug px-2.5 whitespace-pre-line">
+                            <p className="flex flex-wrap text-sm font-medium text-foreground leading-snug px-2.5 whitespace-pre-line">
                               {(() => {
                                 const items = getChildDisplayItems(child);
                                 const childType = (child.child_type ?? "").toString().trim().replace(/_/g, " ");
@@ -257,22 +296,14 @@ export function SavedCardFamily({
                           </div>
                           {!readOnly && (
                             <div
-                              className="flex gap-0.5 flex-shrink-0 opacity-0 group-hover/child:opacity-100 transition-opacity"
+                              className="flex gap-0.5 flex-shrink-0"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="text-muted-foreground hover:text-foreground h-6 w-6 p-0"
-                                onClick={() => onStartEditingChild?.(child)}
-                              >
-                                <PenLine className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
                                 className="text-muted-foreground hover:text-destructive h-6 w-6 p-0"
-                                onClick={() => onDeleteChild?.(child.id)}
+                                onClick={() => openChildDeleteConfirmation(child)}
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
@@ -285,6 +316,45 @@ export function SavedCardFamily({
                 })}
               </ul>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            key={`delete-confirm-${deleteTarget.type}-${deleteTarget.id}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            onClick={closeDeleteConfirmation}
+          >
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" aria-hidden />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              className="relative z-10 w-full max-w-md rounded-2xl border border-border/60 bg-card shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-5 sm:p-6">
+                <h3 className="text-base font-semibold text-foreground">Delete this card?</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  <span className="font-medium text-foreground">{deleteTarget.label}</span> will be removed permanently.
+                </p>
+                <div className="mt-5 flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={closeDeleteConfirmation}>
+                    Cancel
+                  </Button>
+                  <Button type="button" variant="destructive" onClick={confirmDelete}>
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -313,7 +383,7 @@ export function SavedCardFamily({
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 12 }}
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-card shadow-xl"
+                className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border/60 bg-card shadow-xl"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="py-[10px] px-[15px] sm:p-6">
@@ -398,7 +468,7 @@ export function SavedCardFamily({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 8 }}
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-card shadow-xl"
+              className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border/60 bg-card shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
               {isEditingParent ? (

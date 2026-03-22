@@ -20,12 +20,12 @@ export function HeroScene() {
         }}
       />
       {/* Orbital rings */}
-      <div className="absolute w-48 h-48 sm:w-56 sm:h-56 rounded-full border border-white/20 animate-[hero-spin_12s_linear_infinite]" />
+      <div className="absolute w-48 h-48 sm:w-56 sm:h-56 rounded-full border border-zinc-700/60 animate-[hero-spin_12s_linear_infinite]" />
       <div
-        className="absolute w-64 h-64 sm:w-72 sm:h-72 rounded-full border border-white/15 animate-[hero-spin_16s_linear_infinite_reverse]"
+        className="absolute w-64 h-64 sm:w-72 sm:h-72 rounded-full border border-zinc-700/60 animate-[hero-spin_16s_linear_infinite_reverse]"
         style={{ transform: "rotateX(60deg)" }}
       />
-      <div className="absolute w-80 h-80 sm:w-96 sm:h-96 rounded-full border border-white/10 animate-[hero-spin_20s_linear_infinite]" />
+      <div className="absolute w-80 h-80 sm:w-96 sm:h-96 rounded-full border border-zinc-700/60 animate-[hero-spin_20s_linear_infinite]" />
       {/* Floating nodes */}
       {Array.from({ length: 24 }).map((_, i) => (
         <div

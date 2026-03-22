@@ -78,7 +78,7 @@ export function SearchForm({
                 placeholder="Describe who you're looking for..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="flex h-11 min-h-[44px] w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 focus-visible:border-foreground/30 transition-colors"
+                className="flex h-11 min-h-[44px] w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20 focus-visible:border-foreground/30 transition-colors"
               />
             </div>
             {error && <ErrorMessage message={error} />}

@@ -16,7 +16,16 @@ export type { ChatMessage, ClarifyHistoryEntry, ClarifyOption } from "./chat";
 
 export { AiSphere } from "./ai-sphere";
 
-export { DraftCardFamily, SavedCardFamily, FamilyTree } from "./family";
+export {
+  DraftCardFamily,
+  SavedCardFamily,
+  ExperienceFamilyCardPreview,
+  FamilyTree,
+} from "./family";
+export type { ExperienceFamilyCardPreviewProps } from "./family";
 export type { TreeNode } from "./family";
 
 export { SaveCardsModal } from "./modals";
+
+export { EnhanceChatPanel } from "./enhance/enhance-chat-panel";
+export type { EnhanceChatMessage } from "./enhance/enhance-chat-panel";

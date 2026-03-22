@@ -46,7 +46,7 @@ export function SearchResults({ searchId, people }: SearchResultsProps) {
             {hasMore && " · more available"}
           </h2>
           {people.length === 0 ? (
-            <div className="py-14 text-center rounded-xl border border-dashed border-border bg-muted/20">
+            <div className="py-14 text-center rounded-xl border border-dashed border-border/60 bg-muted/20">
               <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
                 <SearchX className="h-6 w-6 text-muted-foreground" />
               </div>

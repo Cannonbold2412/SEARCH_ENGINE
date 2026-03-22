@@ -36,7 +36,7 @@ export function CardFamilyDisplay({
       className="relative"
     >
       <div className={cn(
-        "group rounded-xl border border-border bg-card overflow-hidden transition-colors",
+        "group rounded-xl border border-border/60 bg-card overflow-hidden transition-colors",
         "hover:bg-accent/30",
       )}>
         <div className="p-4 sm:p-5">

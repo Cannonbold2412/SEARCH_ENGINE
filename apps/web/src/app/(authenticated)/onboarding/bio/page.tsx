@@ -245,7 +245,7 @@ export default function OnboardingBioPage() {
                 type="button"
                 onClick={handlePhotoClick}
                 disabled={photoUploading}
-                className="relative w-24 h-24 rounded-full overflow-hidden bg-muted border-2 border-border hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-colors flex items-center justify-center"
+                className="relative w-24 h-24 rounded-full overflow-hidden bg-muted border-2 border-border/60 hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-colors flex items-center justify-center"
                 aria-label="Select profile photo (optional)"
               >
                 {(photoPreview || serverPhotoBlob) ? (

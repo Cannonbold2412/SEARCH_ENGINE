@@ -43,7 +43,7 @@ function formatSearchDate(value: string): string {
 
 function ResultSkeleton() {
   return (
-    <li className="rounded-xl border border-border bg-card p-4 sm:p-6 animate-pulse">
+    <li className="rounded-xl border border-border/60 bg-card p-4 sm:p-6 animate-pulse">
       <div className="flex items-start gap-3">
         <div className="h-10 w-10 rounded-full bg-muted flex-shrink-0" />
         <div className="min-w-0 flex-1 space-y-2">
@@ -165,13 +165,13 @@ function SearchesPageContent() {
       {/* Left: list of searches */}
       <aside
         className={cn(
-          "flex-shrink-0 border-r border-border bg-background flex flex-col min-h-0",
+          "flex-shrink-0 border-r border-border/60 bg-background flex flex-col min-h-0",
           "w-full md:w-52 lg:w-60",
           !showMobileList && "hidden md:flex"
         )}
         aria-label="Saved searches"
       >
-        <div className="flex-shrink-0 px-4 py-3 border-b border-border">
+        <div className="flex-shrink-0 px-4 py-3 border-b border-border/60">
           <h2 className="text-sm font-semibold text-foreground">Your Searches</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             {searches.length === 0
@@ -290,7 +290,7 @@ function SearchesPageContent() {
               transition={{ duration: 0.15 }}
               className="flex-1 overflow-y-auto"
             >
-              <div className="sticky top-0 z-10 flex-shrink-0 border-b border-border bg-background/95 backdrop-blur py-3 px-4 sm:px-6">
+              <div className="sticky top-0 z-10 flex-shrink-0 border-b border-border/60 bg-background/95 backdrop-blur py-3 px-4 sm:px-6">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"

@@ -162,11 +162,11 @@ function MessageStatusIcon({ status }: { status?: MessageStatus }) {
 function DateSeparator({ date }: { date: string }) {
   return (
     <div className="flex items-center justify-center my-4">
-      <div className="h-px bg-border flex-1" />
+      <div className="h-px bg-border/60 flex-1" />
       <span className="px-3 py-1 text-[11px] font-medium text-muted-foreground bg-muted rounded-full mx-2">
         {formatDateSeparator(date)}
       </span>
-      <div className="h-px bg-border flex-1" />
+      <div className="h-px bg-border/60 flex-1" />
     </div>
   );
 }

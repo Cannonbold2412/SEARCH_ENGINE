@@ -117,7 +117,7 @@ export default function CreditsPage() {
                     "relative flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-accent",
                     pack.popular
                       ? "border-primary/50 ring-1 ring-primary/20"
-                      : "border-border"
+                      : "border-border/60"
                   )}
                 >
                   {pack.popular && (

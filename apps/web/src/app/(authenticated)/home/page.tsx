@@ -81,7 +81,7 @@ export default function HomePage() {
               <div className="h-4 w-24 bg-muted rounded animate-pulse" />
               <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <li key={i} className="rounded-xl border border-border p-4 sm:p-6 animate-pulse">
+                  <li key={i} className="rounded-xl border border-border/60 p-4 sm:p-6 animate-pulse">
                     <div className="flex items-start gap-3">
                       <div className="h-10 w-10 rounded-full bg-muted flex-shrink-0" />
                       <div className="min-w-0 flex-1 space-y-2">
@@ -130,11 +130,11 @@ export default function HomePage() {
         )}
       </div>
 
-      <div className="flex-shrink-0 border-t border-border bg-background">
+      <div className="flex-shrink-0 border-t border-border/60 bg-background">
         <div className="container max-w-3xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <form
             onSubmit={handleSubmit}
-            className="relative flex flex-col sm:flex-row sm:items-end gap-2 rounded-2xl border border-border bg-muted/30 hover:bg-muted/50 focus-within:bg-muted/50 focus-within:ring-1 focus-within:ring-ring/30 transition-all shadow-sm"
+            className="relative flex flex-col sm:flex-row sm:items-end gap-2 rounded-2xl border border-border/60 bg-muted/30 hover:bg-muted/50 focus-within:bg-muted/50 focus-within:ring-1 focus-within:ring-ring/30 transition-all shadow-sm"
           >
             <div className="relative flex-1 w-full min-w-0">
               <textarea

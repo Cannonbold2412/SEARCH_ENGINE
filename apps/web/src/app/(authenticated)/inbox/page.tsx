@@ -90,7 +90,7 @@ export default function InboxPage() {
       </div>
 
       {conversations.length === 0 ? (
-        <div className="py-12 text-center rounded-lg border border-dashed border-border">
+        <div className="py-12 text-center rounded-lg border border-dashed border-border/60">
           <MessageCircle className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">
             You don&apos;t have any chats yet.

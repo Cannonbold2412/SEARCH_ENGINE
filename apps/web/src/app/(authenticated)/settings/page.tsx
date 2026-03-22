@@ -210,7 +210,7 @@ export default function SettingsPage() {
                     key={opt}
                     className={cn(
                       "flex items-start gap-3 cursor-pointer rounded-lg border p-3 transition-colors",
-                      mode === opt ? "border-primary/50 bg-accent" : "border-border hover:bg-accent/50"
+                      mode === opt ? "border-primary/50 bg-accent" : "border-border/60 hover:bg-accent/50"
                     )}
                   >
                     <input
@@ -218,7 +218,7 @@ export default function SettingsPage() {
                       name="visibility_mode"
                       checked={mode === opt}
                       onChange={() => setMode(opt)}
-                      className="h-4 w-4 border-border mt-0.5"
+                      className="h-4 w-4 border-border/60 mt-0.5"
                     />
                     <div>
                       <span className="text-sm font-medium text-foreground">{VISIBILITY_OPTIONS[opt].label}</span>
@@ -241,7 +241,7 @@ export default function SettingsPage() {
                           }
                         }}
                         className={cn(
-                          "rounded-lg border border-input bg-background px-3 py-2 text-sm min-w-[160px]",
+                          "rounded-lg border border-input/60 bg-background px-3 py-2 text-sm min-w-[160px]",
                           "focus:outline-none focus:ring-1 focus:ring-ring/30 transition-colors"
                         )}
                       >
@@ -258,7 +258,7 @@ export default function SettingsPage() {
                         {workPreferredLocations.map((city) => (
                           <span
                             key={city}
-                            className="inline-flex items-center gap-1 rounded-md bg-accent border border-border px-2 py-1 text-xs text-foreground"
+                            className="inline-flex items-center gap-1 rounded-md bg-accent border border-border/60 px-2 py-1 text-xs text-foreground"
                           >
                             {city}
                             <button

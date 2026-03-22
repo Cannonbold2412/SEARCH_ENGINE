@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
@@ -214,6 +215,7 @@ function mergeFilledIntoChildForm(
 }
 
 export default function YourCardsPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { data: savedFamilies = [], isLoading } = useExperienceCardFamilies();
   const hasCards = savedFamilies.length > 0;
@@ -232,7 +234,6 @@ export default function YourCardsPage() {
     setEditForm,
     childEditForm,
     setChildEditForm,
-    populateParentForm,
     populateChildForm,
   } = useCardForms();
 
@@ -261,7 +262,8 @@ export default function YourCardsPage() {
             raw_text: text.trim(),
             current_card: currentCard,
             card_type: "parent",
-            card_id: editingSavedCardId,
+            // Keep Update fast: only fill the local form here.
+            // Actual DB persist happens when user clicks Done.
           },
         });
         if (res.filled && Object.keys(res.filled).length > 0) {
@@ -310,11 +312,10 @@ export default function YourCardsPage() {
   const onStartEditing = useCallback(
     (card: ExperienceCard) => {
       const id = getParentId(card);
-      setEditingSavedCardId(id);
-      setEditingSavedChildId(null);
-      populateParentForm(card as Record<string, unknown> & { id?: string });
+      if (!id) return;
+      router.push(`/cards/${encodeURIComponent(id)}/enhance`);
     },
-    [populateParentForm]
+    [router]
   );
 
   const onStartEditingChild = useCallback(

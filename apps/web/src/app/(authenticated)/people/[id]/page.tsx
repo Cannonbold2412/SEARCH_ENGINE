@@ -280,7 +280,7 @@ function PersonProfilePageContent() {
             ))}
           </div>
         ) : profile.experience_cards.length === 0 ? (
-          <div className="text-center py-8 rounded-lg border border-dashed border-border">
+          <div className="text-center py-8 rounded-lg border border-dashed border-border/60">
             <Briefcase className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
             <p className="text-sm text-muted-foreground">No experience cards shared.</p>
           </div>
@@ -338,7 +338,7 @@ function PersonProfilePageContent() {
                 )}
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4">
+              <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
                   <div className="h-8 w-8 rounded-lg bg-background flex items-center justify-center shrink-0">
                     <Lock className="h-4 w-4 text-muted-foreground" />

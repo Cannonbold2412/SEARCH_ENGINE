@@ -70,7 +70,7 @@ export default function ExplorePage() {
                 href={`/people/${person.id}?from=explore`}
                 className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-xl"
               >
-                <Card className="h-full transition-all duration-200 hover:bg-muted/50 hover:shadow-md hover:border-border">
+                <Card className="h-full transition-all duration-200 hover:bg-muted/50 hover:shadow-md hover:border-border/60">
                   <CardHeader className="pb-2">
                     <div className="flex items-start gap-3">
                       <div className="h-11 w-11 rounded-full bg-muted flex items-center justify-center flex-shrink-0 ring-1 ring-border/50 text-sm font-medium text-muted-foreground">

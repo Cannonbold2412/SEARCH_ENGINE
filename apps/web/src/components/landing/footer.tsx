@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function LandingFooter() {
   return (
-    <footer className="border-t border-border py-12 px-6">
+    <footer className="border-t border-border/60 py-12 px-6">
       <div className="container mx-auto max-w-5xl flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="flex flex-col items-center sm:items-start gap-1">
           <Link href="/" className="font-display text-lg font-bold text-gradient-logo">
