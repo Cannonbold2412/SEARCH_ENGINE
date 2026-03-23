@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database with pgvector extension
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: conxa-db
+    environment:
+      POSTGRES_USER: conxa
+      POSTGRES_PASSWORD: conxa_dev_password
+      POSTGRES_DB: conxa
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U conxa"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI backend
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: conxa-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://conxa:conxa_dev_password@db:5432/conxa
+      JWT_SECRET: dev-secret-change-in-production
+      CHAT_API_BASE_URL: ${CHAT_API_BASE_URL:-https://api.groq.com/openai/v1}
+      CHAT_API_KEY: ${CHAT_API_KEY}
+      CHAT_MODEL: ${CHAT_MODEL:-llama-3.3-70b-versatile}
+      EMBED_API_BASE_URL: ${EMBED_API_BASE_URL:-https://api.jina.ai/v1}
+      EMBED_API_KEY: ${EMBED_API_KEY}
+      EMBED_MODEL: ${EMBED_MODEL:-jina-embeddings-v3}
+      CORS_ORIGINS: http://localhost:3000,http://localhost:3001
+      # Optional: Add other environment variables as needed
+      # TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      # TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      # SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app
+    command: sh -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8080 --reload"
+
+  # Next.js frontend
+  web:
+    build:
+      context: .
+      dockerfile: ./apps/web/Dockerfile
+      target: builder  # Use builder stage for development
+    container_name: conxa-web
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+      NEXT_PUBLIC_VAPI_PUBLIC_KEY: ${NEXT_PUBLIC_VAPI_PUBLIC_KEY}
+      NEXT_PUBLIC_VAPI_ASSISTANT_ID: ${NEXT_PUBLIC_VAPI_ASSISTANT_ID}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web:/app/apps/web
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
+    command: sh -c "cd /app/apps/web && pnpm dev"
+
+  # Redis (optional - for caching and rate limiting)
+  redis:
+    image: redis:7-alpine
+    container_name: conxa-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: conxa-network

@@ -1,0 +1,31 @@
+[MASTER]
+max-line-length=100
+disable=
+    C0111,  # missing-docstring
+    C0103,  # invalid-name
+    R0903,  # too-few-public-methods
+    R0913,  # too-many-arguments
+    W0212,  # protected-access
+    C0114,  # missing-module-docstring
+    C0115,  # missing-class-docstring
+    C0116,  # missing-function-docstring
+
+[FORMAT]
+max-line-length=100
+
+[MESSAGES CONTROL]
+confidence=
+
+[REPORTS]
+output-format=text
+reports=no
+
+[REFACTORING]
+max-nested-blocks=5
+
+[BASIC]
+good-names=i,j,k,ex,db,_,id
+
+[DESIGN]
+max-args=10
+max-attributes=15
