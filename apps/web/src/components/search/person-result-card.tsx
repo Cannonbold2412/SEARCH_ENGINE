@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { apiAssetUrl } from "@/lib/constants";
-import type { PersonSearchResult } from "@/types";
+import type { PersonSearchResult } from "@/lib/types";
 
 type PersonResultCardProps = {
   person: PersonSearchResult;

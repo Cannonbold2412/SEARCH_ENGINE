@@ -7,10 +7,9 @@ layer rather than in the router so they can be tested and reused independently.
 """
 
 from datetime import date
-from typing import Any, Optional
+from typing import Any
 
-from src.schemas.builder import ExperienceCardPatch, ExperienceCardChildPatch
-
+from src.schemas.builder import ExperienceCardPatch
 
 # ---------------------------------------------------------------------------
 # Keys used when merging LLM-filled values into the current form state
@@ -20,19 +19,27 @@ from src.schemas.builder import ExperienceCardPatch, ExperienceCardChildPatch
 #: Boolean fields (is_current, experience_card_visibility) are handled
 #: separately in ``parent_merged_to_patch``.
 PARENT_MERGE_KEYS: tuple[str, ...] = (
-    "title", "summary", "normalized_role", "domain", "sub_domain",
-    "company_name", "company_type", "location", "employment_type",
-    "start_date", "end_date", "intent_primary", "intent_secondary_str",
-    "seniority_level", "confidence_score",
+    "title",
+    "summary",
+    "normalized_role",
+    "domain",
+    "sub_domain",
+    "company_name",
+    "company_type",
+    "location",
+    "employment_type",
+    "start_date",
+    "end_date",
+    "intent_primary",
+    "intent_secondary_str",
+    "seniority_level",
+    "confidence_score",
 )
-
-#: Child fields that the merge may fill.
-CHILD_MERGE_KEYS: tuple[str, ...] = ("items",)
-
 
 # ---------------------------------------------------------------------------
 # Core merge logic
 # ---------------------------------------------------------------------------
+
 
 def is_empty(v: Any) -> bool:
     """
@@ -73,7 +80,8 @@ def merged_form(
 # Patch builders
 # ---------------------------------------------------------------------------
 
-def _parse_date(value: Any) -> Optional[date]:
+
+def _parse_date(value: Any) -> date | None:
     """
     Parse a date from a merged form value.
 
@@ -96,7 +104,7 @@ def _parse_date(value: Any) -> Optional[date]:
 
 def parent_merged_to_patch(merged: dict[str, Any]) -> ExperienceCardPatch:
     """Build an ``ExperienceCardPatch`` from a merged frontend form dict."""
-    intent_secondary: Optional[list[str]] = None
+    intent_secondary: list[str] | None = None
     raw_secondary = merged.get("intent_secondary_str")
     if raw_secondary is not None:
         if isinstance(raw_secondary, str):
@@ -104,7 +112,7 @@ def parent_merged_to_patch(merged: dict[str, Any]) -> ExperienceCardPatch:
         elif isinstance(raw_secondary, list):
             intent_secondary = [str(x).strip() for x in raw_secondary if str(x).strip()]
 
-    confidence_score: Optional[float] = None
+    confidence_score: float | None = None
     raw_confidence = merged.get("confidence_score")
     if raw_confidence is not None and str(raw_confidence).strip():
         try:
@@ -135,23 +143,3 @@ def parent_merged_to_patch(merged: dict[str, Any]) -> ExperienceCardPatch:
             else None
         ),
     )
-
-
-def child_merged_to_patch(merged: dict[str, Any]) -> ExperienceCardChildPatch:
-    """Build an ``ExperienceCardChildPatch`` from a merged frontend form dict."""
-    items: Optional[list[dict[str, Any]]] = None
-    raw_items = merged.get("items")
-    if raw_items is not None and isinstance(raw_items, list):
-        items = []
-        for x in raw_items:
-            if not isinstance(x, dict):
-                continue
-            title = str(
-                x.get("title") or x.get("subtitle") or ""
-            ).strip()
-            if not title:
-                continue
-            desc = (x.get("description") or x.get("sub_summary") or "").strip() or None
-            items.append({"title": title, "description": desc})
-        items = items or None
-    return ExperienceCardChildPatch(items=items)

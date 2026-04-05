@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
 from src.prompts.builder_conversation import (
@@ -12,8 +11,6 @@ from src.prompts.builder_conversation import (
 )
 from src.providers import ChatServiceError, get_chat_provider
 from src.utils import extract_json_from_llm_response
-
-logger = logging.getLogger(__name__)
 
 
 def _parse_json_response(text: str) -> dict[str, Any]:
@@ -72,7 +69,9 @@ async def fast_turn(
     temperature = 0.5 if (mode or "").strip().lower() == "voice" else 0.6
     data = await _chat_json(prompt, max_tokens=900, temperature=temperature)
 
-    updated_working_narrative = str(data.get("working_narrative") or "").strip() or working_narrative
+    updated_working_narrative = (
+        str(data.get("working_narrative") or "").strip() or working_narrative
+    )
 
     raw_hidden_state = data.get("hidden_state")
     if raw_hidden_state and isinstance(raw_hidden_state, dict):
@@ -148,7 +147,9 @@ def fallback_stop_decision(*, hidden_state: dict[str, Any], turn_count: int) -> 
     }
 
 
-def fallback_director(*, stop_decision: dict[str, Any], hidden_state: dict[str, Any]) -> dict[str, Any]:
+def fallback_director(
+    *, stop_decision: dict[str, Any], hidden_state: dict[str, Any]
+) -> dict[str, Any]:
     strengths = hidden_state.get("hidden_strengths")
     first_strength = None
     if isinstance(strengths, list):
@@ -173,7 +174,9 @@ def fallback_director(*, stop_decision: dict[str, Any], hidden_state: dict[str, 
     }
 
 
-def fallback_reply(*, director_plan: dict[str, Any], stop_decision: dict[str, Any], hidden_state: dict[str, Any]) -> dict[str, Any]:
+def fallback_reply(
+    *, director_plan: dict[str, Any], stop_decision: dict[str, Any], hidden_state: dict[str, Any]
+) -> dict[str, Any]:
     strengths = hidden_state.get("hidden_strengths")
     surfaced_insights: list[str] = []
     top_strength = None
@@ -187,7 +190,9 @@ def fallback_reply(*, director_plan: dict[str, Any], stop_decision: dict[str, An
     if stop_decision.get("should_stop"):
         message = "I think I have a pretty strong picture of what stands out about you now, so I’m going to stop here before this turns repetitive."
         if top_strength:
-            message += f" One thing that comes through clearly is your knack for {top_strength.lower()}."
+            message += (
+                f" One thing that comes through clearly is your knack for {top_strength.lower()}."
+            )
         return {
             "assistant_message": message,
             "message_type": "stop",
@@ -213,7 +218,9 @@ def safe_hidden_state_payload(hidden_state: dict[str, Any]) -> dict[str, Any]:
         "hidden_strengths": _coerce_list(hidden_state.get("hidden_strengths")),
         "opportunity_hypotheses": _coerce_list(hidden_state.get("opportunity_hypotheses")),
         "missing_high_value_signals": _coerce_list(hidden_state.get("missing_high_value_signals")),
-        "possible_experience_boundaries": _coerce_list(hidden_state.get("possible_experience_boundaries")),
+        "possible_experience_boundaries": _coerce_list(
+            hidden_state.get("possible_experience_boundaries")
+        ),
         "schema_patch": _coerce_dict(hidden_state.get("schema_patch")),
         "confidence": _coerce_dict(hidden_state.get("confidence")),
     }

@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -16,7 +15,7 @@ class LedgerEntryResponse(BaseModel):
     id: str
     amount: int
     reason: str
-    reference_type: Optional[str] = None
-    reference_id: Optional[str] = None
-    balance_after: Optional[int] = None
+    reference_type: str | None = None
+    reference_id: str | None = None
+    balance_after: int | None = None
     created_at: datetime

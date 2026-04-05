@@ -1,6 +1,5 @@
 """Search pipeline, profile views, and contact unlock."""
 
-from .search import search_service
-from .search_logic import run_search
+from .search_logic import delete_search, list_searches, load_search_more, run_search
 
-__all__ = ["search_service", "run_search"]
+__all__ = ["run_search", "load_search_more", "list_searches", "delete_search"]

@@ -12,7 +12,7 @@ import {
 } from "../card/card-details";
 import { PenLine, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ExperienceCard, ExperienceCardChild } from "@/types";
+import type { ExperienceCard, ExperienceCardChild } from "@/lib/types";
 
 export interface ExperienceFamilyCardPreviewProps {
   parent: ExperienceCard;
@@ -146,7 +146,7 @@ export function ExperienceFamilyCardPreview({
           >
             <div className="relative pl-7 pt-0" onClick={(e) => e.stopPropagation()}>
               <span className="thread-line thread-line-animated top-0 bottom-4" aria-hidden />
-              <ul className="relative space-y-0">
+              <ul className="relative space-y-1">
                 {visibleChildren.map((child, childIdx) => {
                   const relationType = (child.child_type ?? "").toString().trim();
                   const relationDisplay = relationType ? relationType.replace(/_/g, " ") : "";
@@ -185,13 +185,13 @@ export function ExperienceFamilyCardPreview({
                                 {relationDisplay}
                               </span>
                             )}
-                            <p className="flex flex-wrap text-sm font-medium text-foreground leading-snug px-2.5 whitespace-pre-line">
+                            <p className="flex flex-col gap-1 text-sm font-medium text-foreground leading-snug px-2.5">
                               {(() => {
                                 const items = getChildDisplayItems(child);
                                 const childType = (child.child_type ?? "").toString().trim().replace(/_/g, " ");
                                 if (items.length === 0) return childType || "Detail";
                                 return items.map((it, i) => (
-                                  <span key={i}>
+                                  <span key={i} className="block">
                                     {it.title && it.summary ? (
                                       <>
                                         {it.title}:{" "}
@@ -200,7 +200,6 @@ export function ExperienceFamilyCardPreview({
                                     ) : (
                                       it.title || it.summary
                                     )}
-                                    {i < items.length - 1 && "\n"}
                                   </span>
                                 ));
                               })()}

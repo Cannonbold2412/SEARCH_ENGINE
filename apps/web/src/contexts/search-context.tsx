@@ -10,7 +10,8 @@ import {
 } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, apiWithIdempotency } from "@/lib/api";
-import type { PersonSearchResult, SearchResponse } from "@/types";
+import { useLanguage } from "@/contexts/language-context";
+import type { PersonSearchResult, SearchResponse } from "@/lib/types";
 
 type SearchMoreResponse = { people: PersonSearchResult[] };
 
@@ -34,6 +35,7 @@ const SearchContext = createContext<SearchContextValue | null>(null);
 const LOAD_MORE_LIMIT = 6;
 
 export function SearchProvider({ children }: { children: ReactNode }) {
+  const { language } = useLanguage();
   const [query, setQuery] = useState("");
   const [searchId, setSearchId] = useState<string | null>(null);
   const [people, setPeople] = useState<PersonSearchResult[]>([]);
@@ -47,7 +49,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
       const idempotencyKey = `search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       return apiWithIdempotency<SearchResponse>("/search", idempotencyKey, {
         method: "POST",
-        body: { query: q },
+        body: { query: q, language },
       });
     },
     onMutate: () => {
@@ -88,7 +90,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const data = await api<SearchMoreResponse>(
-        `/search/${searchId}/more?offset=${people.length}&limit=${LOAD_MORE_LIMIT}`
+        `/search/${searchId}/more?offset=${people.length}&limit=${LOAD_MORE_LIMIT}&language=${encodeURIComponent(language)}`
       );
       setPeople((prev) => [...prev, ...data.people]);
       setHasMore(data.people.length >= LOAD_MORE_LIMIT);
@@ -98,7 +100,7 @@ export function SearchProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [searchId, people.length, isLoadingMore, hasMore, queryClient]);
+  }, [searchId, people.length, isLoadingMore, hasMore, queryClient, language]);
 
   const value = useMemo<SearchContextValue>(
     () => ({

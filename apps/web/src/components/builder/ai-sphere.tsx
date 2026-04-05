@@ -57,7 +57,7 @@ export function AiSphere({
     }
   }, [active]);
 
-  const draw = useCallback(() => {
+  const draw = useCallback(function drawFrame() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -214,7 +214,7 @@ export function AiSphere({
       }
     }
 
-    animRef.current = requestAnimationFrame(draw);
+    animRef.current = requestAnimationFrame(drawFrame);
   }, [intensity, canvasSize, size, palette]);
 
   useEffect(() => {

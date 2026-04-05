@@ -16,7 +16,7 @@ import { PageLoading, PageError, ErrorMessage } from "@/components/feedback";
 import { VisibilitySection, type VisibilityMode } from "@/components/onboarding/visibility-section";
 import { api, apiUpload, type ApiOptions } from "@/lib/api";
 import { bioSchema, bioFormDefaultValues, type BioForm } from "@/lib/bio-schema";
-import type { PatchVisibilityRequest, VisibilitySettingsResponse } from "@/types";
+import type { PatchVisibilityRequest, VisibilitySettingsResponse } from "@/lib/types";
 import { useBio, useVisibility, useProfilePhoto, BIO_QUERY_KEY, VISIBILITY_QUERY_KEY, PROFILE_SCHEMA_QUERY_KEY } from "@/hooks";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -197,8 +197,8 @@ export default function OnboardingBioPage() {
       });
       queryClient.invalidateQueries({ queryKey: BIO_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: VISIBILITY_QUERY_KEY });
-      setOnboardingStep("builder");
-      router.push("/builder");
+      setOnboardingStep("language");
+      router.push("/onboarding/language");
     } catch (e) {
       setServerError(e instanceof Error ? e.message : "Failed to save");
     }
@@ -405,7 +405,7 @@ export default function OnboardingBioPage() {
                 {putBio.isPending || patchVisibility.isPending ? "Saving..." : "Save & continue to Builder"}
               </Button>
               <p className="text-xs text-muted-foreground self-center leading-relaxed">
-                Next: add your experience in the builder, or go to Home from the menu.
+                Next: select your preferred language.
               </p>
             </div>
           </form>

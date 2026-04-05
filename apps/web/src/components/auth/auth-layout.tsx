@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { HeroBg, DepthGrid } from "@/components/hero";
+import { AuthBg, DepthGrid } from "@/components/common";
 
 type AuthLayoutProps = {
   title: string;
@@ -12,7 +12,7 @@ type AuthLayoutProps = {
 export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative">
-      <HeroBg />
+      <AuthBg />
       <DepthGrid />
       <motion.div
         initial={{ opacity: 0, y: 8 }}

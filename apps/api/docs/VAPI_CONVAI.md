@@ -1,81 +1,62 @@
-# Vapi AI Conversational Voice Integration
+# Vapi voice integration
 
-This project uses **Vapi AI** for real-time voice experience building.
-
-## Migration from ElevenLabs
-
-If migrating from ElevenLabs, update your `.env`:
-- Replace `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `ELEVENLABS_CALLBACK_BASE_URL` with `VAPI_API_KEY` and `VAPI_CALLBACK_BASE_URL`. The flow uses our own LLM (clarify pipeline) while Vapi handles STT, TTS, and real-time WebRTC.
+The web app uses **Vapi** for real-time voice (STT, TTS, WebRTC). The assistant you talk to is configured in the **Vapi dashboard** (system prompt, model, voice, transcriber). This API does **not** expose a custom OpenAI-compatible proxy at `/convai/v1/chat/completions`; experience extraction runs **after** the call when the client posts a transcript (or a Vapi `call_id` for server-side fetch).
 
 ## Architecture
 
-- **Vapi**: STT (user speech → text), TTS (our replies → speech), WebRTC transport
-- **Our backend**: Custom LLM proxy; receives chat messages from Vapi and runs the clarify pipeline to build experience cards
+| Layer | Role |
+|--------|------|
+| **Vapi (client)** | `npm` package `@vapi-ai/web` in the Next.js app: connects with the dashboard **public** key + **assistant ID**, handles audio and conversation in Vapi’s cloud. |
+| **This API** | Authenticated **`POST /builder/transcript/commit`**: optional `call_id` → fetch full transcript from Vapi’s REST API using **`VAPI_API_KEY`**; then run `detect_experiences` + `run_draft_single` per detected experience (see `services/builder/engine.py`). |
 
-## Setup
+So: conversation = Vapi dashboard assistant; card extraction = our Python pipeline on commit—not streaming LLM turns through this repo.
 
-### 1. Create a Vapi Account
+## Web app configuration
 
-1. Sign up at [dashboard.vapi.ai](https://dashboard.vapi.ai)
-2. Get your **API Key** from the dashboard
+Set in `apps/web/.env.local` (see `apps/web/.env.example`):
 
-### 2. Provider Keys (Lower Cost – ElevenLabs + Deepgram)
+- **`NEXT_PUBLIC_VAPI_PUBLIC_KEY`** — Public API key from [dashboard.vapi.ai](https://dashboard.vapi.ai) (safe for the browser).
+- **`NEXT_PUBLIC_VAPI_ASSISTANT_ID`** — Assistant ID from the dashboard.
 
-Add your own API keys in the Vapi Dashboard so you pay ElevenLabs and Deepgram directly instead of through Vapi’s markup:
+Voice UI components (`builder-chat`, `vapi-voice-widget`) call `createPatchedVapiClient(publicKey)` and `vapi.start(assistantId)`.
 
-1. In [Vapi Dashboard](https://dashboard.vapi.ai) go to **Provider Keys** (or Settings → Provider Keys)
-2. Add **ElevenLabs** – your ElevenLabs API key for TTS
-3. Add **Deepgram** – your Deepgram API key for STT
+## Server (API) configuration
 
-Vapi will use these keys when the assistant uses `11labs` (voice) and `deepgram` (transcriber). You are billed by each provider plus Vapi’s platform usage.
+Set in `apps/api/.env`:
 
-### 3. Environment Variables
+- **`VAPI_API_KEY`** — Private key from the Vapi dashboard. Used to **retrieve call/transcript by `call_id`** when the client commits without sending the full `transcript` body.
+- **`VAPI_API_BASE_URL`** (optional) — Default `https://api.vapi.ai`.
 
-```env
-VAPI_API_KEY=your_vapi_api_key
-VAPI_CALLBACK_BASE_URL=https://your-api-domain.com
-# Optional – defaults: 11labs, Deepgram nova-2
-VAPI_VOICE_PROVIDER=11labs
-VAPI_VOICE_ID=21m00Tcm4TlvDq8ikWAM
-VAPI_TRANSCRIBER_PROVIDER=deepgram
-VAPI_TRANSCRIBER_MODEL=nova-2
-```
+No `VAPI_CALLBACK_BASE_URL` is required for this flow: there is no inbound “custom LLM” webhook on this service for voice.
 
-- `VAPI_API_KEY`: Your private Vapi API key from the dashboard
-- `VAPI_CALLBACK_BASE_URL`: Public base URL of your API (e.g. `https://conxa-api.onrender.com`). Vapi calls `{base}/convai/v1/chat/completions` when using our custom LLM.
-- `VAPI_VOICE_PROVIDER`, `VAPI_VOICE_ID`: Voice provider and voice ID (default: ElevenLabs)
-- `VAPI_TRANSCRIBER_PROVIDER`, `VAPI_TRANSCRIBER_MODEL`: Transcriber provider and model (default: Deepgram nova-2)
+## End-to-end flow
 
-### 4. Flow
+1. User opens Builder (`/builder`) and starts voice; the browser runs the Vapi Web SDK with the dashboard assistant.
+2. User and assistant speak; transcript chunks can be accumulated in the client.
+3. When the call ends, the client calls **`POST /builder/transcript/commit`** with `Authorization: Bearer <jwt>` and a JSON body such as:
+   - `call_id`: Vapi call id (server fetches transcript if `VAPI_API_KEY` is set), and/or  
+   - `transcript`: full text fallback assembled in the browser.  
+   At least one must produce non-empty text.
+4. The API runs **`commit_builder_transcript`** → **`_commit_extraction_input`**: `detect_experiences` then **`run_draft_single`** for each experience index, then finalizes committed cards (see `EXPERIENCE_CARD_FLOW.md`).
 
-1. User clicks "Start voice" in the builder
-2. Frontend uses Vapi Web SDK with our API as proxy: `new Vapi(token, API_BASE + '/convai')`
-3. Our `/convai/call` and `/convai/call/web` endpoints receive the request, validate JWT, and create a Vapi call with a transient assistant
-4. The transient assistant uses our custom LLM URL: `{VAPI_CALLBACK_BASE_URL}/convai/v1/chat/completions?user_id={user_id}`
-5. Vapi calls our chat completions endpoint with conversation messages; we run the clarify pipeline and return the reply
-6. Vapi speaks the reply via TTS
+## API endpoint
 
-## API Endpoints
+### `POST /builder/transcript/commit`
 
-### `POST /convai/call` and `POST /convai/call/web`
+- **Auth:** required (`get_current_user`).
+- **Body:** `BuilderTranscriptCommitRequest` — `call_id`, `transcript`, `session_id`, `mode` (`"text"` \| `"voice"`).
+- **Response:** `BuilderSessionCommitResponse` — `session_id`, `session_status`, `committed_card_ids`, `committed_card_count`, etc.
 
-Proxy for Vapi web calls. Requires `Authorization: Bearer <token>`.
-Creates a call with a transient assistant that uses our custom LLM.
-The frontend uses the Vapi Web SDK with this URL as the proxy base.
+## Provider keys (cost)
 
-### `POST /convai/v1/chat/completions`
-
-OpenAI-compatible. Called by Vapi with conversation messages.
-We run the clarify pipeline and stream the assistant reply.
+In the Vapi dashboard under **Provider Keys**, you can add your own **ElevenLabs** (TTS) and **Deepgram** (STT) keys so usage is billed by those providers plus Vapi’s platform fee, instead of only Vapi’s bundled rates.
 
 ## Troubleshooting
 
-**If you see `503 Voice requires the callback URL to reach this server`:** You're running the API locally but `VAPI_CALLBACK_BASE_URL` points to production. Vapi's cloud calls that URL for AI responses, so it must reach the same process that created the session. For local development, expose your API via a tunnel (e.g. `ngrok http 8000`) and set `VAPI_CALLBACK_BASE_URL` to the tunnel URL (e.g. `https://abc123.ngrok.io`).
+**Transcript empty / commit returns zero cards:** Ensure either `transcript` in the request is non-empty or `call_id` is valid and **`VAPI_API_KEY`** is set so the server can fetch the call from Vapi.
 
-**If you see `503 Voice service unavailable`:** Check that `VAPI_API_KEY` and `VAPI_CALLBACK_BASE_URL` are set and that your API is publicly reachable.
+**401 on commit:** JWT missing or expired; user must be logged in.
 
-**If you see `Missing conversation context`:** Ensure the custom LLM URL includes `user_id` as a query parameter. Our proxy adds this automatically.
+**502/503 from transcript fetch:** Vapi API unreachable or invalid `call_id`; fall back to passing `transcript` from the client.
 
-**If you see `Session not found` (404) with `conversation_id=.../chat/completions`:** Vapi appends `/chat/completions` to the custom LLM URL; with some clients this can end up in the `user_id` query value. Our server strips that suffix automatically. If the issue persists, ensure `VAPI_CALLBACK_BASE_URL` is correct and the call was started via our proxy (which creates the session).
-
-**Provider keys:** Add ElevenLabs and Deepgram keys in the Vapi Dashboard under Provider Keys to reduce cost. Without them, Vapi uses its own keys and marks up usage. Override voice/transcriber via `VAPI_VOICE_PROVIDER`, `VAPI_VOICE_ID`, `VAPI_TRANSCRIBER_PROVIDER`, `VAPI_TRANSCRIBER_MODEL` in `.env`.
+**Legacy `/convai/*` routes:** Older docs referred to a custom LLM proxy and in-memory ConvAI session. That code path is not present in the current API; use the dashboard assistant + `/builder/transcript/commit` instead.

@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { BuilderChat } from "@/components/builder";
 
-export default function BuilderPage() {
+export default function Page() {
   return (
     <motion.div
       className="flex flex-col min-h-0 h-[calc(100vh-6rem)] max-h-[calc(100vh-6rem)] overflow-hidden -mt-2 sm:-mt-3"

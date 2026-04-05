@@ -66,12 +66,15 @@ export function FamilyTree({
   }, []);
 
   useEffect(() => {
-    recalc();
     const el = wrapperRef.current;
     if (!el) return;
+    const frame = requestAnimationFrame(recalc);
     const ro = new ResizeObserver(() => recalc());
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+    };
   }, [recalc, childNodes.length]);
 
   useEffect(() => {

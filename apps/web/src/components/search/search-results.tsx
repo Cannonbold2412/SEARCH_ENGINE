@@ -6,7 +6,7 @@ import { LockOpen, SearchX } from "lucide-react";
 import { PersonResultCard } from "./person-result-card";
 import { useSearch } from "@/contexts/search-context";
 import { Button } from "@/components/ui/button";
-import type { PersonSearchResult } from "@/types";
+import type { PersonSearchResult } from "@/lib/types";
 
 type SearchResultsProps = {
   searchId: string | null;

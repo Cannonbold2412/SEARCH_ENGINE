@@ -1,14 +1,14 @@
 """Request/response schemas for the builder (experience card pipeline) endpoints."""
 
-from datetime import datetime, date
-from typing import Any, Literal, Optional
+from datetime import date, datetime
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
-
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 # ---------------------------------------------------------------------------
 # Fill-missing-from-text
 # ---------------------------------------------------------------------------
+
 
 class FillFromTextRequest(BaseModel):
     """Request for fill-missing-from-text: rewrite + fill only missing fields. Optionally persist to DB."""
@@ -16,8 +16,9 @@ class FillFromTextRequest(BaseModel):
     raw_text: str
     card_type: Literal["parent", "child"] = "parent"
     current_card: dict[str, Any] = {}
-    card_id: Optional[str] = None   # if set, merge and PATCH this parent card
-    child_id: Optional[str] = None  # if set, merge and PATCH this child card
+    card_id: str | None = None  # if set, merge and PATCH this parent card
+    child_id: str | None = None  # if set, merge and PATCH this child card
+    language: str = "en"  # BCP-47 language code; translate non-English to English
 
 
 class FillFromTextResponse(BaseModel):
@@ -29,85 +30,27 @@ class FillFromTextResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Conversation-first Builder
 # ---------------------------------------------------------------------------
-
-class BuilderChatTurnRequest(BaseModel):
-    """One conversation turn for the new Builder engine."""
-
-    session_id: Optional[str] = None
-    person_id: Optional[str] = None
-    message: str
-    mode: Literal["text", "voice"] = "text"
-
-
-class BuilderTurnResponse(BaseModel):
-    """One visible Builder turn."""
-
-    id: str
-    role: Literal["user", "assistant"]
-    content: str
-    turn_index: int
-    message_type: Optional[str] = None
-    created_at: Optional[datetime] = None
-
-
-class BuilderChatTurnResponse(BaseModel):
-    """Frontend-safe response for one Builder conversation turn."""
-
-    session_id: str
-    assistant_message: str
-    working_narrative: Optional[str] = None
-    surfaced_insights: list[str] = []
-    should_continue: bool = True
-    session_status: str
-    # When true, the chat agent ended and extraction can be queued/committed.
-    ready_to_commit: bool = False
-    # True when backend queued background schema extraction/commit for this session.
-    extract_schema_queued: bool = False
-
-
-class BuilderSessionResponse(BaseModel):
-    """Current state of a Builder session."""
-
-    session_id: str
-    mode: Literal["text", "voice"]
-    session_status: str
-    current_focus: Optional[str] = None
-    working_narrative: Optional[str] = None
-    turn_count: int = 0
-    stop_confidence: float = 0.0
-    surfaced_insights: list[str] = []
-    should_continue: bool = True
-    ready_to_commit: bool = False
-    turns: list[BuilderTurnResponse] = []
-
-
 class BuilderSessionCommitResponse(BaseModel):
     """Commit response for projecting a Builder session into experience cards."""
 
     session_id: str
     session_status: str
-    working_narrative: Optional[str] = None
+    working_narrative: str | None = None
     committed_card_ids: list[str] = []
     committed_card_count: int = 0
+    cards: list["ExperienceCardResponse"] = []
+    children: list["ExperienceCardChildResponse"] = []
+    mode: Literal["text", "voice"] | None = None
 
 
 class BuilderTranscriptCommitRequest(BaseModel):
     """Commit cards from a completed Vapi conversation transcript."""
 
-    call_id: Optional[str] = None
-    transcript: Optional[str] = None
-    session_id: Optional[str] = None
+    call_id: str | None = None
+    transcript: str | None = None
+    session_id: str | None = None
     mode: Literal["text", "voice"] = "voice"
-
-
-# ---------------------------------------------------------------------------
-# Finalize / commit
-# ---------------------------------------------------------------------------
-
-class CommitDraftSetRequest(BaseModel):
-    """Optional body for commit: approve only selected card ids, or all if omitted."""
-
-    card_ids: Optional[list[str]] = None
+    language: str = "en"  # BCP-47 language code; translate non-English to English
 
 
 class FinalizeExperienceCardRequest(BaseModel):
@@ -120,7 +63,8 @@ class FinalizeExperienceCardRequest(BaseModel):
 # Experience card create / patch / response
 # ---------------------------------------------------------------------------
 
-def _location_to_str(v: Any) -> Optional[str]:
+
+def _location_to_str(v: Any) -> str | None:
     """Convert location value (str or dict) to a plain string for DB storage."""
     if v is None:
         return None
@@ -131,7 +75,8 @@ def _location_to_str(v: Any) -> Optional[str]:
         if isinstance(text, str) and text.strip():
             return text.strip()
         parts = [
-            x for x in (v.get("city"), v.get("region"), v.get("country"))
+            x
+            for x in (v.get("city"), v.get("region"), v.get("country"))
             if isinstance(x, str) and x.strip()
         ]
         return ", ".join(parts) if parts else None
@@ -141,29 +86,29 @@ def _location_to_str(v: Any) -> Optional[str]:
 class ExperienceCardBase(BaseModel):
     """Shared optional fields for create/patch. Normalises the ``location`` field."""
 
-    title: Optional[str] = None
-    normalized_role: Optional[str] = None
-    domain: Optional[str] = None
-    sub_domain: Optional[str] = None
-    company_name: Optional[str] = None
-    company_type: Optional[str] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    is_current: Optional[bool] = None
-    location: Optional[str] = None  # accepts str or dict; normalised to str for DB
-    is_remote: Optional[bool] = None
-    employment_type: Optional[str] = None
-    summary: Optional[str] = None
-    raw_text: Optional[str] = None
-    intent_primary: Optional[str] = None
-    intent_secondary: Optional[list[str]] = None
-    seniority_level: Optional[str] = None
-    confidence_score: Optional[float] = None
-    experience_card_visibility: Optional[bool] = None
+    title: str | None = None
+    normalized_role: str | None = None
+    domain: str | None = None
+    sub_domain: str | None = None
+    company_name: str | None = None
+    company_type: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    is_current: bool | None = None
+    location: str | None = None  # accepts str or dict; normalised to str for DB
+    is_remote: bool | None = None
+    employment_type: str | None = None
+    summary: str | None = None
+    raw_text: str | None = None
+    intent_primary: str | None = None
+    intent_secondary: list[str] | None = None
+    seniority_level: str | None = None
+    confidence_score: float | None = None
+    experience_card_visibility: bool | None = None
 
     @field_validator("location", mode="before")
     @classmethod
-    def _normalize_location(cls, v: Any) -> Optional[str]:
+    def _normalize_location(cls, v: Any) -> str | None:
         return _location_to_str(v)
 
 
@@ -174,32 +119,34 @@ class ExperienceCardCreate(ExperienceCardBase):
 class ExperienceCardPatch(ExperienceCardBase):
     """Payload for patching an existing experience card (all fields optional)."""
 
+    language: str = "en"  # BCP-47 language code; translate non-English to English
+
 
 class ExperienceCardResponse(BaseModel):
     id: str
     user_id: str
-    title: Optional[str] = None
-    normalized_role: Optional[str] = None
-    domain: Optional[str] = None
-    sub_domain: Optional[str] = None
-    company_name: Optional[str] = None
-    company_type: Optional[str] = None
-    team: Optional[str] = None
-    start_date: Optional[date] = None
-    end_date: Optional[date] = None
-    is_current: Optional[bool] = None
-    location: Optional[str] = None
-    is_remote: Optional[bool] = None
-    employment_type: Optional[str] = None
-    summary: Optional[str] = None
-    raw_text: Optional[str] = None
-    intent_primary: Optional[str] = None
+    title: str | None = None
+    normalized_role: str | None = None
+    domain: str | None = None
+    sub_domain: str | None = None
+    company_name: str | None = None
+    company_type: str | None = None
+    team: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    is_current: bool | None = None
+    location: str | None = None
+    is_remote: bool | None = None
+    employment_type: str | None = None
+    summary: str | None = None
+    raw_text: str | None = None
+    intent_primary: str | None = None
     intent_secondary: list[str] = []
-    seniority_level: Optional[str] = None
-    confidence_score: Optional[float] = None
+    seniority_level: str | None = None
+    confidence_score: float | None = None
     experience_card_visibility: bool = True
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -208,6 +155,7 @@ class ExperienceCardResponse(BaseModel):
 # Experience card children
 # ---------------------------------------------------------------------------
 
+
 class ExperienceCardChildPatch(BaseModel):
     """
     Patch payload for ExperienceCardChild.
@@ -215,21 +163,21 @@ class ExperienceCardChildPatch(BaseModel):
     ``value.items`` uses ``ChildValueItem`` shape: ``{ title, description }``.
     """
 
-    items: Optional[list[dict[str, Any]]] = None
+    items: list[dict[str, Any]] | None = None
 
 
 class ChildValueItem(BaseModel):
     """One item in a child card ``value.items[]``."""
 
     title: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class ExperienceCardChildResponse(BaseModel):
     """Response DTO for ExperienceCardChild."""
 
     id: str
-    parent_experience_id: Optional[str] = None
+    parent_experience_id: str | None = None
     child_type: str = ""
     items: list[ChildValueItem] = []
 
@@ -241,3 +189,36 @@ class CardFamilyResponse(BaseModel):
 
     parent: ExperienceCardResponse
     children: list[ExperienceCardChildResponse] = []
+
+
+# ---------------------------------------------------------------------------
+# Commit full draft (enhance flow — single transaction)
+# ---------------------------------------------------------------------------
+
+
+class CommitCardDraftChild(BaseModel):
+    """
+    One child row to upsert. If ``id`` is set, update that row; otherwise create
+    or update by ``child_type`` (unique per parent).
+    """
+
+    id: str | None = None
+    child_type: str = ""
+    items: list[Any] = []
+
+    @model_validator(mode="after")
+    def _validate_new_child(self) -> "CommitCardDraftChild":
+        from src.domain import ALLOWED_CHILD_TYPES
+
+        if self.id is None:
+            ct = (self.child_type or "").strip()
+            if not ct or ct not in ALLOWED_CHILD_TYPES:
+                raise ValueError("When id is omitted, child_type must be a valid dimension type.")
+        return self
+
+
+class CommitCardDraftRequest(BaseModel):
+    """Persist a full parent + children draft from the enhance editor (one shot)."""
+
+    parent: ExperienceCardPatch
+    children: list[CommitCardDraftChild] = []

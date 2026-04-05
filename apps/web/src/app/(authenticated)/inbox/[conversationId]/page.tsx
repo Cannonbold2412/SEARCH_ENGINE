@@ -11,164 +11,34 @@ import {
   Phone,
   Video,
   Info,
-  Check,
-  CheckCheck,
-  Clock,
-  AlertCircle,
   Paperclip,
   Smile,
   Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { ConversationDetail, MessageItem } from "@/types";
+import type { ConversationDetail, MessageItem } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PageLoading, PageError } from "@/components/feedback";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "../../../../components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "../../../../components/ui/tooltip";
-
-// Message status types for UI state
-type MessageStatus = "sending" | "sent" | "delivered" | "read" | "error";
+  type MessageStatus,
+  formatMessageTime,
+  isSameDay,
+  getInitials,
+  getAvatarColor,
+  MessageStatusIcon,
+  DateSeparator,
+} from "@/components/inbox";
 
 interface MessageWithStatus extends MessageItem {
   status?: MessageStatus;
-}
-
-// Format message time with smart defaults
-function formatMessageTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-// Format date separator
-function formatDateSeparator(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  const now = new Date();
-  const isToday =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-
-  if (isToday) return "Today";
-
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const isYesterday =
-    date.getFullYear() === yesterday.getFullYear() &&
-    date.getMonth() === yesterday.getMonth() &&
-    date.getDate() === yesterday.getDate();
-
-  if (isYesterday) return "Yesterday";
-
-  // Within last 7 days - show day name
-  const daysDiff = Math.floor(
-    (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
-  );
-  if (daysDiff < 7) {
-    return date.toLocaleDateString(undefined, { weekday: "long" });
-  }
-
-  // Older - show full date
-  return date.toLocaleDateString(undefined, {
-    month: "long",
-    day: "numeric",
-    year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
-  });
-}
-
-// Check if messages are on the same day
-function isSameDay(a: string, b: string): boolean {
-  const dateA = new Date(a);
-  const dateB = new Date(b);
-  return (
-    dateA.getFullYear() === dateB.getFullYear() &&
-    dateA.getMonth() === dateB.getMonth() &&
-    dateA.getDate() === dateB.getDate()
-  );
-}
-
-// Get initials from display name
-function getInitials(name: string | null | undefined): string {
-  if (!name) return "?";
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
-
-// Generate avatar color based on name
-function getAvatarColor(name: string | null | undefined): string {
-  if (!name) return "bg-muted text-muted-foreground";
-  const colors = [
-    "bg-blue-500/15 text-blue-400",
-    "bg-emerald-500/15 text-emerald-400",
-    "bg-violet-500/15 text-violet-400",
-    "bg-pink-500/15 text-pink-400",
-    "bg-amber-500/15 text-amber-400",
-    "bg-indigo-500/15 text-indigo-400",
-    "bg-teal-500/15 text-teal-400",
-    "bg-orange-500/15 text-orange-400",
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
-}
-
-// Message status icon component
-function MessageStatusIcon({ status }: { status?: MessageStatus }) {
-  if (!status || status === "sent") {
-    return <Check className="h-3 w-3" />;
-  }
-  if (status === "delivered" || status === "read") {
-    return <CheckCheck className={cn("h-3 w-3", status === "read" && "text-blue-500")} />;
-  }
-  if (status === "sending") {
-    return <Clock className="h-3 w-3 animate-pulse" />;
-  }
-  if (status === "error") {
-    return <AlertCircle className="h-3 w-3 text-destructive" />;
-  }
-  return null;
-}
-
-// Date separator component
-function DateSeparator({ date }: { date: string }) {
-  return (
-    <div className="flex items-center justify-center my-4">
-      <div className="h-px bg-border/60 flex-1" />
-      <span className="px-3 py-1 text-[11px] font-medium text-muted-foreground bg-muted rounded-full mx-2">
-        {formatDateSeparator(date)}
-      </span>
-      <div className="h-px bg-border/60 flex-1" />
-    </div>
-  );
 }
 
 export default function ConversationPage() {
@@ -176,7 +46,6 @@ export default function ConversationPage() {
   const conversationId = params.conversationId as string;
   const queryClient = useQueryClient();
   const [messageText, setMessageText] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -293,14 +162,20 @@ export default function ConversationPage() {
     }
   }, [conversationQuery.data?.messages.length]);
 
-  // Simulate typing indicator when receiving messages (demo feature)
-  useEffect(() => {
-    if (!conversationQuery.data?.messages.length) return;
-    const lastMsg = conversationQuery.data.messages[conversationQuery.data.messages.length - 1];
-    if (!lastMsg.is_mine) {
-      setIsTyping(false);
-    }
-  }, [conversationQuery.data?.messages]);
+  const messages = useMemo(
+    () => (conversationQuery.data?.messages ?? []) as MessageWithStatus[],
+    [conversationQuery.data?.messages]
+  );
+  const isTyping = false;
+  const messagesWithSeparators = useMemo(
+    () =>
+      messages.map((msg, index) => ({
+        msg,
+        showDateSeparator:
+          index === 0 || !isSameDay(messages[index - 1].created_at, msg.created_at),
+      })),
+    [messages]
+  );
 
   if (conversationQuery.isLoading) {
     return (
@@ -383,10 +258,6 @@ export default function ConversationPage() {
     }
   };
 
-  // Group messages for display
-  const messages = conversation.messages as MessageWithStatus[];
-  let lastDate: string | null = null;
-
   return (
     <TooltipProvider delayDuration={300}>
       <motion.div
@@ -466,10 +337,7 @@ export default function ConversationPage() {
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {messages.map((msg, index) => {
-                    const showDateSeparator = !lastDate || !isSameDay(lastDate, msg.created_at);
-                    lastDate = msg.created_at;
-
+                  {messagesWithSeparators.map(({ msg, showDateSeparator }, index) => {
                     // Check if this is the first message in a group
                     const prevMsg = index > 0 ? messages[index - 1] : null;
                     const isFirstInGroup = !prevMsg || prevMsg.is_mine !== msg.is_mine;

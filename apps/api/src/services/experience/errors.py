@@ -1,11 +1,11 @@
 """Shared pipeline stage and error types for experience card pipeline and embedding."""
 
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 
-class PipelineStage(str, Enum):
+class PipelineStage(StrEnum):
     """Pipeline stage identifiers for error reporting."""
+
     REWRITE = "rewrite"
     EXTRACT = "extract"
     VALIDATE = "validate"
@@ -15,7 +15,8 @@ class PipelineStage(str, Enum):
 
 class PipelineError(Exception):
     """Pipeline error with stage context."""
-    def __init__(self, stage: PipelineStage, message: str, cause: Optional[Exception] = None):
+
+    def __init__(self, stage: PipelineStage, message: str, cause: Exception | None = None):
         self.stage = stage
         self.message = message
         self.cause = cause

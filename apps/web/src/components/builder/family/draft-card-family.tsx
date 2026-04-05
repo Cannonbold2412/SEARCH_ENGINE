@@ -13,7 +13,7 @@ import { ParentCardEditForm } from "../forms/parent-card-edit-form";
 import { ChildCardEditForm } from "../forms/child-card-edit-form";
 import { PenLine, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { DraftCardFamily, ExperienceCard, ExperienceCardChild } from "@/types";
+import type { DraftCardFamily, ExperienceCard, ExperienceCardChild } from "@/lib/types";
 import type { ParentCardForm, ChildCardForm } from "@/hooks/use-card-forms";
 
 interface DraftCardFamilyProps {
@@ -182,7 +182,7 @@ export function DraftCardFamily({
             className="thread-line thread-line-animated top-0 bottom-3"
             aria-hidden
           />
-          <ul className="relative space-y-0">
+          <ul className="relative space-y-3">
             {children.map((child, childIdx) => {
               const childId = child?.id ?? "";
               const childRelationType = (child?.child_type ?? "").toString().trim();
@@ -214,13 +214,13 @@ export function DraftCardFamily({
                               {relationDisplay(childRelationType)}
                             </p>
                           )}
-                          <p className="font-medium text-sm text-foreground whitespace-pre-line">
+                          <p className="flex flex-col gap-1 font-medium text-sm text-foreground">
                             {(() => {
                               const items = getChildDisplayItems(child as Record<string, unknown>);
                               const childType = childRelationType || "Untitled";
                               if (items.length === 0) return childType;
                               return items.map((it, i) => (
-                                <span key={i}>
+                                <span key={i} className="block">
                                   {it.title && it.summary ? (
                                     <>
                                       {it.title}:{" "}
@@ -229,7 +229,6 @@ export function DraftCardFamily({
                                   ) : (
                                     it.title || it.summary
                                   )}
-                                  {i < items.length - 1 && "\n"}
                                 </span>
                               ));
                             })()}

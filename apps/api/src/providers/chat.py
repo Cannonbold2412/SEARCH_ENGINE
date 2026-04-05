@@ -2,47 +2,59 @@ import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
+from typing import Any
 
 import httpx
-from pydantic import BaseModel
 
 from src.core import get_settings
-from src.utils import extract_json_from_llm_response
 from src.prompts.search_filters import (
     get_cleanup_prompt,
     get_single_extract_prompt,
 )
+from src.utils import extract_json_from_llm_response
 
 logger = logging.getLogger(__name__)
 
 
 class ChatServiceError(Exception):
-    """Raised when the chat/LLM API is unavailable or returns invalid or unexpected output."""
+    """Raised when the chat/LLM API is unavailable or returns invalid output."""
 
 
 class ChatRateLimitError(ChatServiceError):
     """Raised when the chat/LLM API rate limits the request."""
 
 
-class ParsedQuery(BaseModel):
-    company: str | None = None
-    team: str | None = None
-    open_to_work_only: bool = False
-    semantic_text: str = ""
+class ChatBadRequestError(ChatServiceError):
+    """Raised when the chat API rejects the request payload."""
+
+    def __init__(self, message: str, *, status_code: int, response_body: str = "") -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.response_body = response_body
 
 
 class ChatProvider(ABC):
     @abstractmethod
-    async def parse_search_query(self, query: str) -> ParsedQuery:
-        pass
+    async def _chat(
+        self,
+        messages: list[dict[str, str]],
+        max_tokens: int = 20480,
+        temperature: float | None = None,
+        response_format: dict[str, Any] | None = None,
+    ) -> str:
+        """Send chat-completion messages and return the assistant text."""
 
     @abstractmethod
-    async def parse_search_filters(self, query: str) -> dict:
-        """Cleanup → extract → validate; return full filters JSON for Search.filters."""
-        pass
+    async def parse_search_filters(self, query: str) -> dict[str, Any]:
+        """Cleanup -> extract -> validate; return full filters JSON for search parsing."""
 
-    async def chat(self, user_message: str, max_tokens: int = 20480, temperature: float | None = None) -> str:
-        """Send a single user message and return the assistant reply. Override if needed."""
+    async def chat(
+        self,
+        user_message: str,
+        max_tokens: int = 20480,
+        temperature: float | None = None,
+    ) -> str:
+        """Send a single user message and return the assistant reply."""
         return await self._chat(
             [{"role": "user", "content": user_message}],
             max_tokens=max_tokens,
@@ -51,28 +63,49 @@ class ChatProvider(ABC):
 
 
 class OpenAICompatibleChatProvider(ChatProvider):
-    """OpenAI-compatible endpoint (vLLM, etc.)."""
+    """OpenAI-compatible endpoint (vLLM, Groq, Ollama, etc.)."""
 
-    def __init__(
-        self,
-        base_url: str,
-        api_key: str | None,
-        model: str,
-    ):
+    def __init__(self, base_url: str, api_key: str | None, model: str) -> None:
         self.base_url = base_url.rstrip("/")
         if not self.base_url.endswith("/v1"):
             self.base_url = f"{self.base_url}/v1"
         self.api_key = api_key
         self.model = model
 
+    @staticmethod
+    def _extract_text_content(content: Any) -> str | None:
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if not isinstance(item, dict):
+                    continue
+                text = item.get("text")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text)
+            if parts:
+                return "".join(parts)
+        return None
+
+    @staticmethod
+    def _should_retry_without_response_format(exc: ChatServiceError) -> bool:
+        if not isinstance(exc, ChatBadRequestError):
+            return False
+        body = exc.response_body.lower()
+        if "response_format" not in body:
+            return False
+        markers = ("unsupported", "not supported", "invalid", "json_object", "json schema")
+        return any(marker in body for marker in markers)
+
     async def _chat(
         self,
         messages: list[dict[str, str]],
         max_tokens: int = 20480,
         temperature: float | None = None,
-        response_format: dict | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> str:
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "max_tokens": max_tokens,
@@ -80,43 +113,46 @@ class OpenAICompatibleChatProvider(ChatProvider):
         }
         if response_format is not None:
             payload["response_format"] = response_format
+
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+
         retries = 3
         base_delay_s = 1.0
 
         for attempt in range(retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=60.0) as client:
-                    r = await client.post(
+                    response = await client.post(
                         f"{self.base_url}/chat/completions",
                         json=payload,
                         headers=headers,
                     )
-                    r.raise_for_status()
-                    data = r.json()
-                    choices = data.get("choices") or []
-                    if not choices:
-                        raise ChatServiceError(
-                            "Chat API returned no choices (e.g. content filter)."
-                        )
-                    msg = choices[0].get("message") or {}
-                    content = msg.get("content")
-                    if content is None or not isinstance(content, str):
-                        raise ChatServiceError(
-                            "Chat API returned missing or non-string content."
-                        )
-                    stripped = content.strip()
-                    if not stripped:
-                        raise ChatServiceError(
-                            "Chat API returned empty content (LLM may have failed or been rate-limited)."
-                        )
-                    return stripped
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 429:
+                    response.raise_for_status()
+
+                data = response.json()
+                choices = data.get("choices") or []
+                if not choices:
+                    raise ChatServiceError("Chat API returned no choices.")
+
+                message = choices[0].get("message") or {}
+                content = self._extract_text_content(message.get("content"))
+                if content is None:
+                    raise ChatServiceError("Chat API returned missing or unsupported content.")
+
+                stripped = content.strip()
+                if not stripped:
+                    raise ChatServiceError("Chat API returned empty content.")
+                return stripped
+
+            except httpx.HTTPStatusError as exc:
+                body = getattr(exc.response, "text", None) or ""
+                status_code = exc.response.status_code
+
+                if status_code == 429:
                     if attempt < retries:
-                        retry_after = e.response.headers.get("Retry-After")
+                        retry_after = exc.response.headers.get("Retry-After")
                         try:
                             delay_s = float(retry_after) if retry_after else base_delay_s
                         except ValueError:
@@ -125,133 +161,104 @@ class OpenAICompatibleChatProvider(ChatProvider):
                         continue
                     raise ChatRateLimitError(
                         "Chat API rate limited the request. Please retry later."
-                    ) from e
-                body = getattr(e.response, "text", None) or ""
+                    ) from exc
+
+                if status_code == 400:
+                    raise ChatBadRequestError(
+                        "Chat API rejected the request payload.",
+                        status_code=status_code,
+                        response_body=body,
+                    ) from exc
+
                 if body:
-                    logger.warning(
-                        "Chat API error %s: %s",
-                        e.response.status_code,
-                        body[:500],
-                    )
+                    logger.warning("Chat API error %s: %s", status_code, body[:500])
                 raise ChatServiceError(
-                    f"Chat API returned {e.response.status_code}. Please try again later."
-                ) from e
-            except httpx.RequestError as e:
+                    f"Chat API returned {status_code}. Please try again later."
+                ) from exc
+
+            except httpx.RequestError as exc:
                 raise ChatServiceError(
                     "Chat service unavailable (timeout or connection error). Please try again later."
-                ) from e
-            except (KeyError, TypeError, IndexError) as e:
-                raise ChatServiceError("Chat API returned unexpected response format.") from e
+                ) from exc
 
-    async def parse_search_query(self, query: str) -> ParsedQuery:
-        prompt = """Parse the search query into structured constraints. Reply with a single JSON object only (no markdown, no code fence).
+            except (KeyError, TypeError, IndexError) as exc:
+                raise ChatServiceError("Chat API returned unexpected response format.") from exc
 
-Schema:
-- company: string or null — company name if mentioned (e.g. "Razorpay")
-- team: string or null — team/department if mentioned (e.g. "backend")
-- open_to_work_only: boolean — true only if the query clearly implies "looking for work" / "open to jobs"
-- semantic_query_text: string — the query text normalized for semantic search (keep intent, remove filler)
+        raise ChatServiceError("Chat API request failed after retries.")
 
-Example: {"company": null, "team": "backend", "open_to_work_only": false, "semantic_query_text": "backend engineer with Go experience"}"""
-        user_content = f'Query: "{query}"'
-        messages = [{"role": "user", "content": prompt + "\n\n" + user_content}]
-        text = None
-        try:
-            text = await self._chat(
-                messages,
-                max_tokens=300,
-                response_format={"type": "json_object"},
-            )
-        except ChatServiceError:
-            # Some providers (e.g. Groq with certain models) return 400 for response_format
-            logger.info(
-                "Chat API rejected response_format=json_object, retrying without it."
-            )
-            text = await self._chat(messages, max_tokens=300, response_format=None)
-        try:
-            raw = (text or "").strip()
-            if "```" in raw:
-                raw = raw.split("```")[1].replace("json", "").strip()
-            data = json.loads(raw)
-        except (ValueError, json.JSONDecodeError) as e:
-            raise ChatServiceError("Chat returned invalid JSON for query parse.") from e
-        return ParsedQuery(
-            company=data.get("company"),
-            team=data.get("team"),
-            open_to_work_only=bool(data.get("open_to_work_only", False)),
-            semantic_text=data.get("semantic_query_text", data.get("semantic_text", query)),
-        )
-
-    async def _chat_json(self, messages: list[dict[str, str]], max_tokens: int = 4096) -> dict:
-        """Call _chat and parse response as JSON; retry without response_format if needed."""
+    async def _chat_json(
+        self,
+        messages: list[dict[str, str]],
+        max_tokens: int = 4096,
+    ) -> dict[str, Any]:
+        """Call _chat and parse the response as a JSON object."""
         try:
             text = await self._chat(
                 messages,
                 max_tokens=max_tokens,
                 response_format={"type": "json_object"},
             )
-        except ChatServiceError:
-            logger.info(
-                "Chat API rejected response_format=json_object, retrying without it."
-            )
+        except ChatServiceError as exc:
+            if not self._should_retry_without_response_format(exc):
+                raise
+            logger.info("Chat API rejected response_format=json_object, retrying without it.")
             text = await self._chat(messages, max_tokens=max_tokens, response_format=None)
+
         raw = extract_json_from_llm_response(text or "")
         try:
-            return json.loads(raw)
-        except (ValueError, json.JSONDecodeError) as e:
-            raise ChatServiceError("Chat returned invalid JSON.") from e
+            parsed = json.loads(raw)
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise ChatServiceError("Chat returned invalid JSON.") from exc
 
-    async def parse_search_filters(self, query: str) -> dict:
-        """Cleanup → single extract; return JSON for Search.parsed_constraints_json (company_norm, team_norm, intent_primary, etc.)."""
-        # 1) Cleanup (plain text only)
+        if not isinstance(parsed, dict):
+            raise ChatServiceError("Chat returned a non-object JSON payload.")
+        return parsed
+
+    async def parse_search_filters(self, query: str) -> dict[str, Any]:
+        """Cleanup -> single extract; return parsed search constraints JSON."""
         cleanup_prompt = get_cleanup_prompt(query)
-        cleaned_text = (await self._chat(
-            [{"role": "user", "content": cleanup_prompt}],
-            max_tokens=500,
-            response_format=None,
-        )).strip()
+        cleaned_text = (
+            await self._chat(
+                [{"role": "user", "content": cleanup_prompt}],
+                max_tokens=500,
+                response_format=None,
+            )
+        ).strip()
         if not cleaned_text:
             cleaned_text = query
 
-        # 2) Single extraction (exact schema for parsed_constraints_json)
         extract_prompt = get_single_extract_prompt(query, cleaned_text)
-        extracted = await self._chat_json(
+        return await self._chat_json(
             [{"role": "user", "content": extract_prompt}],
             max_tokens=4096,
         )
-        if not isinstance(extracted, dict):
-            raise ChatServiceError("Extract step did not return a JSON object.")
-
-        return extracted
 
 
 class OpenAIChatProvider(OpenAICompatibleChatProvider):
     """Official OpenAI API."""
 
-    def __init__(self):
-        s = get_settings()
+    def __init__(self) -> None:
+        settings = get_settings()
         super().__init__(
             base_url="https://api.openai.com/v1",
-            api_key=s.openai_api_key,
-            model=s.chat_model or _OPENAI_DEFAULT_MODEL,
+            api_key=settings.openai_api_key,
+            model=settings.chat_model or _OPENAI_DEFAULT_MODEL,
         )
 
 
-# Default model for OpenAI official API when CHAT_MODEL is not set
 _OPENAI_DEFAULT_MODEL = "gpt-4o-mini"
-# Default model for OpenAI-compatible (vLLM, etc.) when CHAT_MODEL is not set
 _OPENAI_COMPATIBLE_DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 
 
 def get_chat_provider() -> ChatProvider:
-    s = get_settings()
-    if s.openai_api_key and not s.chat_api_base_url:
+    settings = get_settings()
+    if settings.openai_api_key and not settings.chat_api_base_url:
         return OpenAIChatProvider()
-    if s.chat_api_base_url:
+    if settings.chat_api_base_url:
         return OpenAICompatibleChatProvider(
-            base_url=s.chat_api_base_url,
-            api_key=s.chat_api_key,
-            model=s.chat_model or _OPENAI_COMPATIBLE_DEFAULT_MODEL,
+            base_url=settings.chat_api_base_url,
+            api_key=settings.chat_api_key,
+            model=settings.chat_model or _OPENAI_COMPATIBLE_DEFAULT_MODEL,
         )
     raise RuntimeError(
         "Chat LLM not configured. Set OPENAI_API_KEY or CHAT_API_BASE_URL (and CHAT_MODEL)."

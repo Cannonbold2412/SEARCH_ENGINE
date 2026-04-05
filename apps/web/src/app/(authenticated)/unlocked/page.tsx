@@ -6,7 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Briefcase, ChevronRight, LockOpen, MapPin } from "lucide-react";
 import { api } from "@/lib/api";
-import type { UnlockedCardsResponse } from "@/types";
+import type { UnlockedCardsResponse } from "@/lib/types";
+import { useLanguage } from "@/contexts/language-context";
 import { PageError, PageLoading } from "@/components/feedback";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -22,20 +23,27 @@ function formatUnlockedAt(value: string | null): string {
 }
 
 export default function UnlockedCardsPage() {
+  const { language } = useLanguage();
   const { data, isLoading, error } = useQuery({
-    queryKey: ["me", "unlocked-cards"],
-    queryFn: () => api<UnlockedCardsResponse>("/me/unlocked-cards"),
+    queryKey: ["me", "unlocked-cards", language],
+    queryFn: () =>
+      api<UnlockedCardsResponse>(
+        `/me/unlocked-cards?language=${encodeURIComponent(language)}`
+      ),
+    // Default staleTime is 2m app-wide; unlocked strings are server-translated — avoid stale English.
+    staleTime: 0,
   });
 
-  const cards = data?.cards ?? [];
   const sortedCards = useMemo(
-    () =>
-      [...cards].sort((a, b) => {
+    () => {
+      const cards = data?.cards ?? [];
+      return [...cards].sort((a, b) => {
         const aTime = a.unlocked_at ? new Date(a.unlocked_at).getTime() : 0;
         const bTime = b.unlocked_at ? new Date(b.unlocked_at).getTime() : 0;
         return bTime - aTime;
-      }),
-    [cards]
+      });
+    },
+    [data?.cards]
   );
 
   if (isLoading) {

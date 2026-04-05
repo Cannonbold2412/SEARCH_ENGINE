@@ -1,9 +1,11 @@
 """Credit wallet, ledger, and idempotency key operations."""
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from typing import Any
 
-from src.db.models import PersonProfile, CreditLedger, IdempotencyKey
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.db.models import CreditLedger, IdempotencyKey, PersonProfile
 
 
 async def get_balance(db: AsyncSession, person_id: str) -> int:
@@ -21,9 +23,7 @@ async def deduct_credits(
     reference_id: str | None = None,
 ) -> bool:
     result = await db.execute(
-        select(PersonProfile)
-        .where(PersonProfile.person_id == person_id)
-        .with_for_update()
+        select(PersonProfile).where(PersonProfile.person_id == person_id).with_for_update()
     )
     profile = result.scalar_one_or_none()
     if not profile:
@@ -54,9 +54,7 @@ async def add_credits(
 ) -> int:
     """Add credits to profile balance. Returns new balance."""
     result = await db.execute(
-        select(PersonProfile)
-        .where(PersonProfile.person_id == person_id)
-        .with_for_update()
+        select(PersonProfile).where(PersonProfile.person_id == person_id).with_for_update()
     )
     profile = result.scalar_one_or_none()
     if not profile:
@@ -96,7 +94,7 @@ async def save_idempotent_response(
     person_id: str,
     endpoint: str,
     response_status: int,
-    response_body: dict,
+    response_body: dict[str, Any],
 ):
     row = IdempotencyKey(
         key=key,

@@ -7,12 +7,15 @@ import { Briefcase, ChevronRight, MapPin, Users } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageError, PageLoading } from "@/components/feedback";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { PersonListResponse } from "@/types";
+import type { PersonListResponse } from "@/lib/types";
+import { useLanguage } from "@/contexts/language-context";
 
 export default function ExplorePage() {
+  const { language } = useLanguage();
   const { data, isLoading, error } = useQuery({
-    queryKey: ["people", "explore"],
-    queryFn: () => api<PersonListResponse>("/people"),
+    queryKey: ["people", "explore", language],
+    queryFn: () =>
+      api<PersonListResponse>(`/people?language=${encodeURIComponent(language)}`),
   });
 
   const people = data?.people ?? [];

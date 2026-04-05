@@ -43,9 +43,9 @@ Do NOT copy raw labels/headlines verbatim when they are repetitive, duplicated, 
 OUTPUT (STRICT)
 Return ONLY valid JSON with this exact schema:
 {
-  "people": [
+        "people": [
     {
-      "person_id": "string",
+            "person_id": "string",
       "why_matched": ["string", "string", "string"]
     }
   ]

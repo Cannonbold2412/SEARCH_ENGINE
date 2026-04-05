@@ -68,7 +68,7 @@ export default function SignupPage() {
   return (
     <AuthLayout
       title="CONXA"
-      subtitle="Create your account. We'll send a verification email to activate it."
+      subtitle="Create your account. We&apos;ll send a verification email to activate it."
     >
       <motion.div
         initial={{ opacity: 0, y: 16 }}
@@ -78,7 +78,7 @@ export default function SignupPage() {
         <Card>
           <CardHeader className="pb-4">
             <CardTitle className="text-lg">Sign up</CardTitle>
-            <CardDescription>Enter your details. We'll email a verification link.</CardDescription>
+            <CardDescription>Enter your details. We&apos;ll email a verification link.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit(onSubmitDetails)} className="space-y-4">

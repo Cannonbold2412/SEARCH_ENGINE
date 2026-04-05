@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { AUTH_TOKEN_KEY } from "@/lib/auth-flow";
 import { getVapiAssistantId, getVapiPublicKey, isVapiVoiceConfigured } from "@/lib/vapi-config";
 import { createPatchedVapiClient, isBenignVapiDisconnectError, type VapiClient } from "@/lib/vapi-client";
+import { isTranscriptPartial, mergePartialTranscriptChunk } from "@/lib/vapi-transcript";
+import { useLanguage } from "@/contexts/language-context";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +27,7 @@ function isTranscriptMessage(msg: unknown): msg is { type: string; role?: string
 }
 
 export function VapiVoiceWidget() {
+  const { language } = useLanguage();
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -70,7 +73,7 @@ export function VapiVoiceWidget() {
       setConnecting(false);
       return;
     }
-    if (!isVapiVoiceConfigured()) {
+    if (!isVapiVoiceConfigured(language)) {
       setError(
         "Set NEXT_PUBLIC_VAPI_PUBLIC_KEY and NEXT_PUBLIC_VAPI_ASSISTANT_ID (Vapi dashboard)."
       );
@@ -80,7 +83,7 @@ export function VapiVoiceWidget() {
 
     try {
       const publicKey = getVapiPublicKey();
-      const assistantId = getVapiAssistantId();
+      const assistantId = getVapiAssistantId(language);
       vapi = await createPatchedVapiClient(publicKey);
       vapiRef.current = vapi;
 
@@ -100,11 +103,9 @@ export function VapiVoiceWidget() {
 
       vapi.on("message", (msg: unknown) => {
         if (!isTranscriptMessage(msg)) return;
-        const transcriptType = String(
-          (msg as Record<string, unknown>).transcriptType ?? ""
-        ).toLowerCase();
-        const isPartial = transcriptType && transcriptType !== "final";
-        const text = (msg.transcript ?? (msg as Record<string, unknown>).content) as string;
+        const mrec = msg as Record<string, unknown>;
+        const isPartial = isTranscriptPartial(mrec);
+        const text = (msg.transcript ?? mrec.content) as string;
         const role =
           msg.role === "user" || msg.role === "assistant" ? msg.role : "assistant";
 
@@ -127,7 +128,7 @@ export function VapiVoiceWidget() {
                 m.id === activeId
                   ? {
                       ...m,
-                      content: isPartial ? t : mergeText(m.content, t),
+                      content: isPartial ? mergePartialTranscriptChunk(m.content, t) : mergeText(m.content, t),
                     }
                   : m
               );
@@ -143,7 +144,7 @@ export function VapiVoiceWidget() {
               m.id === activeId
                 ? {
                     ...m,
-                    content: isPartial ? t : mergeText(m.content, t),
+                    content: isPartial ? mergePartialTranscriptChunk(m.content, t) : mergeText(m.content, t),
                   }
                 : m
             );
@@ -180,7 +181,7 @@ export function VapiVoiceWidget() {
     } finally {
       setConnecting(false);
     }
-  }, [detachCall]);
+  }, [detachCall, language]);
 
   const handleEnd = useCallback(async () => {
     const vapi = vapiRef.current;
@@ -195,11 +196,17 @@ export function VapiVoiceWidget() {
 
   useEffect(() => {
     return () => {
-      if (vapiRef.current) {
-        handleEnd();
-      }
+      const vapi = vapiRef.current;
+      if (!vapi) return;
+      vapiRef.current = null;
+      resetCallState();
+      void vapi.stop().catch((error) => {
+        if (!isBenignVapiDisconnectError(error)) {
+          console.warn("Vapi stop on unmount:", error);
+        }
+      });
     };
-  }, [handleEnd]);
+  }, [resetCallState]);
 
   return (
     <div className="flex flex-col h-full min-h-0 rounded-xl border border-border/60 bg-card overflow-hidden">

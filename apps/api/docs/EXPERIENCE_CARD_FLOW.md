@@ -22,7 +22,7 @@ This document describes the **entire experience card flow**: from messy free-for
 ## 1. High-level flow
 
 ```
-User enters messy text (Builder Chat / edit form)
+User provides text (Vapi voice transcript commit, fill-missing-from-text, or edit form)
        │
        ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -60,7 +60,7 @@ User enters messy text (Builder Chat / edit form)
 └──────────────────────────────────────────────────────────────────────────┘
        │
        ▼
-Optional: CLARIFY (planner → question writer / apply answer) → merge patch into canonical family.
+Optional: CLARIFY (planner → question writer / apply answer) — implemented in pipeline; not exposed as a standalone HTTP route in the current API.
        │
        ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -110,12 +110,11 @@ Optional: EDIT (fill missing from text, or PATCH) → re-embed (search text deri
 
 **ENTITY_TAXONOMY (full list):** person, organization, company, school, team, community, place, event, program, domain, industry, product, service, artifact, document, portfolio_item, credential, award, tool, equipment, system, platform, instrument, method, process
 
-Prompt-facing strings are built in `apps/api/src/prompts/experience_card_enums.py` (derived from `domain.py`):
+**Prompt injection (`experience_card_enums.py`):** Only a subset is exported for LLM templates. The module currently provides:
 
-- `INTENT_ENUM`, `CHILD_INTENT_ENUM`, `CHILD_RELATION_TYPE_ENUM`, `ENTITY_TYPES`, `ALLOWED_CHILD_TYPES_STR`  
-- `SENIORITY_LEVEL_ENUM`, `EMPLOYMENT_TYPE_ENUM`, `COMPANY_TYPE_ENUM`, `EXPERIENCE_RELATION_TYPE_ENUM`  
+- `INTENT_ENUM`, `ALLOWED_CHILD_TYPES_STR`, `SENIORITY_LEVEL_ENUM`, `EMPLOYMENT_TYPE_ENUM`, `COMPANY_TYPE_ENUM`
 
-These are injected into prompt templates via `fill_prompt()`.
+These are merged into templates by `_DEFAULT_REPLACEMENTS` in `experience_card.py` (see §3). Other literals in the table above (e.g. `ChildIntent`, `ChildRelationType`, `ExperienceRelationType`, `ENTITY_TAXONOMY` / `EntityType`) remain in `domain.py` for typing and validation elsewhere; they are **not** all duplicated as comma-separated strings in `experience_card_enums.py`.
 
 ### 2.2 Database models
 
@@ -152,29 +151,24 @@ Relationship: one **ExperienceCard** has many **ExperienceCardChild**; children 
 
 **File:** `apps/api/src/schemas/builder.py`
 
+The builder router exposes CRUD, fill-missing, finalize, and transcript commit. There are **no** dedicated HTTP bodies for `detect_experiences` / `run_draft_single` / `clarify_experience_interactive`; those run inside `services/builder/engine.py` (e.g. `commit_builder_transcript` → `_commit_extraction_input`).
+
 **Request schemas (input to API):**
 
-| Schema | Fields (all that are sent in request body) |
-|--------|-------------------------------------------|
-| **RawExperienceCreate** | `raw_text: str` |
-| **DraftSingleRequest** | `raw_text: str`, `experience_index: int = 1`, `experience_count: int = 1` |
-| **ClarifyExperienceRequest** | `raw_text: str`, `card_type: str = "parent"`, `current_card: dict = {}`, `conversation_history: list[ClarifyMessage] = []`, `card_id: Optional[str]`, `child_id: Optional[str]`, `card_family: Optional[dict]`, `card_families: Optional[list[dict]]`, `detected_experiences: Optional[list[dict]]`, `focus_parent_id: Optional[str]`, `asked_history: Optional[list[dict]]`, `last_question_target: Optional[dict]`, `max_parent_questions: Optional[int]`, `max_child_questions: Optional[int]` |
-| **ClarifyMessage** | `role: str` ("assistant" \| "user"), `content: str` |
-| **ClarifyHistoryMessage** | `role: str`, `kind: str` ("clarify_question" \| "clarify_answer"), `target_type: Optional[str]`, `target_field: Optional[str]`, `target_child_type: Optional[str]`, `text: str` |
-| **LastQuestionTarget** | `target_type: Optional[str]`, `target_field: Optional[str]`, `target_child_type: Optional[str]` |
-| **FillFromTextRequest** | `raw_text: str`, `card_type: str = "parent"`, `current_card: dict = {}`, `card_id: Optional[str]`, `child_id: Optional[str]` |
-| **ExperienceCardPatch** | All optional: `title`, `normalized_role`, `domain`, `sub_domain`, `company_name`, `company_type`, `start_date`, `end_date`, `is_current`, `location` (dict: city, region, country, text, is_remote), `is_remote`, `employment_type`, `summary`, `raw_text`, `intent_primary`, `intent_secondary`, `seniority_level`, `confidence_score`, `experience_card_visibility` |
+| Schema | Fields (request body) |
+|--------|------------------------|
+| **FillFromTextRequest** | `raw_text: str`, `card_type: Literal["parent","child"] = "parent"`, `current_card: dict = {}`, `card_id: Optional[str]`, `child_id: Optional[str]` |
+| **BuilderTranscriptCommitRequest** | `call_id: Optional[str]`, `transcript: Optional[str]`, `session_id: Optional[str]`, `mode: Literal["text","voice"] = "voice"` — for `POST /builder/transcript/commit`. At least one of `call_id` (server fetches transcript from Vapi) or `transcript` must yield text. |
+| **FinalizeExperienceCardRequest** | `card_id: str` |
+| **ExperienceCardCreate** | Same optional fields as patch (parent card create). |
+| **ExperienceCardPatch** | All optional: `title`, `normalized_role`, `domain`, `sub_domain`, `company_name`, `company_type`, `start_date`, `end_date`, `is_current`, `location` (normalized to `str` for DB), `is_remote`, `employment_type`, `summary`, `raw_text`, `intent_primary`, `intent_secondary`, `seniority_level`, `confidence_score`, `experience_card_visibility` |
 | **ExperienceCardChildPatch** | `items: Optional[list[dict]]` — list of `{ title: str, description: str \| None }`. |
-| **FinalizeExperienceCardRequest** | `card_id: str` — request body for `POST /experience-cards/finalize`. |
 
 **Response schemas (output from API):**
 
 | Schema | Fields (returned to client) |
 |--------|-----------------------------|
-| **DetectExperiencesResponse** | `count: int = 0`, `experiences: list[DetectedExperienceItem]` where each item has `index: int`, `label: str`, `suggested: bool = False` |
-| **DraftSetResponse** | `draft_set_id: str`, `raw_experience_id: str`, `card_families: list[DraftCardFamily]` |
-| **DraftCardFamily** | `parent: dict`, `children: list[dict]` — each card in API response shape |
-| **ClarifyExperienceResponse** | `clarifying_question: Optional[str]`, `filled: dict = {}`, `action: Optional[str]`, `message: Optional[str]`, `options: Optional[list[dict]]`, `focus_parent_id: Optional[str]`, `should_stop: Optional[bool]`, `stop_reason: Optional[str]`, `target_type`, `target_field`, `target_child_type`, `progress: Optional[dict]`, `missing_fields: Optional[dict]`, `asked_history_entry: Optional[dict]`, `canonical_family: Optional[dict]` |
+| **BuilderSessionCommitResponse** | `session_id`, `session_status`, `working_narrative`, `committed_card_ids`, `committed_card_count` |
 | **FillFromTextResponse** | `filled: dict` (only keys that were extracted) |
 | **ExperienceCardResponse** | `id`, `user_id`, `title`, `normalized_role`, `domain`, `sub_domain`, `company_name`, `company_type`, `team`, `start_date`, `end_date`, `is_current`, `location`, `is_remote`, `employment_type`, `summary`, `raw_text`, `intent_primary`, `intent_secondary`, `seniority_level`, `confidence_score`, `experience_card_visibility`, `created_at`, `updated_at` |
 | **ExperienceCardChildResponse** | `id`, `parent_experience_id`, `child_type`, `items` (list of `ChildValueItem`: `{ title: str, description: Optional[str] }`). |
@@ -364,7 +358,7 @@ For time: patch may have `time: { start, end, ongoing, text }`. For location: `l
 ## 3. Prompts: placeholders, inputs, and expected output schema
 
 **File:** `apps/api/src/prompts/experience_card.py`  
-**Filler:** `fill_prompt(template, **kwargs)` — replaces placeholders. Enums are auto-injected via `_DEFAULT_REPLACEMENTS` (from `experience_card_enums`): INTENT_ENUM, CHILD_INTENT_ENUM, CHILD_RELATION_TYPE_ENUM, ALLOWED_CHILD_TYPES_STR, COMPANY_TYPE_ENUM, EMPLOYMENT_TYPE_ENUM, SENIORITY_LEVEL_ENUM.
+**Filler:** `fill_prompt(template, **kwargs)` — replaces placeholders. Enums are auto-injected via `_DEFAULT_REPLACEMENTS` (from `experience_card_enums`): `INTENT_ENUM`, `ALLOWED_CHILD_TYPES_STR` (templates use `{{ALLOWED_CHILD_TYPES}}`), `COMPANY_TYPE_ENUM`, `EMPLOYMENT_TYPE_ENUM`, `SENIORITY_LEVEL_ENUM`.
 
 ### 3.1 PROMPT_REWRITE
 
@@ -563,7 +557,7 @@ Return valid JSON only:
 | Item | Detail |
 |------|--------|
 | **Placeholders** | `{{CLARIFY_PLAN_JSON}}`, `{{CANONICAL_CARD_JSON}}` |
-| **What is passed** | `validated_plan_json=json.dumps({ action, target_type, target_field, target_child_type, reason })` (mapped to both `{{CLARIFY_PLAN_JSON}}` and `{{VALIDATED_PLAN_JSON}}`), `card_context_json=json.dumps(canonical_family)` (mapped to `{{CANONICAL_CARD_JSON}}`) |
+| **What is passed** | `validated_plan_json=json.dumps({ action, target_type, target_field, target_child_type, reason })` (mapped to both `{{CLARIFY_PLAN_JSON}}` and `{{VALIDATED_PLAN_JSON}}`), `canonical_card_json=json.dumps(canonical_family)` (mapped to `{{CANONICAL_CARD_JSON}}`) |
 | **Expected output** | **Plain text only** — one short, natural, conversational question. No JSON, no preamble, no formatting. |
 
 **Full prompt text:**
@@ -733,12 +727,13 @@ Each row: function name, **inputs** (parameter → type/source), **output** (typ
 
 **File:** `apps/api/src/routers/builder.py`
 
-- `POST /experience-cards/detect-experiences` → `detect_experiences(raw_text)`  
-- `POST /experience-cards/draft-single` → `run_draft_single(db, person_id, raw_text, experience_index, experience_count)` — no embedding; returns draft card families.  
-- `POST /experience-cards/clarify-experience` → `clarify_experience_interactive(...)`  
+- `POST /builder/transcript/commit` → `commit_builder_transcript(...)` (`services/builder/engine.py`): resolves transcript from `call_id` (Vapi API + `VAPI_API_KEY`) and/or request `transcript`, then `_commit_extraction_input` runs `detect_experiences` + per-index `run_draft_single` and finalizes committed cards.  
 - `POST /experience-cards/finalize` → loads card + children, calls `embed_experience_cards(db, parents, children)`, marks card visible.  
-- `POST /experience-cards/fill-missing-from-text` → `fill_missing_fields_from_text(...)`; if card_id/child_id set, merges + PATCH + re-embed.  
+- `POST /experience-cards/fill-missing-from-text` → `fill_missing_fields_from_text(...)`; if `card_id` is set for a parent, merges + PATCH + re-embed.  
+- `POST /experience-cards` → create card.  
 - `PATCH /experience-cards/{card_id}`, `PATCH /experience-card-children/{child_id}` → `apply_card_patch` / `apply_child_patch` + `embed_experience_cards` after update.
+
+**Internal pipeline (no dedicated REST routes):** `detect_experiences`, `run_draft_single`, and `clarify_experience_interactive` live in `services/experience/pipeline.py` and are used by the builder engine and other services—not directly mounted as the HTTP list above.
 
 ### 5.2 Pipeline (pipeline.py)
 
@@ -802,7 +797,7 @@ Each row: function name, **inputs** (parameter → type/source), **output** (typ
   - If action **autofill**: merge autofill_patch, normalize_after_patch, continue loop  
   - If action **ask**: **_generate_clarify_question_llm**(plan, canonical) → return plain text clarifying_question and asked_history_entry  
 
-All merge/validation/fallback logic (merge_patch_into_card_family, validate_clarify_plan, fallback_clarify_plan, is_parent_good_enough, compute_missing_fields) lives in **clarify.py**; LLM calls live in **pipeline.py**.
+Merge/validation/fallback logic (merge_patch_into_card_family, validate_clarify_plan, fallback_clarify_plan, is_parent_good_enough, compute_missing_fields) lives in **clarify.py**; LLM calls for clarify live in **pipeline.py**.
 
 ### 5.5 Edit / fill (pipeline.py)
 
@@ -817,19 +812,19 @@ Card/child updates (apply_card_patch, apply_child_patch) are in **crud.py**; the
 ## 6. Messy text → embedding pipeline (step-by-step)
 
 1. **User input**  
-   Raw string (e.g. from Builder Chat or edit form).
+   Raw string (e.g. voice transcript commit, fill-missing-from-text, or card edit form).
 
 2. **Rewrite**  
    `rewrite_raw_text(raw_text)` → PROMPT_REWRITE → cleaned text. Cached by input hash.
 
-3. **Detect (optional for single-experience)**  
-   `detect_experiences(raw_text)` uses cleaned text → PROMPT_DETECT_EXPERIENCES → `{ count, experiences }`. Frontend can show choices; user may send `experience_index` + `experience_count` to draft-single.
+3. **Detect (optional; used in multi-experience text)**  
+   `detect_experiences(raw_text)` uses cleaned text → PROMPT_DETECT_EXPERIENCES → `{ count, experiences }`. The transcript-commit path calls this inside `_commit_extraction_input` and loops `experience_index` from 1..count (defaulting count to 1 if detection returns none).
 
 4. **Extract one experience**  
    `run_draft_single(..., raw_text, experience_index, experience_count)`  
    - Rewrite (cache hit if same text).  
    - Create RawExperience (store raw + cleaned), DraftSet.  
-   - PROMPT_EXTRACT_SINGLE_CARDS with cleaned text and index/count and enums (INTENT_ENUM, ALLOWED_CHILD_TYPES).  
+   - PROMPT_EXTRACT_SINGLE_CARDS with cleaned text and index/count and enums (`INTENT_ENUM`, `ALLOWED_CHILD_TYPES`, etc.).  
    - LLM returns one parent + children; each child has `child_type` in ALLOWED_CHILD_TYPES and `value` (`{ raw_text, items: [{ title, description }] }`).
 
 5. **Parse and validate**  
@@ -863,7 +858,7 @@ Card/child updates (apply_card_patch, apply_child_patch) are in **crud.py**; the
 
 ## 7. Clarify flow (Q&A and autofill)
 
-Clarify runs **after** extraction when the app has a card family and optionally conversation history. It either asks one targeted question, autofills from cleaned text, or stops when the card is "good enough."
+Clarify runs **after** extraction when code has a card family and optionally conversation history. It either asks one targeted question, autofills from cleaned text, or stops when the card is "good enough." The implementation is in `clarify_experience_interactive` / `_run_clarify_flow` (**pipeline.py**) plus rules in **clarify.py**. The current FastAPI app does **not** expose a `clarify-experience` HTTP route; integrations would call the Python API directly or add a router.
 
 - **Canonical shape:** `normalize_card_family_for_clarify(card_family)` produces a single nested structure (parent with time/location objects, children with child_type and value) used by planner and answer applier.
 
@@ -877,7 +872,7 @@ Clarify runs **after** extraction when the app has a card family and optionally 
 
 - **Stop:** When action is stop (and validated), return `filled` (flat parent via canonical_parent_to_flat_response) and `should_stop=True`.
 
-- **choose_focus:** If multiple experiences were detected and no focus_parent_id, clarify_experience_interactive returns action=choose_focus and options (from detect-experiences labels); no LLM. User then sends experience index and can call draft-single for that index.
+- **choose_focus:** If multiple experiences were detected and no `focus_parent_id`, `clarify_experience_interactive` can return `action=choose_focus` and options (labels from detection); no LLM. Any UI that needs a single experience must resolve focus before or during extraction (e.g. transcript commit runs detection + one `run_draft_single` per index internally).
 
 Relationship: prompts (CLARIFY_PLANNER, QUESTION_WRITER, APPLY_ANSWER) are in experience_card.py; orchestration and LLM calls in pipeline.py; rules and merge in clarify.py.
 
@@ -936,6 +931,7 @@ Embedding pipeline: **build_embedding_inputs** (in embedding.py) uses build_pare
 | Prompt templates and fill_prompt | `apps/api/src/prompts/experience_card.py` |
 | Prompt enum strings from domain | `apps/api/src/prompts/experience_card_enums.py` |
 | Pipeline: rewrite, detect, extract, parse, persist, clarify | `apps/api/src/services/experience/pipeline.py` |
+| Builder orchestration: transcript commit, draft runs, sessions | `apps/api/src/services/builder/engine.py` |
 | Clarify rules, canonical shape, validate plan, merge patch | `apps/api/src/services/experience/clarify.py` |
 | Child value normalization (raw_text, items: [{ title, description }]) | `apps/api/src/services/experience/child_value.py` |
 | Search document text for parent/child (derived, no stored column) | `apps/api/src/services/experience/search_document.py` |

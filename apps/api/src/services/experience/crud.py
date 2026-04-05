@@ -7,12 +7,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import ExperienceCard, ExperienceCardChild
-from src.services.experience.child_value import normalize_child_items
 from src.schemas import (
     ExperienceCardChildPatch,
     ExperienceCardCreate,
     ExperienceCardPatch,
 )
+from src.services.experience.child_value import normalize_child_items
 
 # -----------------------------------------------------------------------------
 # Constants
@@ -86,11 +86,32 @@ async def get_card_for_user(
 # -----------------------------------------------------------------------------
 
 
-def apply_card_patch(card: ExperienceCard, body: ExperienceCardPatch) -> None:
-    """Apply patch fields to card in place."""
+# Fields that should be translated to English when non-English text is provided
+_TRANSLATABLE_FIELDS = ("title", "summary", "raw_text", "company_name", "location")
+
+
+async def apply_card_patch(
+    card: ExperienceCard,
+    body: ExperienceCardPatch,
+    db=None,
+) -> None:
+    """
+    Apply patch fields to card in place.
+
+    If body.language is not English and db is provided, translates
+    text fields to English before applying.
+    """
+    language = getattr(body, "language", "en") or "en"
+    should_translate = language.lower() not in ("en", "english") and db is not None
+
     for field in _CARD_PATCH_FIELDS:
         new_val = getattr(body, field, None)
         if new_val is not None:
+            # Translate text fields if needed
+            if should_translate and field in _TRANSLATABLE_FIELDS and isinstance(new_val, str):
+                from src.services.translation import to_english
+
+                new_val = await to_english(new_val, language, db)
             setattr(card, field, new_val)
 
 
@@ -138,7 +159,7 @@ async def list_my_cards(
         .order_by(ExperienceCard.created_at.desc())
     )
     result = await db.execute(q)
-    return result.scalars().all()
+    return list(result.scalars().all())
 
 
 async def list_my_children(
@@ -148,7 +169,45 @@ async def list_my_children(
     """List all experience card children for the user."""
     q = select(ExperienceCardChild).where(ExperienceCardChild.person_id == person_id)
     result = await db.execute(q)
-    return result.scalars().all()
+    return list(result.scalars().all())
+
+
+async def list_children_for_parent(
+    db: AsyncSession,
+    *,
+    parent_experience_id: str,
+    person_id: str,
+) -> list[ExperienceCardChild]:
+    """Children for one parent card belonging to the user."""
+    result = await db.execute(
+        select(ExperienceCardChild).where(
+            ExperienceCardChild.parent_experience_id == parent_experience_id,
+            ExperienceCardChild.person_id == person_id,
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def create_experience_card_child(
+    db: AsyncSession,
+    *,
+    person_id: str,
+    parent_experience_id: str,
+    child_type: str,
+    items: list[dict],
+) -> ExperienceCardChild:
+    """Insert a new dimension row for a parent card."""
+    norm = normalize_child_items(items)
+    child = ExperienceCardChild(
+        parent_experience_id=parent_experience_id,
+        person_id=person_id,
+        child_type=child_type,
+        value={"items": norm},
+    )
+    db.add(child)
+    await db.flush()
+    await db.refresh(child)
+    return child
 
 
 async def list_my_card_families(
@@ -181,9 +240,7 @@ class ExperienceCardService:
         return await create_experience_card(db, person_id, body)
 
     @staticmethod
-    async def get_card(
-        db: AsyncSession, card_id: str, person_id: str
-    ) -> ExperienceCard | None:
+    async def get_card(db: AsyncSession, card_id: str, person_id: str) -> ExperienceCard | None:
         return await get_card_for_user(db, card_id, person_id)
 
     @staticmethod

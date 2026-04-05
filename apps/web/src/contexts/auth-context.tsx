@@ -33,7 +33,7 @@ function readToken(): string | null {
 function readOnboardingStep(): OnboardingStep | null {
   if (typeof window === "undefined") return null;
   const step = localStorage.getItem(ONBOARDING_STEP_KEY);
-  return step === "bio" || step === "builder" ? step : null;
+  return step === "bio" || step === "language" || step === "builder" ? step : null;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -78,13 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!token) {
-      setUser(null);
-      setIsAuthLoading(false);
-      return;
-    }
+    if (!token) return;
     let isMounted = true;
-    setIsAuthLoading(true);
     api<{ id: string; email: string; display_name: string | null }>("/me")
       .then((me) => {
         if (!isMounted) return;

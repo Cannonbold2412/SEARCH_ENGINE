@@ -13,199 +13,49 @@ import { isPlaceholderChildCard } from "@/components/builder/card/card-details";
 import { EnhanceChatPanel, ExperienceFamilyCardPreview, type EnhanceChatMessage } from "@/components/builder";
 import { PageLoading } from "@/components/feedback";
 import {
+  type ChildForm,
+  type FillFromTextResponse,
+  childToForm,
+  childFormToPatch,
+  mergeParentForPreview,
+  mergeChildForPreview,
+  syntheticPreviewChild,
+  getParentId,
+  applyFilledToParentFormOverwrite,
+  buildAiQuestions,
+  buildCommitDraftPayload,
+} from "@/components/enhance";
+import {
   useCardForms,
-  useCardMutations,
   useExperienceCardFamilies,
+  useEnhanceVapiVoice,
   EXPERIENCE_CARD_FAMILIES_QUERY_KEY,
 } from "@/hooks";
 import type { ParentCardForm } from "@/hooks/use-card-forms";
+import {
+  applyCardDraftPatch,
+  childTypeToIdMap,
+  type CardDraftPatch,
+  type EnhanceDraftState,
+} from "@/lib/apply-card-draft-patch";
+import { buildEditAssistantVariableValues } from "@/lib/build-edit-assistant-variables";
 import { api } from "@/lib/api";
-import type {
-  ChildValueItem,
-  DraftCardFamily,
-  ExperienceCard,
-  ExperienceCardChild,
-  ExperienceCardChildPatch,
-  ExperienceCardPatch,
-} from "@/types";
-
-function getParentId(parent: ExperienceCard | Record<string, unknown>): string {
-  const p = parent as Record<string, unknown>;
-  return String(p.id ?? p.card_id ?? "").trim();
-}
-
-function parentFormToPatch(form: {
-  title: string;
-  summary: string;
-  normalized_role: string;
-  domain: string;
-  sub_domain: string;
-  company_name: string;
-  company_type: string;
-  location: string;
-  employment_type: string;
-  start_date: string;
-  end_date: string;
-  is_current: boolean;
-  intent_primary: string;
-  intent_secondary_str: string;
-  seniority_level: string;
-  confidence_score: string;
-  experience_card_visibility: boolean;
-}): ExperienceCardPatch {
-  const intentSecondary = form.intent_secondary_str
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const confidence =
-    form.confidence_score.trim() === ""
-      ? null
-      : Number(form.confidence_score);
-  return {
-    title: form.title.trim() || null,
-    summary: form.summary.trim() || null,
-    normalized_role: form.normalized_role.trim() || null,
-    domain: form.domain.trim() || null,
-    sub_domain: form.sub_domain.trim() || null,
-    company_name: form.company_name.trim() || null,
-    company_type: form.company_type.trim() || null,
-    location: form.location.trim() || null,
-    employment_type: form.employment_type.trim() || null,
-    start_date: form.start_date.trim() || null,
-    end_date: form.end_date.trim() || null,
-    is_current: form.is_current,
-    intent_primary: form.intent_primary.trim() || null,
-    intent_secondary: intentSecondary.length ? intentSecondary : null,
-    seniority_level: form.seniority_level.trim() || null,
-    confidence_score: confidence,
-    experience_card_visibility: form.experience_card_visibility,
-  };
-}
-
-function mergeParentForPreview(parent: ExperienceCard, form: ParentCardForm): ExperienceCard {
-  const patch = parentFormToPatch(form);
-  return {
-    ...parent,
-    ...patch,
-    intent_secondary: patch.intent_secondary ?? parent.intent_secondary,
-    experience_card_visibility:
-      patch.experience_card_visibility ?? parent.experience_card_visibility,
-  };
-}
-
-type FillFromTextResponse = {
-  filled?: Record<string, unknown>;
-};
-
-type ChildForm = {
-  title: string;
-  summary: string;
-  items: ChildValueItem[];
-};
-
-function normalizeChildItem(item: ChildValueItem | Record<string, unknown>): ChildValueItem {
-  const raw = item as Record<string, unknown>;
-  return {
-    subtitle: String(raw.subtitle ?? raw.title ?? "").trim(),
-    sub_summary: (raw.sub_summary ?? raw.description ?? null) as string | null,
-  };
-}
-
-const PARENT_FORM_KEYS = new Set([
-  "title", "summary", "normalized_role", "domain", "sub_domain", "company_name", "company_type",
-  "location", "employment_type", "start_date", "end_date", "is_current", "intent_primary",
-  "intent_secondary_str", "seniority_level", "confidence_score", "experience_card_visibility",
-]);
-
-function applyFilledToParentFormOverwrite(filled: Record<string, unknown>): Record<string, unknown> {
-  const updates: Record<string, unknown> = {};
-  for (const key of Object.keys(filled)) {
-    if (PARENT_FORM_KEYS.has(key)) {
-      const val = filled[key];
-      if (val !== undefined && val !== null) updates[key] = val;
-    }
-  }
-  if (Array.isArray(filled.intent_secondary) && filled.intent_secondary.length > 0) {
-    updates.intent_secondary_str = (filled.intent_secondary as string[])
-      .map((s) => String(s).trim())
-      .filter(Boolean)
-      .join(", ");
-  }
-  return updates;
-}
-
-function buildAiQuestions(card: ExperienceCard): string[] {
-  const questions: string[] = [];
-  if (!card.summary?.trim()) questions.push("What problem did you solve, and what measurable result came from it?");
-  if (!card.normalized_role?.trim()) questions.push("What was your exact role title and core responsibility in this experience?");
-  if (!card.company_type?.trim()) questions.push("What kind of company was this (startup, enterprise, agency, nonprofit, etc.)?");
-  if (!card.employment_type?.trim()) questions.push("Was this full-time, part-time, contract, internship, or freelance?");
-  if (!card.domain?.trim()) questions.push("Which domain best describes this work (e.g. fintech, healthtech, e-commerce)?");
-  if (!card.seniority_level?.trim()) questions.push("What seniority level best matches this role (junior, mid, senior, lead)?");
-  if (!card.location?.trim()) questions.push("Where was this role based (city/remote/hybrid)?");
-  if (questions.length === 0) {
-    questions.push("Which tools or technologies had the biggest impact in this role?");
-    questions.push("What would a recruiter need to know in 2 lines to understand your impact?");
-  }
-  return questions.slice(0, 4);
-}
-
-function childToForm(child: ExperienceCardChild): ChildForm {
-  const rawItems = (Array.isArray(child.items) ? child.items : []) as Array<
-    ChildValueItem | Record<string, unknown>
-  >;
-  const items: ChildValueItem[] =
-    rawItems.length > 0
-      ? rawItems.map((it) => normalizeChildItem(it))
-      : [{ subtitle: "", sub_summary: null }];
-  const first = items[0];
-  const title = first?.subtitle ?? "";
-  const summary = first?.sub_summary ?? "";
-
-  return { title, summary, items };
-}
-
-function childFormToPatch(form: ChildForm): ExperienceCardChildPatch {
-  const rawItems = form.items
-    .map((it) => ({
-      subtitle: (it.subtitle ?? "").trim(),
-      sub_summary: (it.sub_summary ?? "").trim() || null,
-    }))
-    .filter((it) => it.subtitle);
-
-  const title = form.title.trim();
-  const summary = form.summary.trim();
-  const items =
-    rawItems.length > 0
-      ? rawItems.map((it, i) =>
-          i === 0
-            ? {
-                subtitle: title || it.subtitle,
-                sub_summary: summary || it.sub_summary,
-              }
-            : it
-        )
-      : title || summary
-        ? [{ subtitle: title || "Untitled", sub_summary: summary || null }]
-        : [];
-
-  return { items };
-}
-
-function mergeChildForPreview(child: ExperienceCardChild, form: ChildForm | undefined): ExperienceCardChild {
-  if (!form) return child;
-  const patch = childFormToPatch(form);
-  return {
-    ...child,
-    items: patch.items ?? child.items,
-  };
-}
+import { isVapiEditVoiceConfigured } from "@/lib/vapi-config";
+import { preloadVapiWeb } from "@/lib/vapi-client";
+import {
+  resetTranscriptStreamRefs,
+  upsertStreamingTranscriptMessage,
+} from "@/lib/vapi-transcript";
+import { useLanguage } from "@/contexts/language-context";
+import type { VoiceTranscriptChunk } from "@/hooks/use-enhance-vapi-voice";
+import type { ExperienceCard, ExperienceCardChild, ChildValueItem } from "@/lib/types";
 
 export default function EnhanceCardPage() {
   const params = useParams<{ cardId: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
   const cardId = decodeURIComponent(String(params?.cardId ?? ""));
+  const { language } = useLanguage();
 
   const { data: savedFamilies = [], isLoading } = useExperienceCardFamilies();
   const family = savedFamilies.find((f) => getParentId(f.parent as ExperienceCard) === cardId);
@@ -220,76 +70,191 @@ export default function EnhanceCardPage() {
 
   const [isUpdatingFromMessyText, setIsUpdatingFromMessyText] = useState(false);
   const [updatingChildId, setUpdatingChildId] = useState<string | null>(null);
-  const [submittingChildId, setSubmittingChildId] = useState<string | null>(null);
   const [isSavingAllFamily, setIsSavingAllFamily] = useState(false);
   const [saveAllError, setSaveAllError] = useState<string | null>(null);
   const [childForms, setChildForms] = useState<Record<string, ChildForm>>({});
-  const [, setDraftFamilies] = useState<DraftCardFamily[] | null>(null);
-  const noop = useCallback(() => {}, []);
-
+  const [parentRawText, setParentRawText] = useState("");
+  const [extraChildFormsByType, setExtraChildFormsByType] = useState<Record<string, ChildForm>>({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [manualEdit, setManualEdit] = useState(false);
   const [chatMessages, setChatMessages] = useState<EnhanceChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isChatSending, setIsChatSending] = useState(false);
-  const chatInitRef = useRef(false);
+  const initCardRef = useRef<string | null>(null);
+  const [isEnhanceFormInitialized, setIsEnhanceFormInitialized] = useState(false);
+  const startVoiceRef = useRef<() => Promise<void>>(async () => {});
+  const activeAssistantMessageIdRef = useRef<string | null>(null);
+  const committedAssistantTextRef = useRef("");
+  const activeUserMessageIdRef = useRef<string | null>(null);
+  const committedUserTextRef = useRef("");
 
   const { editForm, setEditForm, populateParentForm } = useCardForms();
-  const { patchChildMutation } = useCardMutations(
-    setDraftFamilies,
-    noop,
-    noop,
-    noop,
-    noop
-  );
+
+  const resetVoiceTranscriptRefs = useCallback(() => {
+    resetTranscriptStreamRefs({
+      activeAssistantId: activeAssistantMessageIdRef,
+      committedAssistant: committedAssistantTextRef,
+      activeUserId: activeUserMessageIdRef,
+      committedUser: committedUserTextRef,
+    });
+  }, []);
+
+  const onVoiceTranscriptChunk = useCallback((chunk: VoiceTranscriptChunk) => {
+    const { role, text, isPartial } = chunk;
+    setChatMessages((prev) =>
+      role === "user"
+        ? upsertStreamingTranscriptMessage(
+            prev,
+            "user",
+            text,
+            isPartial,
+            activeUserMessageIdRef,
+            committedUserTextRef
+          )
+        : upsertStreamingTranscriptMessage(
+            prev,
+            "assistant",
+            text,
+            isPartial,
+            activeAssistantMessageIdRef,
+            committedAssistantTextRef
+          )
+    );
+  }, []);
 
   useEffect(() => {
-    if (parent) {
-      populateParentForm(parent);
-    }
-  }, [parent, populateParentForm]);
-
-  useEffect(() => {
-    chatInitRef.current = false;
-    setChatMessages([]);
-    setChatInput("");
+    initCardRef.current = null;
+    setIsEnhanceFormInitialized(false);
   }, [cardId]);
 
   useEffect(() => {
+    if (isLoading || !parent || !cardId) return;
+    if (initCardRef.current === cardId) return;
+    initCardRef.current = cardId;
+    populateParentForm(parent);
     const next: Record<string, ChildForm> = {};
     for (const child of children) {
       if (child.id) next[child.id] = childToForm(child);
     }
     setChildForms(next);
-  }, [children]);
+    setParentRawText(String(parent.raw_text ?? ""));
+    setExtraChildFormsByType({});
+    setHasUnsavedChanges(false);
+    setIsEnhanceFormInitialized(true);
+  }, [cardId, parent, children, isLoading, populateParentForm]);
 
   useEffect(() => {
-    if (!parent || chatInitRef.current) return;
-    chatInitRef.current = true;
-    const qs = buildAiQuestions(parent);
-    const intro =
-      "I'll ask a few short questions so this experience is richer for search and recruiters.";
-    const first =
-      qs[0] ??
-      "What impact did you deliver in this role (including metrics if you have them)?";
-    setChatMessages([
-      {
-        id: `intro-${Date.now()}`,
-        role: "assistant",
-        content: `${intro}\n\n${first}`,
-      },
-    ]);
-  }, [parent]);
+    resetVoiceTranscriptRefs();
+    setChatMessages([]);
+    setChatInput("");
+  }, [cardId, resetVoiceTranscriptRefs]);
+
+  const childTypeToId = useMemo(() => childTypeToIdMap(children), [children]);
 
   const previewParent = useMemo(
-    () => (parent ? mergeParentForPreview(parent, editForm) : null),
-    [parent, editForm]
+    () => (parent ? mergeParentForPreview(parent, editForm, parentRawText) : null),
+    [parent, editForm, parentRawText]
   );
 
   const previewChildren = useMemo(() => {
-    return children.map((child) =>
+    const merged = children.map((child) =>
       mergeChildForPreview(child, child.id ? childForms[child.id] : undefined)
     );
-  }, [children, childForms]);
+    const extra: ExperienceCardChild[] = [];
+    for (const [ct, form] of Object.entries(extraChildFormsByType)) {
+      if (form.items?.length) {
+        extra.push(syntheticPreviewChild(ct, form));
+      }
+    }
+    return [...merged, ...extra];
+  }, [children, childForms, extraChildFormsByType]);
+
+  const previewFamilyCardProps = {
+    parent: previewParent!,
+    children: previewChildren,
+    defaultExpanded: true,
+    onParentPenClick: () => setManualEdit(true),
+    onChildPenClick: () => setManualEdit(true),
+  };
+
+  const editAssistantVariableValues = useMemo(() => {
+    if (!parent) return {};
+    const mergedParent = mergeParentForPreview(parent, editForm, parentRawText);
+    const mergedChildren = children.map((c) =>
+      mergeChildForPreview(c, c.id ? childForms[c.id] : undefined)
+    );
+    return buildEditAssistantVariableValues(mergedParent, mergedChildren);
+  }, [parent, editForm, parentRawText, children, childForms]);
+
+  const draftRef = useRef<EnhanceDraftState>({
+    parentForm: editForm,
+    parentRawText,
+    childForms,
+    extraChildFormsByType,
+  });
+  useEffect(() => {
+    draftRef.current = {
+      parentForm: editForm,
+      parentRawText,
+      childForms,
+      extraChildFormsByType,
+    };
+  }, [editForm, parentRawText, childForms, extraChildFormsByType]);
+
+  const applyVoiceDraftPatch = useCallback(
+    (patch: CardDraftPatch) => {
+      const next = applyCardDraftPatch(draftRef.current, patch, childTypeToId);
+      draftRef.current = next;
+      setEditForm(next.parentForm);
+      setParentRawText(next.parentRawText);
+      setChildForms(next.childForms);
+      setExtraChildFormsByType(next.extraChildFormsByType);
+      setHasUnsavedChanges(true);
+    },
+    [childTypeToId, setEditForm]
+  );
+
+  const {
+    voiceActive,
+    voiceError: vapiVoiceError,
+    voiceSphereActive,
+    voiceSphereIntensity,
+    startVoice,
+    toggleVoice,
+  } = useEnhanceVapiVoice({
+    enabled: !manualEdit && !!parent,
+    voiceSessionKey: cardId,
+    language,
+    variableValues: editAssistantVariableValues,
+    onDraftPatch: applyVoiceDraftPatch,
+    onTranscriptChunk: onVoiceTranscriptChunk,
+    onTranscriptStreamReset: resetVoiceTranscriptRefs,
+  });
+
+  useEffect(() => {
+    startVoiceRef.current = startVoice;
+  }, [startVoice]);
+
+  useEffect(() => {
+    if (!parent || manualEdit || !isVapiEditVoiceConfigured(language) || !isEnhanceFormInitialized) return;
+    const hasVariableValues = editAssistantVariableValues && Object.keys(editAssistantVariableValues).length > 0;
+    if (!hasVariableValues) return;
+    void preloadVapiWeb().catch(() => {});
+    void startVoiceRef.current();
+  }, [cardId, parent?.id, manualEdit, isEnhanceFormInitialized, editAssistantVariableValues, language, parent]);
+
+  const resetDraftFromServer = useCallback(() => {
+    if (!parent) return;
+    populateParentForm(parent);
+    const next: Record<string, ChildForm> = {};
+    for (const child of children) {
+      if (child.id) next[child.id] = childToForm(child);
+    }
+    setChildForms(next);
+    setParentRawText(String(parent.raw_text ?? ""));
+    setExtraChildFormsByType({});
+    setHasUnsavedChanges(false);
+  }, [parent, children, populateParentForm]);
 
   const fillParentFromAnswer = useCallback(
     async (text: string): Promise<ExperienceCard> => {
@@ -303,28 +268,25 @@ export default function EnhanceCardPage() {
           raw_text: text.trim(),
           current_card: currentCard,
           card_type: "parent",
+          language: language,
         },
       });
 
-      let mergedForm: ParentCardForm;
-      setEditForm((prev) => {
-        if (!res.filled || Object.keys(res.filled).length === 0) {
-          mergedForm = prev;
-          return prev;
-        }
-        const updates = applyFilledToParentFormOverwrite(res.filled);
-        if (Object.keys(updates).length === 0) {
-          mergedForm = prev;
-          return prev;
-        }
-        mergedForm = { ...prev, ...updates } as ParentCardForm;
-        return mergedForm;
-      });
-
-      await queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
-      return mergeParentForPreview(parent, mergedForm!);
+      if (!res.filled || Object.keys(res.filled).length === 0) {
+        setHasUnsavedChanges(true);
+        return mergeParentForPreview(parent, editForm, parentRawText);
+      }
+      const updates = applyFilledToParentFormOverwrite(res.filled);
+      if (Object.keys(updates).length === 0) {
+        setHasUnsavedChanges(true);
+        return mergeParentForPreview(parent, editForm, parentRawText);
+      }
+      const mergedForm = { ...editForm, ...updates } as ParentCardForm;
+      setEditForm(mergedForm);
+      setHasUnsavedChanges(true);
+      return mergeParentForPreview(parent, mergedForm, parentRawText);
     },
-    [cardId, editForm, parent, queryClient, setEditForm]
+    [cardId, editForm, parent, parentRawText, setEditForm, language]
   );
 
   const onUpdateParentFromMessyText = useCallback(
@@ -343,6 +305,7 @@ export default function EnhanceCardPage() {
   const handleChatSend = useCallback(async () => {
     const text = chatInput.trim();
     if (!text || !parent) return;
+    resetVoiceTranscriptRefs();
     const userMsg: EnhanceChatMessage = {
       id: `u-${crypto.randomUUID()}`,
       role: "user",
@@ -387,23 +350,7 @@ export default function EnhanceCardPage() {
     } finally {
       setIsChatSending(false);
     }
-  }, [chatInput, parent, fillParentFromAnswer]);
-
-  const onSubmitChild = useCallback(
-    (childId: string) => {
-      const form = childForms[childId];
-      if (!form) return;
-      const body = childFormToPatch(form);
-      setSubmittingChildId(childId);
-      patchChildMutation.mutate(
-        { childId, body },
-        {
-          onSettled: () => setSubmittingChildId((current) => (current === childId ? null : current)),
-        }
-      );
-    },
-    [childForms, patchChildMutation]
-  );
+  }, [chatInput, parent, fillParentFromAnswer, resetVoiceTranscriptRefs]);
 
   const onUpdateChildFromMessyText = useCallback(
     async (childId: string, text: string) => {
@@ -418,6 +365,7 @@ export default function EnhanceCardPage() {
             current_card: form as unknown as Record<string, unknown>,
             card_type: "child",
             child_id: childId,
+            language: language,
           },
         });
 
@@ -459,13 +407,13 @@ export default function EnhanceCardPage() {
             },
           }));
 
-          queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
+          setHasUnsavedChanges(true);
         }
       } finally {
         setUpdatingChildId((current) => (current === childId ? null : current));
       }
     },
-    [childForms, queryClient]
+    [childForms, language]
   );
 
   const onSaveAllFamily = useCallback(async () => {
@@ -474,23 +422,20 @@ export default function EnhanceCardPage() {
     setIsSavingAllFamily(true);
     setSaveAllError(null);
     try {
-      const parentBody = parentFormToPatch(editForm);
-      await api<ExperienceCard>(`/experience-cards/${cardId}`, {
-        method: "PATCH",
-        body: parentBody,
+      const payload = buildCommitDraftPayload(
+        editForm,
+        parentRawText,
+        children,
+        childForms,
+        extraChildFormsByType
+      );
+      await api(`/experience-cards/${cardId}/commit-draft`, {
+        method: "POST",
+        body: payload,
       });
 
-      for (const child of children) {
-        if (!child.id) continue;
-        const form = childForms[child.id] ?? childToForm(child);
-        const body = childFormToPatch(form);
-        await api<ExperienceCardChild>(`/experience-card-children/${child.id}`, {
-          method: "PATCH",
-          body,
-        });
-      }
-
       await queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
+      setHasUnsavedChanges(false);
       router.push("/cards");
     } catch (err) {
       const message =
@@ -501,7 +446,17 @@ export default function EnhanceCardPage() {
     } finally {
       setIsSavingAllFamily(false);
     }
-  }, [cardId, childForms, children, editForm, isSavingAllFamily, queryClient, router]);
+  }, [
+    cardId,
+    childForms,
+    children,
+    editForm,
+    extraChildFormsByType,
+    isSavingAllFamily,
+    parentRawText,
+    queryClient,
+    router,
+  ]);
 
   if (isLoading) {
     return (
@@ -546,18 +501,18 @@ export default function EnhanceCardPage() {
             <h1 className="text-base sm:text-lg font-semibold tracking-tight truncate">
               Enhance experience
             </h1>
+            {hasUnsavedChanges && (
+              <span className="text-xs text-amber-500/90 whitespace-nowrap hidden sm:inline">
+                Unsaved changes
+              </span>
+            )}
           </div>
         </div>
         <Button
           type="button"
           size="sm"
           onClick={onSaveAllFamily}
-          disabled={
-            isSavingAllFamily ||
-            !!submittingChildId ||
-            isChatSending ||
-            patchChildMutation.isPending
-          }
+          disabled={isSavingAllFamily || isChatSending}
         >
           {isSavingAllFamily ? "Saving…" : "Save & exit"}
         </Button>
@@ -578,13 +533,7 @@ export default function EnhanceCardPage() {
             <div className="flex flex-col min-h-0 h-full overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 scrollbar-theme">
                 {previewParent && (
-                  <ExperienceFamilyCardPreview
-                    parent={previewParent}
-                    children={previewChildren}
-                    defaultExpanded
-                    onParentPenClick={() => setManualEdit(true)}
-                    onChildPenClick={() => setManualEdit(true)}
-                  />
+                  <ExperienceFamilyCardPreview {...previewFamilyCardProps} />
                 )}
               </div>
             </div>
@@ -592,16 +541,36 @@ export default function EnhanceCardPage() {
             <div className="flex flex-col min-h-0 h-full overflow-hidden">
               <div className="flex items-center justify-between gap-2 flex-shrink-0 mb-2">
                 <p className="text-xs text-muted-foreground">Manual edit</p>
-                <Button type="button" size="sm" variant="outline" onClick={() => setManualEdit(false)}>
-                  Done
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="text-muted-foreground"
+                    onClick={() => {
+                      resetDraftFromServer();
+                      setManualEdit(false);
+                    }}
+                  >
+                    Discard
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => setManualEdit(false)}>
+                    Done
+                  </Button>
+                </div>
               </div>
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 scrollbar-theme space-y-4">
                 <ParentCardEditForm
                   form={editForm}
-                  onChange={(updates) => setEditForm((prev) => ({ ...prev, ...updates }))}
+                  onChange={(updates) => {
+                    setEditForm((prev) => ({ ...prev, ...updates }));
+                    setHasUnsavedChanges(true);
+                  }}
                   onSubmit={() => setManualEdit(false)}
-                  onCancel={() => setManualEdit(false)}
+                  onCancel={() => {
+                    resetDraftFromServer();
+                    setManualEdit(false);
+                  }}
                   isSubmitting={false}
                   showDeleteButton={false}
                   checkboxIdPrefix={`enhance-card-${cardId}`}
@@ -628,12 +597,14 @@ export default function EnhanceCardPage() {
                               ...prev,
                               [child.id]: { ...(prev[child.id] ?? childToForm(child)), ...updates },
                             }));
+                            setHasUnsavedChanges(true);
                           }}
-                          onSubmit={() => {
-                            if (child.id) onSubmitChild(child.id);
+                          onSubmit={() => setHasUnsavedChanges(true)}
+                          onCancel={() => {
+                            resetDraftFromServer();
+                            setManualEdit(false);
                           }}
-                          onCancel={() => setManualEdit(false)}
-                          isSubmitting={submittingChildId === child.id}
+                          isSubmitting={false}
                           showDeleteButton={false}
                           onUpdateFromMessyText={(text) =>
                             child.id ? onUpdateChildFromMessyText(child.id, text) : Promise.resolve()
@@ -659,8 +630,18 @@ export default function EnhanceCardPage() {
             isSending={isChatSending}
             disabled={manualEdit}
             placeholder={
-              manualEdit ? "Finish manual edit to continue chat…" : "Type your answer…"
+              manualEdit
+                ? "Finish manual edit to continue chat…"
+                : voiceActive
+                  ? "Voice active — or type your answer…"
+                  : "Type your answer…"
             }
+            voiceError={vapiVoiceError}
+            voiceConfigured={isVapiEditVoiceConfigured(language)}
+            onVoiceToggle={() => void toggleVoice()}
+            voiceDisabled={manualEdit}
+            voiceSphereIntensity={voiceSphereIntensity}
+            voiceSphereActive={voiceSphereActive}
           />
         </div>
       </div>

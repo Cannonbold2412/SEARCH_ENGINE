@@ -1,62 +1,81 @@
-# Start ngrok tunnel for local API (port 8000) - used for VAPI voice callbacks.
-# Usage: .\scripts\ngrok-tunnel.ps1
-# Then set apps/api/.env: VAPI_CALLBACK_BASE_URL=https://<ngrok-url>
+# ngrok-tunnel.ps1
+# Expose local FastAPI (port 8000) via ngrok for mobile/Vapi testing
 
-$port = 8000
-$ngrok = $null
+Write-Host "Starting ngrok tunnel for CONXA API (port 8000)..." -ForegroundColor Cyan
+Write-Host ""
 
-# 1. Try PATH
-if (Get-Command ngrok -ErrorAction SilentlyContinue) {
-    $ngrok = "ngrok"
+# Resolve ngrok executable (PATH first, then common local locations)
+$ngrokExe = $null
+$ngrokCmd = Get-Command ngrok -ErrorAction SilentlyContinue
+if ($ngrokCmd -and $ngrokCmd.Source) {
+    $ngrokExe = $ngrokCmd.Source
 }
 
-# 2. Try common install locations
-if (-not $ngrok) {
-    $paths = @(
-        "$env:ProgramFiles\Ngrok\ngrok.exe",
-        "${env:ProgramFiles(x86)}\Ngrok\ngrok.exe",
-        "$env:LOCALAPPDATA\Microsoft\WinGet\Links\ngrok.exe",
-        "$PSScriptRoot\ngrok\ngrok.exe"
+if (-not $ngrokExe) {
+    $candidates = @(
+        "$env:USERPROFILE\ngrok.exe",
+        "$env:LOCALAPPDATA\ngrok\ngrok.exe",
+        "$env:LOCALAPPDATA\Programs\ngrok\ngrok.exe",
+        "$env:ProgramData\chocolatey\bin\ngrok.exe",
+        "$env:ProgramFiles\ngrok\ngrok.exe",
+        "${env:ProgramFiles(x86)}\ngrok\ngrok.exe"
     )
-    # WinGet packages (folder names vary by version)
-    $wingetPackages = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages"
-    if (Test-Path $wingetPackages) {
-        $found = Get-ChildItem -Path $wingetPackages -Filter "ngrok.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-        if ($found) { $paths = @($found) + $paths }
-    }
-    foreach ($p in $paths) {
-        if (Test-Path $p) { $ngrok = $p; break }
-    }
-}
-
-# 3. Download latest ngrok to scripts/ngrok/ if still not found
-if (-not $ngrok) {
-    $ngrokDir = Join-Path $PSScriptRoot "ngrok"
-    $ngrokExe = Join-Path $ngrokDir "ngrok.exe"
-    $zipUrl = "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip"
-
-    if (-not (Test-Path $ngrokExe)) {
-        Write-Host "Downloading latest ngrok to $ngrokDir ..." -ForegroundColor Yellow
-        New-Item -ItemType Directory -Force -Path $ngrokDir | Out-Null
-        $zipPath = Join-Path $env:TEMP "ngrok-windows.zip"
-        try {
-            Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
-            Expand-Archive -Path $zipPath -DestinationPath $ngrokDir -Force
-            Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
-        } catch {
-            Write-Host "Download failed: $_" -ForegroundColor Red
-            Write-Host "Install manually from: https://ngrok.com/download" -ForegroundColor Yellow
-            exit 1
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            $ngrokExe = $candidate
+            break
         }
     }
-    if (Test-Path $ngrokExe) { $ngrok = $ngrokExe }
 }
 
-if (-not $ngrok) {
-    Write-Host "ngrok not found. Install from: https://ngrok.com/download" -ForegroundColor Yellow
+if (-not $ngrokExe) {
+    Write-Host "Error: ngrok not found." -ForegroundColor Red
+    Write-Host "Install from: https://ngrok.com/download" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Quick install (Windows with Chocolatey):" -ForegroundColor Yellow
+    Write-Host "  choco install ngrok" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "Or download directly from https://ngrok.com/download" -ForegroundColor Yellow
     exit 1
 }
 
-Write-Host "Starting ngrok tunnel to http://localhost:$port ..." -ForegroundColor Green
-Write-Host "Set apps/api/.env: VAPI_CALLBACK_BASE_URL=<the https URL ngrok shows>" -ForegroundColor Cyan
-& $ngrok http $port
+# Check if backend is running on port 8000
+Write-Host "Checking if backend is running on port 8000..." -ForegroundColor Cyan
+$backendRunning = Test-NetConnection -ComputerName localhost -Port 8000 -InformationLevel Quiet -WarningAction SilentlyContinue
+
+if (-not $backendRunning) {
+    Write-Host "Warning: Backend not detected on port 8000!" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Make sure to start the backend first:" -ForegroundColor Yellow
+    Write-Host "  cd apps/api" -ForegroundColor Gray
+    Write-Host "  uvicorn src.main:app --reload" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "Press Ctrl+C to cancel, or wait to start ngrok anyway..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 3
+} else {
+    Write-Host "Backend is running!" -ForegroundColor Green
+    Write-Host ""
+}
+
+# Display usage instructions
+Write-Host "╔════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  ngrok tunnel will create a public HTTPS URL              ║" -ForegroundColor Cyan
+Write-Host "║  like: https://abc123.ngrok.io                            ║" -ForegroundColor Cyan
+Write-Host "╚════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "After tunnel starts:" -ForegroundColor Yellow
+Write-Host "1. Copy the HTTPS URL from ngrok output" -ForegroundColor White
+Write-Host "2. Update apps/web/.env.local:" -ForegroundColor White
+Write-Host "   NEXT_PUBLIC_API_BASE_URL=https://abc123.ngrok.io" -ForegroundColor Gray
+Write-Host ""
+Write-Host "3. Update apps/api/.env CORS_ORIGINS:" -ForegroundColor White
+Write-Host "   CORS_ORIGINS=http://localhost:3000,https://abc123.ngrok.io" -ForegroundColor Gray
+Write-Host ""
+Write-Host "4. Restart both frontend and backend" -ForegroundColor White
+Write-Host ""
+Write-Host "Press Ctrl+C to stop the tunnel" -ForegroundColor Yellow
+Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host ""
+
+# Start ngrok tunnel
+& $ngrokExe http 8000

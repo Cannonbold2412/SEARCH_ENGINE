@@ -24,8 +24,9 @@ import { apiAssetUrl } from "@/lib/constants";
 import type {
   PersonProfile,
   ContactDetails,
-} from "@/types";
+} from "@/lib/types";
 import { useRouter } from "next/navigation";
+import { useLanguage } from "@/contexts/language-context";
 
 type DetailRow = {
   label: string;
@@ -116,16 +117,15 @@ function PersonProfilePageContent() {
   const searchId = searchParams.get("search_id");
   const from = searchParams.get("from");
   const queryClient = useQueryClient();
+  const { language } = useLanguage();
 
   const profileQuery = useQuery({
-    queryKey: ["person", personId, searchId],
+    queryKey: ["person", personId, searchId, language],
     queryFn: () => {
-      if (searchId) {
-        return api<PersonProfile>(
-          `/people/${personId}?search_id=${encodeURIComponent(searchId)}`
-        );
-      }
-      return api<PersonProfile>(`/people/${personId}`);
+      const params = new URLSearchParams();
+      params.set("language", language);
+      if (searchId) params.set("search_id", searchId);
+      return api<PersonProfile>(`/people/${personId}?${params.toString()}`);
     },
     enabled: !!personId,
   });
@@ -140,7 +140,7 @@ function PersonProfilePageContent() {
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["person", personId, searchId] });
+      queryClient.invalidateQueries({ queryKey: ["person", personId] });
     },
   });
 
@@ -275,7 +275,7 @@ function PersonProfilePageContent() {
                 key={family.parent.id}
                 readOnly
                 parent={family.parent}
-                children={family.children}
+                childCards={family.children}
               />
             ))}
           </div>
@@ -291,7 +291,7 @@ function PersonProfilePageContent() {
                 key={card.id}
                 readOnly
                 parent={card}
-                children={[]}
+                childCards={[]}
               />
             ))}
           </div>

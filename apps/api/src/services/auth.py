@@ -3,24 +3,25 @@
 import hashlib
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
-from fastapi import HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from sqlalchemy.exc import IntegrityError
+from datetime import UTC, datetime, timedelta
 
-from src.core import hash_password, verify_password, create_access_token, get_settings
-from src.db.models import Person, PersonProfile, CreditLedger
-from src.providers import get_email_provider, EmailConfigError, EmailServiceError
+from fastapi import HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.core import create_access_token, get_settings, hash_password, verify_password
+from src.db.models import CreditLedger, Person, PersonProfile
+from src.providers import EmailConfigError, EmailServiceError, get_email_provider
 from src.schemas import (
+    LoginRequest,
+    ResendVerificationRequest,
+    ResendVerificationResponse,
     SignupRequest,
     SignupResponse,
-    LoginRequest,
     TokenResponse,
     VerifyEmailRequest,
     VerifyEmailResponse,
-    ResendVerificationRequest,
-    ResendVerificationResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,9 +46,11 @@ async def _send_verification_email(db: AsyncSession, person: Person) -> None:
 
     settings = get_settings()
     token = str(secrets.randbelow(1_000_000)).zfill(6)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     person.email_verification_token_hash = _hash_token(token)
-    person.email_verification_expires_at = now + timedelta(minutes=settings.email_verify_expire_minutes)
+    person.email_verification_expires_at = now + timedelta(
+        minutes=settings.email_verify_expire_minutes
+    )
     await db.flush()
 
     lines = [
@@ -74,7 +77,9 @@ async def signup(db: AsyncSession, body: SignupRequest) -> SignupResponse:
 
     existing = await db.execute(select(Person.id).where(func.lower(Person.email) == email))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
+        )
 
     person = Person(
         email=email,
@@ -85,7 +90,9 @@ async def signup(db: AsyncSession, body: SignupRequest) -> SignupResponse:
     try:
         await db.flush()
     except IntegrityError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
+        )
 
     db.add(PersonProfile(person_id=person.id, balance=SIGNUP_CREDITS))
     await db.flush()
@@ -116,7 +123,9 @@ async def login(db: AsyncSession, body: LoginRequest) -> TokenResponse:
     result = await db.execute(select(Person).where(func.lower(Person.email) == email))
     person = result.scalar_one_or_none()
     if not person or not verify_password(body.password, person.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        )
     settings = get_settings()
     if settings.email_verification_required and not person.email_verified_at:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
@@ -128,14 +137,18 @@ async def verify_email(db: AsyncSession, body: VerifyEmailRequest) -> VerifyEmai
     email = _normalize_email(body.email)
     result = await db.execute(select(Person).where(func.lower(Person.email) == email))
     person = result.scalar_one_or_none()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if not person:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code"
+        )
     if person.email_verified_at:
         return VerifyEmailResponse(verified=True)
     if not person.email_verification_token_hash or not person.email_verification_expires_at:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code"
+        )
     if person.email_verification_expires_at < now:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -153,7 +166,9 @@ async def verify_email(db: AsyncSession, body: VerifyEmailRequest) -> VerifyEmai
     return VerifyEmailResponse(verified=True)
 
 
-async def resend_verification_email(db: AsyncSession, body: ResendVerificationRequest) -> ResendVerificationResponse:
+async def resend_verification_email(
+    db: AsyncSession, body: ResendVerificationRequest
+) -> ResendVerificationResponse:
     email = _normalize_email(body.email)
     result = await db.execute(select(Person).where(func.lower(Person.email) == email))
     person = result.scalar_one_or_none()

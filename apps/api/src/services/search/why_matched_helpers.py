@@ -3,9 +3,18 @@
 Ensures short, grounded, deduplicated reasons; no raw labels/headlines leaked to UI.
 """
 
-import re
+import asyncio
+import json
 import logging
+import re
 from typing import Any
+
+from src.db.session import async_session
+from src.prompts.search_why_matched import get_why_matched_prompt
+from src.providers import ChatServiceError, get_chat_provider
+from src.utils import extract_json_from_llm_response
+
+from ._runtime_values import as_dict
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +25,6 @@ WHY_REASON_MAX_LEN = 150
 WHY_REASON_MAX_WORDS = 15
 WHY_REASON_MAX_ITEMS = 3
 EVIDENCE_SNIPPET_MAX_LEN = 150
-EVIDENCE_STRING_MAX_LEN = 200
 
 # Generic prefixes to strip from LLM output
 WHY_GENERIC_PREFIXES = (
@@ -51,7 +59,7 @@ def dedupe_strings_preserve_order(items: list[str]) -> list[str]:
         return []
     seen_normalized: set[str] = set()
     out: list[str] = []
-    for x in (items or []):
+    for x in items or []:
         if x is None:
             continue
         s = sanitize_text_for_llm(str(x))
@@ -102,15 +110,6 @@ def _compact_text(value: Any, max_len: int) -> str | None:
     if not txt:
         return None
     return txt[:max_len] if len(txt) > max_len else txt
-
-
-def _compact_list(values: list[Any] | None, max_len: int, max_items: int) -> list[str]:
-    out: list[str] = []
-    for v in (values or [])[:max_items]:
-        c = _compact_text(v, max_len)
-        if c:
-            out.append(c)
-    return dedupe_strings_preserve_order(out)
 
 
 def _child_display_fields(child: Any) -> dict[str, Any]:
@@ -201,15 +200,19 @@ def build_match_explanation_payload(
             clean_title = title if _should_include(title) else None
             clean_summary = summary if _should_include(summary) else None
 
-            parent_evidence.append({
-                "headline": clean_title,
-                "summary": truncate_evidence(clean_summary or "", EVIDENCE_SNIPPET_MAX_LEN) or None,
-                "company": company,
-                "location": location,
-                "time": _compact_text(f"{start_date or ''}–{end_date or ''}".strip("–"), 40) or None,
-                "skills": [],
-                "similarity": round(float(sim), 4) if sim is not None else None,
-            })
+            parent_evidence.append(
+                {
+                    "headline": clean_title,
+                    "summary": truncate_evidence(clean_summary or "", EVIDENCE_SNIPPET_MAX_LEN)
+                    or None,
+                    "company": company,
+                    "location": location,
+                    "time": _compact_text(f"{start_date or ''}–{end_date or ''}".strip("–"), 40)
+                    or None,
+                    "skills": [],
+                    "similarity": round(float(sim), 4) if sim is not None else None,
+                }
+            )
 
         # Process children — child_type + titles and descriptions from value.items[]
         child_evidence: list[dict[str, Any]] = []
@@ -236,19 +239,21 @@ def build_match_explanation_payload(
                     descriptions.append(cd)
 
             if child_type or titles or descriptions:
-                child_evidence.append({
-                    "child_type": child_type,
-                    "titles": titles,
-                    "descriptions": descriptions,
-                })
+                child_evidence.append(
+                    {
+                        "child_type": child_type,
+                        "titles": titles,
+                        "descriptions": descriptions,
+                    }
+                )
 
         # outcomes: child item titles and descriptions only
         # (parent summary is already in evidence.summary; no child summary field exists)
         outcomes: list[str] = []
         for c in child_evidence:
-            for t in (c.get("titles") or []):
+            for t in c.get("titles") or []:
                 outcomes.append(t)
-            for d in (c.get("descriptions") or []):
+            for d in c.get("descriptions") or []:
                 outcomes.append(d)
         outcomes = dedupe_strings_preserve_order(outcomes)[:6]
 
@@ -280,8 +285,7 @@ def build_match_explanation_payload(
         }
         # Drop None/empty values for smaller payload
         payload["evidence"] = {
-            k: v for k, v in payload["evidence"].items()
-            if v is not None and v != [] and v != ""
+            k: v for k, v in payload["evidence"].items() if v is not None and v != [] and v != ""
         }
         cleaned.append(payload)
     return cleaned
@@ -292,7 +296,7 @@ def build_match_explanation_payload(
 # -----------------------------------------------------------------------------
 def clean_why_reason(reason: str) -> str | None:
     """Clean a single why_matched reason: strip generic prefixes, enforce length, reject junk.
-    
+
     Returns None if reason is invalid/low-quality.
     """
     if not reason or not isinstance(reason, str):
@@ -300,7 +304,7 @@ def clean_why_reason(reason: str) -> str | None:
     s = sanitize_text_for_llm(reason)
     if not s:
         return None
-    
+
     # Strip generic meta-prefixes
     lower = s.lower()
     for prefix in WHY_GENERIC_PREFIXES:
@@ -309,7 +313,7 @@ def clean_why_reason(reason: str) -> str | None:
             s = sanitize_text_for_llm(s)
             lower = s.lower()
             break
-    
+
     # Enforce max length with word boundary truncation
     if len(s) > WHY_REASON_MAX_LEN:
         s = s[: WHY_REASON_MAX_LEN + 1].rsplit(maxsplit=1)[0] or s[:WHY_REASON_MAX_LEN]
@@ -317,21 +321,21 @@ def clean_why_reason(reason: str) -> str | None:
     # Enforce max 12 words
     s = truncate_reason_to_max_words(s, WHY_REASON_MAX_WORDS)
     s = s.strip()
-    
+
     if not s or len(s) < 3:
         return None
-    
+
     # Reject obvious junk patterns
     words = s.split()
-    
+
     # 1) Same word repeated 3+ times (e.g., "sales sales sales")
     if len(words) >= 3 and len(set(w.lower() for w in words)) == 1:
         return None
-    
+
     # 2) Very generic/vague reasons (too short or single word)
     if len(words) == 1 and len(s) < 10:
         return None
-    
+
     # 3) All words are the same repeated (e.g., "experience experience experience in tech")
     word_counts = {}
     for w in words:
@@ -340,18 +344,18 @@ def clean_why_reason(reason: str) -> str | None:
     if len(words) >= 3 and max_word_count >= len(words) - 1:
         # Most words are duplicates
         return None
-    
+
     # 4) Reject if it looks like a raw label (all caps or title case spam)
     if s.isupper() and len(words) <= 3:
         return None
-    
+
     # 5) Reject obvious markdown artifacts
     if s.startswith(("-", "*", "•", "#")) or s.endswith((":", "...")):
         s = s.lstrip("-*•#").rstrip(":.")
         s = sanitize_text_for_llm(s)
         if not s or len(s) < 3:
             return None
-    
+
     return s if s else None
 
 
@@ -360,7 +364,22 @@ def _extract_query_terms(query: str) -> set[str]:
     if not query or not isinstance(query, str):
         return set()
     words = re.findall(r"\b\w+\b", query.lower())
-    stop = {"the", "a", "an", "and", "or", "in", "on", "at", "to", "for", "of", "with", "by", "under"}
+    stop = {
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "by",
+        "under",
+    }
     return {w for w in words if len(w) >= 2 and w not in stop}
 
 
@@ -388,7 +407,9 @@ def boost_query_matching_reasons(
     When the LLM omits query-relevant evidence (e.g. '200+ products sold' for query 'Sold 100+ products',
     or 'Epic&Focus' for query 'works in Epic&Focus'), prepend the best-matching evidence as the first reason."""
     terms = _extract_query_terms(query_original or "")
-    by_person = {str(p.get("person_id") or ""): p for p in (cleaned_payloads or []) if p.get("person_id")}
+    by_person = {
+        str(p.get("person_id") or ""): p for p in (cleaned_payloads or []) if p.get("person_id")
+    }
     out = dict(why_matched_by_person)
 
     for person_id, reasons in list(out.items()):
@@ -490,14 +511,13 @@ def fallback_build_why_matched(
     query_context: dict[str, Any],
 ) -> list[str]:
     """Build 1–3 short, clean reasons from cleaned evidence when LLM fails or returns invalid.
-    
+
     Generates natural, compressed reasons without verbose prefixes like "Location match:" or "Skills/domain:".
     Prioritizes: explicit query constraints > skills/tools > outcomes > domain/summary.
     """
     reasons: list[str] = []
     evidence = person_evidence.get("evidence") or {}
-    must = (query_context.get("must") or {})
-    should = (query_context.get("should") or {})
+    must = query_context.get("must") or {}
 
     def _cap_reason(r: str | None) -> str | None:
         """Cap reason to max chars and max words; return None if empty."""
@@ -553,7 +573,7 @@ def fallback_build_why_matched(
         r = _build_location_reason()
         if r and r not in reasons:
             reasons.append(r)
-    
+
     time_start = must.get("time_start")
     time_end = must.get("time_end")
     if (time_start or time_end) and evidence.get("time"):
@@ -604,3 +624,227 @@ def fallback_build_why_matched(
 
     # Final dedupe and return
     return dedupe_strings_preserve_order(reasons)[:WHY_REASON_MAX_ITEMS]
+
+
+# =============================================================================
+# LLM why_matched generation (merged from search_logic.py)
+# =============================================================================
+_logger_wm = logging.getLogger(__name__)
+
+# LLM settings
+SEARCH_LLM_MAX_TOKENS = 1200
+SEARCH_WHY_MATCHED_TEMPERATURE = 0.1
+
+# Async why_matched retry settings
+_WHY_MATCHED_COMMIT_WAIT_S = 1.0
+_WHY_MATCHED_RETRY_COUNT = 4
+_WHY_MATCHED_RETRY_BACKOFF = 0.15
+
+# Generic fallback reason
+_FALLBACK_WHY_MATCHED = "Matched your search intent and profile signals."
+
+
+def _build_person_why_evidence(
+    person_id: str,
+    profile: Any,
+    parent_cards_with_sim: list,
+    child_evidence: list,
+) -> dict:
+    """Build compact person-level evidence payload for LLM explanation."""
+    parent_cards_out: list[dict] = []
+    for card, sim in (parent_cards_with_sim or [])[:2]:
+        parent_cards_out.append(
+            {
+                "title": _compact_text(getattr(card, "title", None), 120),
+                "company_name": _compact_text(getattr(card, "company_name", None), 90),
+                "location": _compact_text(getattr(card, "location", None), 80),
+                "summary": _compact_text(getattr(card, "summary", None), 200),
+                "similarity": round(float(sim), 4),
+                "start_date": str(getattr(card, "start_date", None))
+                if getattr(card, "start_date", None) is not None
+                else None,
+                "end_date": str(getattr(card, "end_date", None))
+                if getattr(card, "end_date", None) is not None
+                else None,
+            }
+        )
+
+    child_cards_out: list[dict] = []
+    for child, _parent_id, sim in (child_evidence or [])[:2]:
+        cf = _child_display_fields(child)
+        child_cards_out.append(
+            {
+                "child_type": _compact_text(getattr(child, "child_type", None), 40),
+                "titles": cf.get("titles") or [],
+                "descriptions": cf.get("descriptions") or [],
+                "raw_text": _compact_text(cf.get("raw_text"), 500),
+                "similarity": round(float(sim), 4),
+            }
+        )
+
+    return {
+        "person_id": person_id,
+        "open_to_work": bool(profile.open_to_work) if profile else False,
+        "open_to_contact": bool(profile.open_to_contact) if profile else False,
+        "matched_parent_cards": parent_cards_out,
+        "matched_child_cards": child_cards_out,
+    }
+
+
+def _why_matched_fallback_all(
+    cleaned_payloads: list[dict],
+    query_context: dict,
+) -> dict[str, list[str]]:
+    """Build deterministic why_matched for all persons when LLM is not used."""
+    out: dict[str, list[str]] = {}
+    generic = [_FALLBACK_WHY_MATCHED]
+    for p in cleaned_payloads:
+        person_id = str(p.get("person_id") or "").strip()
+        if not person_id:
+            continue
+        reasons = fallback_build_why_matched(p, p.get("query_context") or query_context)
+        out[person_id] = reasons if reasons else generic
+    return boost_query_matching_reasons(
+        out, cleaned_payloads, query_context.get("query_original") or ""
+    )
+
+
+async def _generate_llm_why_matched(
+    chat: Any,
+    payload: Any,
+    people_evidence: list[dict],
+) -> dict[str, list[str]]:
+    """Generate person-level why_matched from LLM."""
+    if not people_evidence:
+        return {}
+    query_context = {
+        "query_original": payload.query_original or "",
+        "query_cleaned": payload.query_cleaned or payload.query_original or "",
+        "must": payload.must.model_dump(mode="json"),
+        "should": payload.should.model_dump(mode="json"),
+    }
+    cleaned_payloads = build_match_explanation_payload(query_context, people_evidence)
+    if not cleaned_payloads:
+        _logger_wm.info("why_matched: no cleaned payloads after dedup, skipping LLM")
+        return {}
+
+    prompt = get_why_matched_prompt(
+        query_original=payload.query_original,
+        query_cleaned=payload.query_cleaned,
+        must=payload.must.model_dump(mode="json"),
+        should=payload.should.model_dump(mode="json"),
+        people_evidence=cleaned_payloads,
+    )
+    people_count = len(cleaned_payloads)
+    _logger_wm.info(
+        "why_matched: LLM call start | people=%d payload_chars=%d query=%s",
+        people_count,
+        len(prompt),
+        (payload.query_cleaned or payload.query_original or "")[:60],
+    )
+    try:
+        raw = await chat.chat(
+            prompt, max_tokens=SEARCH_LLM_MAX_TOKENS, temperature=SEARCH_WHY_MATCHED_TEMPERATURE
+        )
+        _logger_wm.info("why_matched: LLM call success | response_chars=%d", len(raw or ""))
+    except ChatServiceError as e:
+        _logger_wm.warning(
+            "why_matched: LLM call FAILED, using deterministic fallback | people=%d error=%s",
+            people_count,
+            e,
+        )
+        return _why_matched_fallback_all(cleaned_payloads, query_context)
+
+    try:
+        parsed = json.loads(extract_json_from_llm_response(raw))
+    except (TypeError, ValueError, json.JSONDecodeError) as e:
+        _logger_wm.warning(
+            "why_matched: JSON parse FAILED, using deterministic fallback | people=%d error=%s",
+            people_count,
+            e,
+        )
+        return _why_matched_fallback_all(cleaned_payloads, query_context)
+
+    validated, fallback_count = validate_why_matched_output(parsed)
+    generic = [_FALLBACK_WHY_MATCHED]
+    out: dict[str, list[str]] = {}
+    for p in cleaned_payloads:
+        person_id = str(p.get("person_id") or "").strip()
+        if not person_id:
+            continue
+        reasons = validated.get(person_id) or []
+        if not reasons:
+            reasons = fallback_build_why_matched(p, p.get("query_context") or query_context)
+            if not reasons:
+                reasons = generic
+            fallback_count += 1
+        out[person_id] = reasons
+
+    out = boost_query_matching_reasons(
+        out, cleaned_payloads, query_context.get("query_original") or ""
+    )
+    _logger_wm.info(
+        "why_matched: complete | people=%d llm_success=%d fallback_used=%d",
+        people_count,
+        len(validated),
+        fallback_count,
+    )
+    return out
+
+
+async def _update_why_matched_async(
+    search_id: str,
+    payload: Any,
+    people_evidence: list[dict],
+    person_ids: list[str],
+) -> None:
+    """Best-effort async refresh of why_matched in SearchResult.extra."""
+    if not people_evidence or not person_ids:
+        return
+    await asyncio.sleep(_WHY_MATCHED_COMMIT_WAIT_S)
+    try:
+        chat = get_chat_provider()
+    except Exception as e:
+        _logger_wm.warning("why_matched async skipped (chat provider unavailable): %s", e)
+        return
+
+    from sqlalchemy import select as _select
+
+    from src.db.models import SearchResult
+
+    llm_why_by_person = await _generate_llm_why_matched(chat, payload, people_evidence)
+    if not llm_why_by_person:
+        return
+
+    unique_person_ids = list(dict.fromkeys([str(pid) for pid in person_ids if pid]))
+    if not unique_person_ids:
+        return
+
+    try:
+        async with async_session() as bg_db:
+            result_rows: list[SearchResult] = []
+            for attempt in range(_WHY_MATCHED_RETRY_COUNT):
+                result = await bg_db.execute(
+                    _select(SearchResult).where(
+                        SearchResult.search_id == search_id,
+                        SearchResult.person_id.in_(unique_person_ids),
+                    )
+                )
+                result_rows = list(result.scalars().all())
+                if result_rows:
+                    break
+                await bg_db.rollback()
+                await asyncio.sleep(_WHY_MATCHED_RETRY_BACKOFF * (attempt + 1))
+            if not result_rows:
+                return
+            for row in result_rows:
+                pid = str(row.person_id)
+                lines = llm_why_by_person.get(pid)
+                if not lines:
+                    continue
+                extra = as_dict(row.extra).copy()
+                extra["why_matched"] = lines
+                setattr(row, "extra", extra)
+            await bg_db.commit()
+    except Exception as e:
+        _logger_wm.exception("why_matched async persist failed: %s", e)

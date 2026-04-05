@@ -1,9 +1,9 @@
 """
 Prompts for search query parsing: cleanup → extract → validate.
-Output is a single JSON stored in Search.filters (JSONB) for vector retrieval + structured filters + ranking.
+Output is a single JSON stored in Search.parsed_constraints_json (JSONB) for vector retrieval + structured filters + ranking.
 """
 
-from src.prompts.experience_card_enums import INTENT_ENUM
+from src.prompts.experience_card import INTENT_ENUM
 
 PROMPT_SEARCH_CLEANUP = """
 You are a search query cleanup engine.
@@ -19,6 +19,7 @@ RULES:
 User query:
 {{USER_TEXT}}
 """
+
 
 def get_cleanup_prompt(user_text: str) -> str:
     return PROMPT_SEARCH_CLEANUP.replace("{{USER_TEXT}}", user_text)

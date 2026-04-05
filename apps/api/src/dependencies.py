@@ -1,15 +1,16 @@
 """FastAPI dependency functions (DB session, current user, card lookups)."""
 
-from typing import Annotated, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.session import async_session
-from src.db.models import Person, ExperienceCard, ExperienceCardChild
 from src.core import decode_access_token, get_settings
+from src.db.models import ExperienceCard, ExperienceCardChild, Person
+from src.db.session import async_session
 from src.services.experience import experience_card_service
 
 security = HTTPBearer(auto_error=False)
@@ -19,7 +20,8 @@ security = HTTPBearer(auto_error=False)
 # Database session
 # ---------------------------------------------------------------------------
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+
+async def get_db() -> AsyncGenerator[AsyncSession]:
     """Yield an async DB session; auto-commit on success, rollback on error."""
     async with async_session() as session:
         try:
@@ -33,6 +35,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 # ---------------------------------------------------------------------------
 # Authentication helpers
 # ---------------------------------------------------------------------------
+
 
 async def _resolve_user_from_token(
     token: str,
@@ -104,23 +107,10 @@ async def get_current_user(
     return user
 
 
-async def get_current_user_optional(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> Person | None:
-    """
-    Like ``get_current_user`` but returns ``None`` instead of raising 401.
-
-    Useful for endpoints that serve both authenticated and anonymous users.
-    """
-    if not credentials:
-        return None
-    return await _resolve_user_from_token(credentials.credentials, db)
-
-
 # ---------------------------------------------------------------------------
 # Card lookups
 # ---------------------------------------------------------------------------
+
 
 async def get_experience_card_or_404(
     card_id: str,

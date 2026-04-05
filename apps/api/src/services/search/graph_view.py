@@ -33,6 +33,8 @@ from typing import Any
 from src.db.models import ExperienceCard, ExperienceCardChild
 from src.schemas.search import ParsedConstraintsMust, ParsedConstraintsShould
 
+from ._runtime_values import attr_nonempty_str, attr_str
+
 # ---------------------------------------------------------------------------
 # Child-type → node-type mapping
 # ---------------------------------------------------------------------------
@@ -80,6 +82,12 @@ def _norm(text: str | None) -> str:
     return (text or "").strip().lower()
 
 
+def _nonempty_norm(text: str | None) -> str | None:
+    """Return normalized text or None when empty after stripping."""
+    normalized = _norm(text)
+    return normalized or None
+
+
 def _items_from_child(child: ExperienceCardChild) -> list[dict[str, Any]]:
     """Extract value.items list from a child row (safe)."""
     value = getattr(child, "value", None) or {}
@@ -117,34 +125,32 @@ def _item_descriptions(child: ExperienceCardChild) -> list[str]:
 
 def _child_node_ids(child: ExperienceCardChild) -> list[str]:
     """Compute implicit node IDs for all items in a child row."""
-    prefix = _CHILD_TYPE_TO_NODE_PREFIX.get(child.child_type or "")
+    prefix = _CHILD_TYPE_TO_NODE_PREFIX.get(attr_str(child, "child_type") or "")
     if not prefix:
         return []
-    return [
-        f"{prefix}:{_norm(title)}"
-        for title in _item_titles(child)
-        if _norm(title)
-    ]
+    return [f"{prefix}:{_norm(title)}" for title in _item_titles(child) if _norm(title)]
 
 
 def _parent_node_ids(card: ExperienceCard) -> list[str]:
     """Compute implicit structural node IDs for a parent card (domain, company, location)."""
     nodes: list[str] = [f"exp:{card.id}"]
-    if card.domain_norm:
-        nodes.append(f"domain:{_norm(card.domain_norm)}")
-    elif card.domain:
-        nodes.append(f"domain:{_norm(card.domain)}")
-    if card.sub_domain_norm:
-        nodes.append(f"subdomain:{_norm(card.sub_domain_norm)}")
-    elif card.sub_domain:
-        nodes.append(f"subdomain:{_norm(card.sub_domain)}")
-    if card.company_norm:
-        nodes.append(f"company:{_norm(card.company_norm)}")
-    elif card.company_name:
-        nodes.append(f"company:{_norm(card.company_name)}")
-    for loc_field in (card.city, card.country, card.location):
-        if loc_field:
-            nodes.append(f"location:{_norm(loc_field)}")
+    if domain_norm := _nonempty_norm(attr_str(card, "domain_norm") or attr_str(card, "domain")):
+        nodes.append(f"domain:{domain_norm}")
+    if subdomain_norm := _nonempty_norm(
+        attr_str(card, "sub_domain_norm") or attr_str(card, "sub_domain")
+    ):
+        nodes.append(f"subdomain:{subdomain_norm}")
+    if company_norm := _nonempty_norm(
+        attr_str(card, "company_norm") or attr_str(card, "company_name")
+    ):
+        nodes.append(f"company:{company_norm}")
+    for loc_field in (
+        attr_str(card, "city"),
+        attr_str(card, "country"),
+        attr_str(card, "location"),
+    ):
+        if location_norm := _nonempty_norm(loc_field):
+            nodes.append(f"location:{location_norm}")
     return nodes
 
 
@@ -205,6 +211,18 @@ def _norm_terms(terms: list[str] | None) -> list[str]:
     return [t.strip().lower() for t in (terms or []) if (t or "").strip()]
 
 
+def _query_signal_tokens(should: ParsedConstraintsShould) -> set[str]:
+    """Collect normalized query-signal tokens from SHOULD fields."""
+    return {
+        token
+        for token in (
+            _nonempty_norm(term)
+            for term in [*should.keywords, *should.skills_or_tools, *should.intent_secondary]
+        )
+        if token is not None
+    }
+
+
 def extract_person_graph_features(
     parent_cards: list[ExperienceCard],
     children: list[ExperienceCardChild],
@@ -245,22 +263,27 @@ def extract_person_graph_features(
         node_ids.extend(_parent_node_ids(card))
 
         # Domain alignment
-        d_norm = _norm(card.domain_norm or card.domain)
+        d_norm = _norm(attr_str(card, "domain_norm") or attr_str(card, "domain"))
         if d_norm and must_domain_norms and d_norm in must_domain_norms:
             if d_norm not in seen_domains:
                 feat.domains_matched.append(d_norm)
                 seen_domains.add(d_norm)
 
         # Company alignment
-        c_norm = _norm(card.company_norm or card.company_name)
+        c_norm = _norm(attr_str(card, "company_norm") or attr_str(card, "company_name"))
         if c_norm and must_company_norms and c_norm in must_company_norms:
             if c_norm not in seen_companies:
                 feat.companies_matched.append(c_norm)
                 seen_companies.add(c_norm)
 
         # Startup / scaleup signal
-        ctype = _norm(card.company_type or "")
-        if "startup" in ctype or "scaleup" in ctype or "scale-up" in ctype or "early stage" in ctype:
+        ctype = _norm(attr_str(card, "company_type") or "")
+        if (
+            "startup" in ctype
+            or "scaleup" in ctype
+            or "scale-up" in ctype
+            or "early stage" in ctype
+        ):
             feat.has_startup_company_type = True
 
     # ---- Child-level nodes -------------------------------------------------
@@ -269,8 +292,9 @@ def extract_person_graph_features(
     tools_hits_set: set[str] = set()
 
     for child in children:
-        ct = child.child_type or ""
-        seen_child_types.add(ct)
+        ct = attr_str(child, "child_type") or ""
+        if ct in _CHILD_TYPE_TO_NODE_PREFIX:
+            seen_child_types.add(ct)
         node_ids.extend(_child_node_ids(child))
 
         titles = _item_titles(child)
@@ -303,15 +327,6 @@ def extract_person_graph_features(
 
         # Skills/tools hits vs SHOULD
         if should_skills_tools:
-            if ct == "skills":
-                for t in titles:
-                    if _norm(t) in should_skills_tools:
-                        skills_hits_set.add(_norm(t))
-            elif ct == "tools":
-                for t in titles:
-                    if _norm(t) in should_skills_tools:
-                        tools_hits_set.add(_norm(t))
-            # Also check any dimension title against should_skills_tools
             for t in titles:
                 nt = _norm(t)
                 if nt in should_skills_tools:
@@ -322,7 +337,15 @@ def extract_person_graph_features(
 
     # Also check marketing in parent summaries
     for card in parent_cards:
-        summary_text = " ".join(filter(None, [card.summary, card.raw_text, card.title]))
+        summary_text = " ".join(
+            value
+            for value in (
+                attr_nonempty_str(card, "summary"),
+                attr_nonempty_str(card, "raw_text"),
+                attr_nonempty_str(card, "title"),
+            )
+            if value is not None
+        )
         if summary_text and _text_matches_any(summary_text, _MARKETING_PATTERNS):
             feat.has_marketing = True
 
@@ -343,12 +366,12 @@ def extract_person_graph_features(
 # ---------------------------------------------------------------------------
 
 # Bonus constants (all small, total cap enforced in compute_graph_bonus)
-GRAPH_BONUS_DIM_PER_HIT = 0.01       # per high-value dimension present
-GRAPH_BONUS_DIM_CAP = 0.04           # cap for dimension coverage bonus
-GRAPH_BONUS_DOMAIN_COMPANY = 0.05    # domain + company both aligned
-GRAPH_BONUS_CROSS_MARKETING = 0.04   # cross-functional + marketing composite
-GRAPH_BONUS_STARTUP_METRICS = 0.03   # startup company type + nonempty metrics
-GRAPH_BONUS_TOTAL_CAP = 0.10         # hard cap on total graph bonus
+GRAPH_BONUS_DIM_PER_HIT = 0.01  # per high-value dimension present
+GRAPH_BONUS_DIM_CAP = 0.04  # cap for dimension coverage bonus
+GRAPH_BONUS_DOMAIN_COMPANY = 0.05  # domain + company both aligned
+GRAPH_BONUS_CROSS_MARKETING = 0.04  # cross-functional + marketing composite
+GRAPH_BONUS_STARTUP_METRICS = 0.03  # startup company type + nonempty metrics
+GRAPH_BONUS_TOTAL_CAP = 0.10  # hard cap on total graph bonus
 
 
 def compute_graph_bonus(
@@ -384,13 +407,15 @@ def compute_graph_bonus(
     bonus = 0.0
 
     # Bonus 1: dimension coverage
-    dim_hits = sum([
-        feat.has_metrics,
-        feat.has_collaborations,
-        feat.has_skills or feat.has_tools,
-        feat.has_achievements,
-        feat.has_domain_knowledge,
-    ])
+    dim_hits = sum(
+        [
+            feat.has_metrics,
+            feat.has_collaborations,
+            feat.has_skills or feat.has_tools,
+            feat.has_achievements,
+            feat.has_domain_knowledge,
+        ]
+    )
     dim_bonus = min(dim_hits * GRAPH_BONUS_DIM_PER_HIT, GRAPH_BONUS_DIM_CAP)
     bonus += dim_bonus
 
@@ -401,24 +426,41 @@ def compute_graph_bonus(
     # Bonus 3: cross-functional + marketing composite
     # Only awarded when the query itself carries marketing/cross-functional intent so
     # that a generic backend/Python search is not penalised by unrelated profile traits.
-    _query_tokens = {
-        t.lower()
-        for t in (should.keywords + should.skills_or_tools + should.intent_secondary)
-    }
-    _MARKETING_QUERY_SIGNALS = frozenset({
-        "marketing", "growth", "seo", "campaign", "branding", "content strategy",
-        "go-to-market", "gtm", "cross-functional", "cross functional",
-    })
+    _query_tokens = _query_signal_tokens(should)
+    _MARKETING_QUERY_SIGNALS = frozenset(
+        {
+            "marketing",
+            "growth",
+            "seo",
+            "campaign",
+            "branding",
+            "content strategy",
+            "go-to-market",
+            "gtm",
+            "cross-functional",
+            "cross functional",
+        }
+    )
     _query_wants_marketing = bool(_query_tokens & _MARKETING_QUERY_SIGNALS)
     if feat.has_cross_functional and feat.has_marketing and _query_wants_marketing:
         bonus += GRAPH_BONUS_CROSS_MARKETING
 
     # Bonus 4: startup + metrics (fintech / startup query signal)
     # Only awarded when the query explicitly asks for startup/metrics context.
-    _STARTUP_QUERY_SIGNALS = frozenset({
-        "startup", "startups", "scaleup", "scale-up", "fintech", "metrics",
-        "kpis", "kpi", "growth metrics", "traction",
-    })
+    _STARTUP_QUERY_SIGNALS = frozenset(
+        {
+            "startup",
+            "startups",
+            "scaleup",
+            "scale-up",
+            "fintech",
+            "metrics",
+            "kpis",
+            "kpi",
+            "growth metrics",
+            "traction",
+        }
+    )
     _query_wants_startup = bool(_query_tokens & _STARTUP_QUERY_SIGNALS)
     if feat.has_startup_company_type and feat.has_nonempty_metrics and _query_wants_startup:
         bonus += GRAPH_BONUS_STARTUP_METRICS
@@ -445,4 +487,5 @@ def build_graph_features_dict(feat: PersonGraphFeatures) -> dict[str, Any]:
         "has_marketing": feat.has_marketing,
         "has_startup_company_type": feat.has_startup_company_type,
         "domain_company_aligned": feat.domain_company_aligned,
+        "node_ids": feat.node_ids,
     }

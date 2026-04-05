@@ -41,9 +41,8 @@ const TooltipTrigger = React.forwardRef<
 >(({ className, asChild, children, ...props }, ref) => {
   if (asChild && React.isValidElement(children)) {
     return React.cloneElement(children, {
-      ref,
       ...props,
-    } as React.Attributes);
+    } as React.HTMLAttributes<HTMLElement>);
   }
 
   return (

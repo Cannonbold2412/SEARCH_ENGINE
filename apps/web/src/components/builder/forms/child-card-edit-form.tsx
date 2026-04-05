@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Check, Plus, Trash2 } from "lucide-react";
-import type { ChildValueItem } from "@/types";
+import type { ChildValueItem } from "@/lib/types";
 
 interface ChildCardEditFormProps {
   form: {

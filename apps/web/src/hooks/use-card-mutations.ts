@@ -8,7 +8,7 @@ import type {
   ExperienceCardChildPatch,
   DraftCardFamily,
   SavedCardFamily,
-} from "@/types";
+} from "@/lib/types";
 
 export function useCardMutations(
   setCardFamilies: React.Dispatch<React.SetStateAction<DraftCardFamily[] | null>>,

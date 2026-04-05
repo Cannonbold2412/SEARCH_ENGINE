@@ -1,10 +1,9 @@
+from datetime import UTC, datetime, timedelta
+
 import bcrypt
-from datetime import datetime, timedelta, timezone
-from typing import Optional
 from jose import JWTError, jwt
 
 from src.core.config import get_settings
-
 
 _MAX_BCRYPT_BYTES = 72  # bcrypt limit
 
@@ -24,7 +23,7 @@ def hash_password(password: str) -> str:
 
 def create_access_token(subject: str) -> str:
     s = get_settings()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=s.jwt_expire_minutes)
+    expire = datetime.now(UTC) + timedelta(minutes=s.jwt_expire_minutes)
     to_encode = {"sub": subject, "exp": expire}
     return jwt.encode(to_encode, s.jwt_secret, algorithm=s.jwt_algorithm)
 
@@ -33,7 +32,7 @@ def create_photo_token(subject: str, expire_minutes: int | None = None) -> str:
     """Token for profile photo URL so <img> can load without Bearer. Does not expire by default."""
     s = get_settings()
     if expire_minutes is not None:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=expire_minutes)
+        expire = datetime.now(UTC) + timedelta(minutes=expire_minutes)
         to_encode = {"sub": subject, "exp": expire}
     else:
         # No expiry: profile photos are stored in DB and URLs should work indefinitely
@@ -41,7 +40,7 @@ def create_photo_token(subject: str, expire_minutes: int | None = None) -> str:
     return jwt.encode(to_encode, s.jwt_secret, algorithm=s.jwt_algorithm)
 
 
-def decode_access_token(token: str) -> Optional[str]:
+def decode_access_token(token: str) -> str | None:
     s = get_settings()
     try:
         payload = jwt.decode(token, s.jwt_secret, algorithms=[s.jwt_algorithm])

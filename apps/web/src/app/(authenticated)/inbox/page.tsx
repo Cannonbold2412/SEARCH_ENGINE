@@ -7,7 +7,7 @@ import { MessageCircle, Clock3, Search, Globe } from "lucide-react";
 import Link from "next/link";
 
 import { api } from "@/lib/api";
-import type { ConversationSummary } from "@/types";
+import type { ConversationSummary } from "@/lib/types";
 import { PageLoading, PageError } from "@/components/feedback";
 import { cn } from "@/lib/utils";
 

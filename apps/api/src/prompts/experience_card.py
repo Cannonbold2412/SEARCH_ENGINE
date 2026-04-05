@@ -8,22 +8,24 @@ The system converts free-form text into structured Experience Cards
 (parent + dimension-based children), with structured parent and child cards.
 
 Domains supported: tech + non-tech + mixed.
-
-Enum strings are fetched from this package's experience_card_enums module
-(which derives them from src.domain).
 """
 
-from src.prompts.experience_card_enums import (
-    INTENT_ENUM,
-    CHILD_INTENT_ENUM,
-    CHILD_RELATION_TYPE_ENUM,
-    ENTITY_TYPES,
-    ALLOWED_CHILD_TYPES_STR,
-    SENIORITY_LEVEL_ENUM,
-    EMPLOYMENT_TYPE_ENUM,
-    COMPANY_TYPE_ENUM,
-    EXPERIENCE_RELATION_TYPE_ENUM,
+from typing import get_args
+
+from src.domain import (
+    ALLOWED_CHILD_TYPES,
+    CompanyType,
+    EmploymentType,
+    Intent,
+    SeniorityLevel,
 )
+
+# Enum strings used in LLM prompts (derived from src.domain — single source of truth)
+INTENT_ENUM = ", ".join(get_args(Intent))
+SENIORITY_LEVEL_ENUM = ", ".join(get_args(SeniorityLevel))
+EMPLOYMENT_TYPE_ENUM = ", ".join(get_args(EmploymentType))
+COMPANY_TYPE_ENUM = ", ".join(get_args(CompanyType))
+ALLOWED_CHILD_TYPES_STR = ", ".join(ALLOWED_CHILD_TYPES)
 
 # -----------------------------------------------------------------------------
 # 1. Rewrite + Cleanup (single pass)
@@ -586,27 +588,20 @@ Return valid JSON only:
 
 _DEFAULT_REPLACEMENTS: dict[str, str] = {
     "{{INTENT_ENUM}}": INTENT_ENUM,
-    "{{CHILD_INTENT_ENUM}}": CHILD_INTENT_ENUM,
-    "{{CHILD_RELATION_TYPE_ENUM}}": CHILD_RELATION_TYPE_ENUM,
     "{{ALLOWED_CHILD_TYPES}}": ALLOWED_CHILD_TYPES_STR,
     "{{COMPANY_TYPE_ENUM}}": COMPANY_TYPE_ENUM,
     "{{EMPLOYMENT_TYPE_ENUM}}": EMPLOYMENT_TYPE_ENUM,
     "{{SENIORITY_LEVEL_ENUM}}": SENIORITY_LEVEL_ENUM,
-    "{{EXPERIENCE_RELATION_TYPE_ENUM}}": EXPERIENCE_RELATION_TYPE_ENUM,
 }
+
 
 def fill_prompt(
     template: str,
     *,
     user_text: str | None = None,
-    person_id: str | None = None,
-    parent_and_children_json: str | None = None,
-    raw_text_original: str | None = None,
-    raw_text_cleaned: str | None = None,
     cleaned_text: str | None = None,
     current_card_json: str | None = None,
     allowed_keys: str | None = None,
-    conversation_history: str | None = None,
     experience_index: int | None = None,
     experience_count: int | None = None,
     canonical_card_json: str | None = None,
@@ -616,23 +611,17 @@ def fill_prompt(
     parent_asked_count: int | None = None,
     child_asked_count: int | None = None,
     validated_plan_json: str | None = None,
-    card_context_json: str | None = None,
     user_answer: str | None = None,
     items_instruction: str | None = None,
 ) -> str:
     kwargs_map = {
         "{{USER_TEXT}}": user_text,
-        "{{PERSON_ID}}": person_id,
-        "{{PARENT_AND_CHILDREN_JSON}}": parent_and_children_json,
-        "{{RAW_TEXT_ORIGINAL}}": raw_text_original,
-        "{{RAW_TEXT_CLEANED}}": raw_text_cleaned,
         "{{CLEANED_TEXT}}": cleaned_text,
         "{{CURRENT_CARD_JSON}}": current_card_json,
         "{{ALLOWED_KEYS}}": allowed_keys,
-        "{{CONVERSATION_HISTORY}}": conversation_history,
         "{{EXPERIENCE_INDEX}}": experience_index,
         "{{EXPERIENCE_COUNT}}": experience_count,
-        "{{CANONICAL_CARD_JSON}}": canonical_card_json or card_context_json,
+        "{{CANONICAL_CARD_JSON}}": canonical_card_json,
         "{{ASKED_HISTORY_JSON}}": asked_history_json,
         "{{MAX_PARENT}}": max_parent,
         "{{MAX_CHILD}}": max_child,
@@ -640,7 +629,6 @@ def fill_prompt(
         "{{CHILD_ASKED_COUNT}}": child_asked_count,
         "{{VALIDATED_PLAN_JSON}}": validated_plan_json,
         "{{CLARIFY_PLAN_JSON}}": validated_plan_json,
-        "{{CARD_CONTEXT_JSON}}": card_context_json,
         "{{USER_ANSWER}}": user_answer,
         "{{ITEMS_INSTRUCTION}}": items_instruction or "",
     }
@@ -650,6 +638,4 @@ def fill_prompt(
     for placeholder, value in kwargs_map.items():
         if value is not None:
             out = out.replace(placeholder, value if isinstance(value, str) else str(value))
-        elif placeholder == "{{CONVERSATION_HISTORY}}" and placeholder in out:
-            out = out.replace(placeholder, "(No messages yet)")
     return out

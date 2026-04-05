@@ -11,50 +11,54 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import Person, ExperienceCard, ExperienceCardChild
+from src.db.models import ExperienceCard, ExperienceCardChild, Person
 from src.dependencies import (
     get_current_user,
     get_db,
-    get_experience_card_or_404,
     get_experience_card_child_or_404,
-)
-from src.schemas import (
-    FillFromTextRequest,
-    FillFromTextResponse,
-    BuilderSessionCommitResponse,
-    BuilderTranscriptCommitRequest,
-    ExperienceCardCreate,
-    ExperienceCardPatch,
-    ExperienceCardResponse,
-    ExperienceCardChildPatch,
-    ExperienceCardChildResponse,
-    FinalizeExperienceCardRequest,
-)
-from src.services.builder import (
-    commit_builder_transcript,
+    get_experience_card_or_404,
 )
 from src.providers import (
     ChatServiceError,
     EmbeddingServiceError,
 )
-from src.serializers import experience_card_to_response, experience_card_child_to_response
+from src.schemas import (
+    BuilderSessionCommitResponse,
+    BuilderTranscriptCommitRequest,
+    ExperienceCardChildPatch,
+    ExperienceCardChildResponse,
+    ExperienceCardCreate,
+    ExperienceCardPatch,
+    ExperienceCardResponse,
+    FillFromTextRequest,
+    FillFromTextResponse,
+    FinalizeExperienceCardRequest,
+)
+from src.serializers import experience_card_child_to_response, experience_card_to_response
+from src.services.builder import (
+    commit_builder_transcript,
+)
 from src.services.experience import (
-    experience_card_service,
+    PipelineError,
     apply_card_patch,
     apply_child_patch,
     embed_experience_cards,
+    experience_card_service,
     fill_missing_fields_from_text,
-    PipelineError,
 )
 from src.services.experience.form_merge import (
+    PARENT_MERGE_KEYS,
     merged_form,
     parent_merged_to_patch,
-    child_merged_to_patch,
-    PARENT_MERGE_KEYS,
-    CHILD_MERGE_KEYS,
 )
+from src.services.locale_display import bump_english_content_version
 
 logger = logging.getLogger(__name__)
+
+
+async def _invalidate_localized_ui(db: AsyncSession, person_id: str) -> None:
+    """Rebuild localized /me payloads after English card or bio content changes."""
+    await bump_english_content_version(db, person_id)
 
 router = APIRouter(tags=["builder"])
 
@@ -127,6 +131,7 @@ async def fill_missing_from_text(
         apply_card_patch(card, patch)
         await db.flush()
         await _reembed_cards_after_update(db, parents=[card], context="fill-missing (parent)")
+        await _invalidate_localized_ui(db, current_user.id)
 
     return FillFromTextResponse(filled=filled)
 
@@ -146,6 +151,7 @@ async def commit_builder_transcript_endpoint(
             session_id=body.session_id,
             mode=body.mode,
         )
+        await _invalidate_localized_ui(db, current_user.id)
         return BuilderSessionCommitResponse(**result)
     except HTTPException:
         raise
@@ -189,6 +195,7 @@ async def finalize_experience_card(
     children = children_result.scalars().all()
 
     await _reembed_cards_after_update(db, parents=[card], children=children, context="finalize")
+    await _invalidate_localized_ui(db, current_user.id)
     return experience_card_to_response(card)
 
 
@@ -204,6 +211,7 @@ async def create_experience_card(
 ):
     """Manually create an experience card (no AI pipeline)."""
     card = await experience_card_service.create_card(db, current_user.id, body)
+    await _invalidate_localized_ui(db, current_user.id)
     return experience_card_to_response(card)
 
 
@@ -216,6 +224,7 @@ async def patch_experience_card(
     """Update fields on an existing experience card and re-embed."""
     apply_card_patch(card, body)
     await _reembed_cards_after_update(db, parents=[card], context="PATCH card")
+    await _invalidate_localized_ui(db, card.user_id)
     return experience_card_to_response(card)
 
 
@@ -229,7 +238,9 @@ async def delete_experience_card(
         delete(ExperienceCardChild).where(ExperienceCardChild.parent_experience_id == card.id)
     )
     response = experience_card_to_response(card)
+    uid = card.user_id
     await db.delete(card)
+    await _invalidate_localized_ui(db, uid)
     return response
 
 
@@ -245,6 +256,7 @@ async def patch_experience_card_child(
     """Update items on an existing child card and re-embed."""
     apply_child_patch(child, body)
     await _reembed_cards_after_update(db, children=[child], context="PATCH child")
+    await _invalidate_localized_ui(db, child.person_id)
     return experience_card_child_to_response(child)
 
 
@@ -258,5 +270,7 @@ async def delete_experience_card_child(
 ):
     """Delete a child card."""
     response = experience_card_child_to_response(child)
+    pid = child.person_id
     await db.delete(child)
+    await _invalidate_localized_ui(db, pid)
     return response

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 import httpx
 
-from src.core.config import get_settings, Settings
+from src.core.config import Settings, get_settings
 
 
 class EmbeddingServiceError(Exception):
@@ -51,7 +51,9 @@ class OpenAICompatibleEmbeddingProvider(EmbeddingProvider):
                 r.raise_for_status()
                 data = r.json()
                 try:
-                    out = [item["embedding"] for item in sorted(data["data"], key=lambda x: x["index"])]
+                    out = [
+                        item["embedding"] for item in sorted(data["data"], key=lambda x: x["index"])
+                    ]
                     return out
                 except (KeyError, TypeError) as e:
                     raise EmbeddingServiceError(
@@ -78,6 +80,4 @@ def get_embedding_provider() -> EmbeddingProvider:
             model=s.embed_model,
             dimension=dimension,
         )
-    raise RuntimeError(
-        "Embedding model not configured. Set EMBED_API_BASE_URL (and EMBED_MODEL)."
-    )
+    raise RuntimeError("Embedding model not configured. Set EMBED_API_BASE_URL (and EMBED_MODEL).")

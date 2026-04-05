@@ -1,7 +1,7 @@
 import os
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
 
 from src.core import get_settings
@@ -19,7 +19,10 @@ engine = create_async_engine(
     poolclass=NullPool if "render.com" in database_url else None,
 )
 
-async_session = async_sessionmaker(
+async_session: async_sessionmaker[AsyncSession] = async_sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False, autoflush=False
 )
-Base = declarative_base()
+
+
+class Base(DeclarativeBase):
+    pass

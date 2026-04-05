@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { LockOpen, Settings, Compass, LayoutGrid, Hammer, Globe, PanelLeftClose, PanelLeft, Menu, MessageSquare, Search } from "lucide-react";
 import { useSidebarWidth, MOBILE_DRAWER_WIDTH } from "@/contexts/sidebar-width-context";
-import { useProfileSchema } from "@/hooks/use-profile-v1";
+import { useProfileSchema } from "@/hooks/use-profile-schema";
 import { useProfilePhoto } from "@/hooks/use-profile-photo";
 import { cn } from "@/lib/utils";
 import { apiAssetUrl } from "@/lib/constants";

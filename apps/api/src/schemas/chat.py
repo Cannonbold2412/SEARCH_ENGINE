@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List
 
 from pydantic import BaseModel
 
@@ -50,12 +49,10 @@ class ConversationDetail(BaseModel):
 
     id: str
     peer: ConversationPeer
-    messages: List[MessageItem]
+    messages: list[MessageItem]
 
 
 class SendMessageRequest(BaseModel):
     """Send a new chat message."""
 
     body: str
-
-

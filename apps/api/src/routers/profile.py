@@ -1,26 +1,24 @@
-from fastapi import APIRouter, Depends, UploadFile, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Person
 from src.dependencies import get_current_user, get_db
+from src.domain import ExperienceCardSchema, PersonSchema
 from src.schemas import (
-    PersonResponse,
-    PatchProfileRequest,
-    VisibilitySettingsResponse,
-    PatchVisibilityRequest,
-    CreditsResponse,
-    PurchaseCreditsRequest,
-    LedgerEntryResponse,
-    BioResponse,
     BioCreateUpdate,
-    ExperienceCardResponse,
+    BioResponse,
     CardFamilyResponse,
+    CreditsResponse,
+    ExperienceCardResponse,
+    LedgerEntryResponse,
+    PatchProfileRequest,
+    PatchVisibilityRequest,
+    PersonResponse,
+    PurchaseCreditsRequest,
+    VisibilitySettingsResponse,
 )
-from src.domain import PersonSchema, ExperienceCardSchema
-from src.serializers import experience_card_to_response, experience_card_to_schema, experience_card_child_to_response
 from src.services.profile import profile_service
-from src.services.experience import experience_card_service
 
 router = APIRouter(prefix="/me", tags=["profile"])
 
@@ -139,8 +137,7 @@ async def list_my_experience_cards(
     current_user: Person = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    cards = await experience_card_service.list_cards(db, current_user.id)
-    return [experience_card_to_response(c) for c in cards]
+    return await profile_service.list_experience_cards(db, current_user)
 
 
 @router.get("/experience-card-families", response_model=list[CardFamilyResponse])
@@ -149,14 +146,7 @@ async def list_my_experience_card_families(
     db: AsyncSession = Depends(get_db),
 ):
     """List saved experience cards with their children grouped by parent."""
-    families = await experience_card_service.list_card_families(db, current_user.id)
-    return [
-        CardFamilyResponse(
-            parent=experience_card_to_response(parent),
-            children=[experience_card_child_to_response(c) for c in children],
-        )
-        for parent, children in families
-    ]
+    return await profile_service.list_experience_card_families(db, current_user)
 
 
 @router.get("/experience-cards-schema", response_model=list[ExperienceCardSchema])
@@ -165,5 +155,4 @@ async def list_my_experience_cards_schema(
     db: AsyncSession = Depends(get_db),
 ):
     """List current user's experience cards in ExperienceCardSchema."""
-    cards = await experience_card_service.list_cards(db, current_user.id)
-    return [experience_card_to_schema(c) for c in cards]
+    return await profile_service.list_experience_cards_schema(db, current_user)

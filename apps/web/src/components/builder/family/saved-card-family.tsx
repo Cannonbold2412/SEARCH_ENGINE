@@ -12,7 +12,7 @@ import {
 } from "../card/card-details";
 import { PenLine, Trash2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ExperienceCard, ExperienceCardChild } from "@/types";
+import type { ExperienceCard, ExperienceCardChild } from "@/lib/types";
 import type { ParentCardForm, ChildCardForm } from "@/hooks/use-card-forms";
 
 type DeleteTarget =
@@ -21,7 +21,7 @@ type DeleteTarget =
 
 interface SavedCardFamilyProps {
   parent: ExperienceCard;
-  children: ExperienceCardChild[];
+  childCards: ExperienceCardChild[];
   /** When true, hides edit/delete and only allows expand + child detail pop-out */
   readOnly?: boolean;
   deletedId?: string | null;
@@ -47,7 +47,7 @@ interface SavedCardFamilyProps {
 
 export function SavedCardFamily({
   parent,
-  children,
+  childCards,
   readOnly = false,
   deletedId = null,
   editingSavedCardId = null,
@@ -73,7 +73,7 @@ export function SavedCardFamily({
     (parent as { id?: string })?.id ?? (parent as Record<string, unknown>)?.card_id ?? ""
   ).trim();
   const isEditingParent = !readOnly && editingSavedCardId === parentId;
-  const visibleChildren = children.filter((c) => !isPlaceholderChildCard(c as Record<string, unknown>));
+  const visibleChildren = childCards.filter((c) => !isPlaceholderChildCard(c as Record<string, unknown>));
   const hasChildren = visibleChildren.length > 0;
   const [isExpanded, setIsExpanded] = useState(false);
   const [viewingChildId, setViewingChildId] = useState<string | null>(null);
@@ -233,7 +233,7 @@ export function SavedCardFamily({
                 className="thread-line thread-line-animated top-0 bottom-4"
                 aria-hidden
               />
-              <ul className="relative space-y-0">
+              <ul className="relative space-y-1">
                 {visibleChildren.map((child, childIdx) => {
                   const relationType = (child.child_type ?? "").toString().trim();
                   const relationDisplay = relationType ? relationType.replace(/_/g, " ") : "";
@@ -273,13 +273,13 @@ export function SavedCardFamily({
                                 {relationDisplay}
                               </span>
                             )}
-                            <p className="flex flex-wrap text-sm font-medium text-foreground leading-snug px-2.5 whitespace-pre-line">
+                            <p className="flex flex-col gap-1 text-sm font-medium text-foreground leading-snug px-2.5">
                               {(() => {
                                 const items = getChildDisplayItems(child);
                                 const childType = (child.child_type ?? "").toString().trim().replace(/_/g, " ");
                                 if (items.length === 0) return childType || "Detail";
                                 return items.map((it, i) => (
-                                  <span key={i}>
+                                  <span key={i} className="block">
                                     {it.title && it.summary ? (
                                       <>
                                         {it.title}:{" "}
@@ -288,7 +288,6 @@ export function SavedCardFamily({
                                     ) : (
                                       it.title || it.summary
                                     )}
-                                    {i < items.length - 1 && "\n"}
                                   </span>
                                 ));
                               })()}

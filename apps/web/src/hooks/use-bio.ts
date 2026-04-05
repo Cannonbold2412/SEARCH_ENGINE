@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { BioResponse } from "@/types";
+import type { BioResponse } from "@/lib/types";
 
 export const BIO_QUERY_KEY = ["bio"] as const;
 

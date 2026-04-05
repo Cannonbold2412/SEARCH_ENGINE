@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { ExperienceCard } from "@/types";
+import type { ExperienceCard } from "@/lib/types";
 
 export const EXPERIENCE_CARDS_QUERY_KEY = ["experience-cards"] as const;
 

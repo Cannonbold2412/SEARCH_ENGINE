@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isPlaceholderChildCard, getChildDisplayTitle, getChildDisplaySummary } from "@/components/builder/card/card-details";
-import type { SavedCardFamily } from "@/types";
+import type { SavedCardFamily } from "@/lib/types";
 
 interface ExpandableExperienceCardProps {
   family: SavedCardFamily;

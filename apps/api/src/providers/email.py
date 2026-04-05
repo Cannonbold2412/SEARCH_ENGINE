@@ -24,7 +24,9 @@ class SendGridProvider:
         self.from_name = from_name
         self.base_url = "https://api.sendgrid.com/v3/mail/send"
 
-    async def send_email(self, to_email: str, subject: str, text: str, html: str | None = None) -> None:
+    async def send_email(
+        self, to_email: str, subject: str, text: str, html: str | None = None
+    ) -> None:
         content: list[dict[str, Any]] = [{"type": "text/plain", "value": text}]
         if html:
             content.append({"type": "text/html", "value": html})

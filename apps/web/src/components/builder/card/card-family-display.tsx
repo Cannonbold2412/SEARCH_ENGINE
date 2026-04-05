@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { CardDetails, getChildDisplaySummary, getChildDisplayTitle, isPlaceholderChildCard } from "./card-details";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ExperienceCard, ExperienceCardChild } from "@/types";
+import type { ExperienceCard, ExperienceCardChild } from "@/lib/types";
 
 export interface CardFamilyDisplayProps {
   parent: ExperienceCard | Record<string, unknown>;

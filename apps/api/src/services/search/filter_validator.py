@@ -11,14 +11,14 @@ Runs after LLM cleanup → single extract. Deterministic post-processor that:
 
 import re
 from datetime import datetime
-from typing import Optional, get_args
+from typing import get_args
 
 from src.domain import Intent
 from src.schemas.search import (
-    ParsedConstraintsPayload,
-    ParsedConstraintsMust,
-    ParsedConstraintsShould,
     ParsedConstraintsExclude,
+    ParsedConstraintsMust,
+    ParsedConstraintsPayload,
+    ParsedConstraintsShould,
 )
 
 # Allow at most this many MUST list items before demoting rest to SHOULD (recall protection)
@@ -35,7 +35,7 @@ MAX_ALLOWED_YEAR_OFFSET = 1
 _VALID_INTENT_PRIMARY = frozenset(get_args(Intent))
 
 
-def _str_strip_or_none(s: Optional[str]) -> Optional[str]:
+def _str_strip_or_none(s: str | None) -> str | None:
     if s is None or not isinstance(s, str):
         return s
     t = s.strip()
@@ -60,7 +60,7 @@ def _dedupe_list(items: list[str], normalize: bool = False) -> list[str]:
     return out
 
 
-def _normalize_date(s: Optional[str]) -> Optional[str]:
+def _normalize_date(s: str | None) -> str | None:
     """Return YYYY-MM-DD if parseable, else None. Accepts YYYY-MM-DD, YYYY-MM."""
     if not s or not isinstance(s, str):
         return None
@@ -84,10 +84,10 @@ def _normalize_date(s: Optional[str]) -> Optional[str]:
 
 
 def _normalize_salary_to_per_year(
-    value: Optional[float],
+    value: float | None,
     *,
     hint_per_month: bool = False,
-) -> Optional[float]:
+) -> float | None:
     """
     Ensure salary is in ₹/year. If hint_per_month or value looks like monthly (< 200_000),
     multiply by 12. Clamp to non-negative.
@@ -120,7 +120,11 @@ def validate_and_normalize(payload: ParsedConstraintsPayload) -> ParsedConstrain
     company_norm = _dedupe_list(list(must.company_norm or []), normalize=True)
     team_norm = _dedupe_list(list(must.team_norm or []), normalize=True)
     intent_primary_raw = list(must.intent_primary or [])
-    intent_primary_valid = [x for x in intent_primary_raw if isinstance(x, str) and x.strip().lower() in _VALID_INTENT_PRIMARY]
+    intent_primary_valid = [
+        x
+        for x in intent_primary_raw
+        if isinstance(x, str) and x.strip().lower() in _VALID_INTENT_PRIMARY
+    ]
     intent_primary = _dedupe_list([s.strip() for s in intent_primary_valid], normalize=True)
     domain = _dedupe_list(list(must.domain or []), normalize=False)
     sub_domain = _dedupe_list(list(must.sub_domain or []), normalize=False)
@@ -153,7 +157,9 @@ def validate_and_normalize(payload: ParsedConstraintsPayload) -> ParsedConstrain
     if confidence < WEAK_CONFIDENCE_THRESHOLD:
         domain_to_should = domain[MAX_MUST_DOMAIN:] if len(domain) > MAX_MUST_DOMAIN else []
         domain = domain[:MAX_MUST_DOMAIN]
-        should_keywords = _dedupe_list(should_keywords + domain_to_should + list(sub_domain), normalize=True)
+        should_keywords = _dedupe_list(
+            should_keywords + domain_to_should + list(sub_domain), normalize=True
+        )
         sub_domain = []
     else:
         domain = domain[:MAX_MUST_DOMAIN]

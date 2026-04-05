@@ -4,7 +4,7 @@ Single source of truth for prompts, validation, and API responses.
 """
 
 from datetime import datetime
-from typing import Literal, Optional, get_args
+from typing import Literal, get_args
 
 from pydantic import BaseModel, Field
 
@@ -13,46 +13,95 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 Intent = Literal[
-    "work", "education", "project", "business", "research",
-    "practice", "exposure", "achievement", "transition", "learning",
-    "life_context", "community", "finance", "other", "mixed",
+    "work",
+    "education",
+    "project",
+    "business",
+    "research",
+    "practice",
+    "exposure",
+    "achievement",
+    "transition",
+    "learning",
+    "life_context",
+    "community",
+    "finance",
+    "other",
+    "mixed",
 ]
 
 ChildIntent = Literal[
-    "responsibility", "capability", "method", "outcome",
-    "learning", "challenge", "decision", "evidence",
+    "responsibility",
+    "capability",
+    "method",
+    "outcome",
+    "learning",
+    "challenge",
+    "decision",
+    "evidence",
 ]
 
 ChildRelationType = Literal[
-    "describes", "supports", "demonstrates", "results_in",
-    "learned_from", "involves", "part_of",
+    "describes",
+    "supports",
+    "demonstrates",
+    "results_in",
+    "learned_from",
+    "involves",
+    "part_of",
 ]
 
 SeniorityLevel = Literal[
-    "intern", "junior", "mid", "senior", "lead", "principal",
-    "staff", "manager", "director", "vp", "executive",
-    "founder", "independent", "volunteer", "student",
-    "apprentice",   # learning under a master/ustaad
-    "owner",        # family business / own shop
+    "intern",
+    "junior",
+    "mid",
+    "senior",
+    "lead",
+    "principal",
+    "staff",
+    "manager",
+    "director",
+    "vp",
+    "executive",
+    "founder",
+    "independent",
+    "volunteer",
+    "student",
+    "apprentice",  # learning under a master/ustaad
+    "owner",  # family business / own shop
     "other",
 ]
 
 EmploymentType = Literal[
-    "full_time", "part_time", "contract", "freelance",
-    "internship", "volunteer", "self_employed", "founder",
-    "apprenticeship",   # formal or informal, under a master
+    "full_time",
+    "part_time",
+    "contract",
+    "freelance",
+    "internship",
+    "volunteer",
+    "self_employed",
+    "founder",
+    "apprenticeship",  # formal or informal, under a master
     "family_business",  # working in a family-owned business
-    "daily_wage",       # informal daily wage / labour
-    "gig",              # gig economy (delivery, ride-share, etc.)
+    "daily_wage",  # informal daily wage / labour
+    "gig",  # gig economy (delivery, ride-share, etc.)
     "other",
 ]
 
 CompanyType = Literal[
-    "startup", "scaleup", "mnc", "sme", "agency", "ngo",
-    "government", "university", "research_institution",
-    "self_employed", "cooperative",
-    "family_business",    # family-owned business
-    "informal",           # street vendor, local shop, dhaba, etc.
+    "startup",
+    "scaleup",
+    "mnc",
+    "sme",
+    "agency",
+    "ngo",
+    "government",
+    "university",
+    "research_institution",
+    "self_employed",
+    "cooperative",
+    "family_business",  # family-owned business
+    "informal",  # street vendor, local shop, dhaba, etc.
     "master_apprentice",  # ustaad/master-based learning or work
     "other",
 ]
@@ -66,23 +115,47 @@ ClaimState = Literal["self_claim", "supported", "verified"]
 EvidenceType = Literal["link", "file", "reference"]
 
 ToolType = Literal[
-    "software", "equipment", "system",
-    "platform", "instrument", "other",
+    "software",
+    "equipment",
+    "system",
+    "platform",
+    "instrument",
+    "other",
 ]
 
 EntityType = Literal[
-    "person", "organization", "company", "school", "team",
-    "community", "place", "event", "program", "domain", "industry",
-    "product", "service", "artifact", "document", "portfolio_item",
-    "credential", "award", "tool", "equipment", "system", "platform",
-    "instrument", "method", "process",
+    "person",
+    "organization",
+    "company",
+    "school",
+    "team",
+    "community",
+    "place",
+    "event",
+    "program",
+    "domain",
+    "industry",
+    "product",
+    "service",
+    "artifact",
+    "document",
+    "portfolio_item",
+    "credential",
+    "award",
+    "tool",
+    "equipment",
+    "system",
+    "platform",
+    "instrument",
+    "method",
+    "process",
 ]
 
 # Describes how two parallel experiences relate to each other.
 ExperienceRelationType = Literal[
-    "parallel",      # running simultaneously (job + side business)
-    "sequential",    # one after the other
-    "nested",        # one within the other (project within a job)
+    "parallel",  # running simultaneously (job + side business)
+    "sequential",  # one after the other
+    "nested",  # one within the other (project within a job)
     "transitional",  # one led directly to the other
 ]
 
@@ -91,8 +164,16 @@ ExperienceRelationType = Literal[
 # ---------------------------------------------------------------------------
 
 ALLOWED_CHILD_TYPES: tuple[str, ...] = (
-    "skills", "tools", "metrics", "achievements", "responsibilities",
-    "collaborations", "domain_knowledge", "exposure", "education", "certifications",
+    "skills",
+    "tools",
+    "metrics",
+    "achievements",
+    "responsibilities",
+    "collaborations",
+    "domain_knowledge",
+    "exposure",
+    "education",
+    "certifications",
 )
 
 ENTITY_TAXONOMY: list[str] = list(get_args(EntityType))
@@ -101,33 +182,34 @@ ENTITY_TAXONOMY: list[str] = list(get_args(EntityType))
 # 3. Nested field models
 # ---------------------------------------------------------------------------
 
+
 class TimeField(BaseModel):
-    start: Optional[str] = None       # YYYY-MM | YYYY-MM-DD
-    end: Optional[str] = None
-    ongoing: Optional[bool] = None
-    text: Optional[str] = None        # user's original phrasing
+    start: str | None = None  # YYYY-MM | YYYY-MM-DD
+    end: str | None = None
+    ongoing: bool | None = None
+    text: str | None = None  # user's original phrasing
     confidence: Confidence
 
 
 class LocationField(BaseModel):
-    city: Optional[str] = None
-    region: Optional[str] = None
-    country: Optional[str] = None
-    text: Optional[str] = None        # user's original phrasing
-    is_remote: Optional[bool] = None
+    city: str | None = None
+    region: str | None = None
+    country: str | None = None
+    text: str | None = None  # user's original phrasing
+    is_remote: bool | None = None
     confidence: Confidence
 
 
 class RoleItem(BaseModel):
     label: str
-    seniority: Optional[SeniorityLevel] = None
+    seniority: SeniorityLevel | None = None
     confidence: Confidence
 
 
 class EntityItem(BaseModel):
     type: EntityType
     name: str
-    entity_id: Optional[str] = None
+    entity_id: str | None = None
     confidence: Confidence
 
 
@@ -139,27 +221,27 @@ class ToolItem(BaseModel):
 
 class ToolingField(BaseModel):
     tools: list[ToolItem] = Field(default_factory=list)
-    raw: Optional[str] = None
+    raw: str | None = None
 
 
 class OutcomeMetric(BaseModel):
-    name: Optional[str] = None
-    value: Optional[float] = None
-    unit: Optional[str] = None
+    name: str | None = None
+    value: float | None = None
+    unit: str | None = None
 
 
 class OutcomeItem(BaseModel):
     type: str
     label: str
-    value_text: Optional[str] = None
+    value_text: str | None = None
     metric: OutcomeMetric
     confidence: Confidence
 
 
 class EvidenceItem(BaseModel):
     type: EvidenceType
-    url: Optional[str] = None
-    note: Optional[str] = None
+    url: str | None = None
+    note: str | None = None
     visibility: Visibility
 
 
@@ -172,23 +254,24 @@ class QualityField(BaseModel):
     overall_confidence: Confidence
     claim_state: ClaimState
     needs_clarification: bool
-    clarifying_question: Optional[str] = None
+    clarifying_question: str | None = None
 
 
 class IndexField(BaseModel):
-    embedding_ref: Optional[str] = None
+    embedding_ref: str | None = None
 
 
 # ---------------------------------------------------------------------------
 # Person (profile) domain types
 # ---------------------------------------------------------------------------
 
+
 class LocationBasic(BaseModel):
     """Simple location for person profile (no confidence field)."""
 
-    city: Optional[str] = None
-    region: Optional[str] = None
-    country: Optional[str] = None
+    city: str | None = None
+    region: str | None = None
+    country: str | None = None
 
 
 class PersonVerification(BaseModel):
@@ -206,8 +289,8 @@ class PersonSchema(BaseModel):
     person_id: str
     username: str
     display_name: str
-    photo_url: Optional[str] = None
-    bio: Optional[str] = None
+    photo_url: str | None = None
+    bio: str | None = None
     location: LocationBasic
     verification: PersonVerification
     privacy_defaults: PersonPrivacyDefaults
@@ -221,22 +304,18 @@ class PersonSchema(BaseModel):
 LocationWithConfidence = LocationField
 
 
-class LanguageField(BaseModel):
-    raw_text: Optional[str] = None
-    confidence: Confidence
-
-
 class ExperienceRelation(BaseModel):
     """Links two experience cards that overlapped in time."""
 
     related_card_id: str
     relation_type: ExperienceRelationType
-    note: Optional[str] = None  # e.g. "ran this side business while employed at X"
+    note: str | None = None  # e.g. "ran this side business while employed at X"
 
 
 # ---------------------------------------------------------------------------
 # 4. Experience Card schemas
 # ---------------------------------------------------------------------------
+
 
 class ExperienceCardBase(BaseModel):
     """Shared fields for parent and child cards."""
@@ -245,7 +324,7 @@ class ExperienceCardBase(BaseModel):
     person_id: str
     created_by: str
     version: Literal[1] = 1
-    edited_at: Optional[datetime] = None
+    edited_at: datetime | None = None
     headline: str
     summary: str
     raw_text: str
@@ -266,25 +345,15 @@ class ExperienceCardBase(BaseModel):
 class ExperienceCardParentSchema(ExperienceCardBase):
     """Parent card — root of a card family."""
 
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
     depth: Literal[0] = 0
-    relation_type: Optional[str] = None
+    relation_type: str | None = None
     intent: Intent
     intent_secondary: list[Intent] = Field(default_factory=list)
-    seniority_level: Optional[SeniorityLevel] = None
-    employment_type: Optional[EmploymentType] = None
-    company_type: Optional[CompanyType] = None
+    seniority_level: SeniorityLevel | None = None
+    employment_type: EmploymentType | None = None
+    company_type: CompanyType | None = None
     relations: list[ExperienceRelation] = Field(default_factory=list)
-
-
-class ExperienceCardChildSchema(ExperienceCardBase):
-    """Child card — belongs to a parent."""
-
-    parent_id: str
-    depth: Literal[1] = 1
-    relation_type: ChildRelationType
-    intent: ChildIntent
-    child_type: str  # validated against ALLOWED_CHILD_TYPES at service layer
 
 
 ExperienceCardSchema = ExperienceCardParentSchema

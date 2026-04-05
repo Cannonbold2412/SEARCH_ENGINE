@@ -1,0 +1,2254 @@
+
+{
+    "version": "1.38.3",
+    "time": "1774274481756",
+    "generalDiagnostics": [
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\builder\\builder_extraction.py",
+            "severity": "error",
+            "message": "Declaration \"lines\" is obscured by a declaration of the same name",
+            "range": {
+                "start": {
+                    "line": 91,
+                    "character": 8
+                },
+                "end": {
+                    "line": 91,
+                    "character": 13
+                }
+            },
+            "rule": "reportRedeclaration"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\builder\\engine.py",
+            "severity": "error",
+            "message": "\"get\" is not a known attribute of \"None\"",
+            "range": {
+                "start": {
+                    "line": 333,
+                    "character": 41
+                },
+                "end": {
+                    "line": 333,
+                    "character": 44
+                }
+            },
+            "rule": "reportOptionalMemberAccess"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\builder\\engine.py",
+            "severity": "error",
+            "message": "\"get\" is not a known attribute of \"None\"",
+            "range": {
+                "start": {
+                    "line": 334,
+                    "character": 53
+                },
+                "end": {
+                    "line": 334,
+                    "character": 56
+                }
+            },
+            "rule": "reportOptionalMemberAccess"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\child_value.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 27,
+                    "character": 46
+                },
+                "end": {
+                    "line": 27,
+                    "character": 50
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\child_value.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 37,
+                    "character": 14
+                },
+                "end": {
+                    "line": 37,
+                    "character": 18
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\child_value.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 62,
+                    "character": 35
+                },
+                "end": {
+                    "line": 62,
+                    "character": 39
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\child_value.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 62,
+                    "character": 50
+                },
+                "end": {
+                    "line": 62,
+                    "character": 54
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\child_value.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 68,
+                    "character": 14
+                },
+                "end": {
+                    "line": 68,
+                    "character": 18
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\child_value.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 83,
+                    "character": 41
+                },
+                "end": {
+                    "line": 83,
+                    "character": 45
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\child_value.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 106,
+                    "character": 30
+                },
+                "end": {
+                    "line": 106,
+                    "character": 34
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\child_value.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 106,
+                    "character": 45
+                },
+                "end": {
+                    "line": 106,
+                    "character": 49
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\child_value.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 106,
+                    "character": 60
+                },
+                "end": {
+                    "line": 106,
+                    "character": 64
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 129,
+                    "character": 16
+                },
+                "end": {
+                    "line": 129,
+                    "character": 20
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 138,
+                    "character": 17
+                },
+                "end": {
+                    "line": 138,
+                    "character": 21
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 138,
+                    "character": 36
+                },
+                "end": {
+                    "line": 138,
+                    "character": 40
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 145,
+                    "character": 17
+                },
+                "end": {
+                    "line": 145,
+                    "character": 21
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 145,
+                    "character": 36
+                },
+                "end": {
+                    "line": 145,
+                    "character": 40
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 152,
+                    "character": 51
+                },
+                "end": {
+                    "line": 152,
+                    "character": 55
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 152,
+                    "character": 60
+                },
+                "end": {
+                    "line": 152,
+                    "character": 64
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 223,
+                    "character": 19
+                },
+                "end": {
+                    "line": 223,
+                    "character": 23
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 242,
+                    "character": 44
+                },
+                "end": {
+                    "line": 242,
+                    "character": 48
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 274,
+                    "character": 45
+                },
+                "end": {
+                    "line": 274,
+                    "character": 49
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 333,
+                    "character": 20
+                },
+                "end": {
+                    "line": 333,
+                    "character": 24
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 336,
+                    "character": 18
+                },
+                "end": {
+                    "line": 336,
+                    "character": 22
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 350,
+                    "character": 30
+                },
+                "end": {
+                    "line": 350,
+                    "character": 34
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 407,
+                    "character": 22
+                },
+                "end": {
+                    "line": 407,
+                    "character": 26
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 408,
+                    "character": 24
+                },
+                "end": {
+                    "line": 408,
+                    "character": 28
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 557,
+                    "character": 24
+                },
+                "end": {
+                    "line": 557,
+                    "character": 28
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 574,
+                    "character": 34
+                },
+                "end": {
+                    "line": 574,
+                    "character": 38
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 601,
+                    "character": 38
+                },
+                "end": {
+                    "line": 601,
+                    "character": 42
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 613,
+                    "character": 44
+                },
+                "end": {
+                    "line": 613,
+                    "character": 48
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 622,
+                    "character": 22
+                },
+                "end": {
+                    "line": 622,
+                    "character": 26
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 623,
+                    "character": 24
+                },
+                "end": {
+                    "line": 623,
+                    "character": 28
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 665,
+                    "character": 51
+                },
+                "end": {
+                    "line": 665,
+                    "character": 55
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 665,
+                    "character": 64
+                },
+                "end": {
+                    "line": 665,
+                    "character": 68
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 665,
+                    "character": 92
+                },
+                "end": {
+                    "line": 665,
+                    "character": 96
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 717,
+                    "character": 44
+                },
+                "end": {
+                    "line": 717,
+                    "character": 48
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 717,
+                    "character": 53
+                },
+                "end": {
+                    "line": 717,
+                    "character": 57
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 734,
+                    "character": 56
+                },
+                "end": {
+                    "line": 734,
+                    "character": 60
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 734,
+                    "character": 65
+                },
+                "end": {
+                    "line": 734,
+                    "character": 69
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 772,
+                    "character": 12
+                },
+                "end": {
+                    "line": 772,
+                    "character": 16
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 773,
+                    "character": 20
+                },
+                "end": {
+                    "line": 773,
+                    "character": 24
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 780,
+                    "character": 14
+                },
+                "end": {
+                    "line": 780,
+                    "character": 18
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 782,
+                    "character": 25
+                },
+                "end": {
+                    "line": 782,
+                    "character": 29
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 783,
+                    "character": 22
+                },
+                "end": {
+                    "line": 783,
+                    "character": 26
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 784,
+                    "character": 5
+                },
+                "end": {
+                    "line": 784,
+                    "character": 9
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 842,
+                    "character": 22
+                },
+                "end": {
+                    "line": 842,
+                    "character": 26
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 843,
+                    "character": 24
+                },
+                "end": {
+                    "line": 843,
+                    "character": 28
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 871,
+                    "character": 31
+                },
+                "end": {
+                    "line": 871,
+                    "character": 35
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 872,
+                    "character": 35
+                },
+                "end": {
+                    "line": 872,
+                    "character": 39
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 873,
+                    "character": 16
+                },
+                "end": {
+                    "line": 873,
+                    "character": 20
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 905,
+                    "character": 22
+                },
+                "end": {
+                    "line": 905,
+                    "character": 26
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 906,
+                    "character": 24
+                },
+                "end": {
+                    "line": 906,
+                    "character": 28
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 939,
+                    "character": 78
+                },
+                "end": {
+                    "line": 939,
+                    "character": 82
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 968,
+                    "character": 22
+                },
+                "end": {
+                    "line": 968,
+                    "character": 26
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 969,
+                    "character": 11
+                },
+                "end": {
+                    "line": 969,
+                    "character": 15
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1006,
+                    "character": 17
+                },
+                "end": {
+                    "line": 1006,
+                    "character": 21
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1007,
+                    "character": 31
+                },
+                "end": {
+                    "line": 1007,
+                    "character": 35
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1008,
+                    "character": 35
+                },
+                "end": {
+                    "line": 1008,
+                    "character": 39
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1009,
+                    "character": 26
+                },
+                "end": {
+                    "line": 1009,
+                    "character": 30
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1012,
+                    "character": 24
+                },
+                "end": {
+                    "line": 1012,
+                    "character": 28
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1014,
+                    "character": 5
+                },
+                "end": {
+                    "line": 1014,
+                    "character": 9
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1090,
+                    "character": 20
+                },
+                "end": {
+                    "line": 1090,
+                    "character": 24
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1202,
+                    "character": 73
+                },
+                "end": {
+                    "line": 1202,
+                    "character": 77
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1202,
+                    "character": 88
+                },
+                "end": {
+                    "line": 1202,
+                    "character": 92
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1216,
+                    "character": 18
+                },
+                "end": {
+                    "line": 1216,
+                    "character": 22
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1218,
+                    "character": 31
+                },
+                "end": {
+                    "line": 1218,
+                    "character": 35
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1220,
+                    "character": 17
+                },
+                "end": {
+                    "line": 1220,
+                    "character": 21
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1221,
+                    "character": 35
+                },
+                "end": {
+                    "line": 1221,
+                    "character": 39
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1222,
+                    "character": 26
+                },
+                "end": {
+                    "line": 1222,
+                    "character": 30
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1225,
+                    "character": 24
+                },
+                "end": {
+                    "line": 1225,
+                    "character": 28
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1227,
+                    "character": 31
+                },
+                "end": {
+                    "line": 1227,
+                    "character": 35
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\clarify.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 1228,
+                    "character": 5
+                },
+                "end": {
+                    "line": 1228,
+                    "character": 9
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\crud.py",
+            "severity": "error",
+            "message": "Type \"Sequence[ExperienceCard]\" is not assignable to return type \"list[ExperienceCard]\"\nÂ Â \"Sequence[ExperienceCard]\" is not assignable to \"list[ExperienceCard]\"",
+            "range": {
+                "start": {
+                    "line": 140,
+                    "character": 11
+                },
+                "end": {
+                    "line": 140,
+                    "character": 33
+                }
+            },
+            "rule": "reportReturnType"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\crud.py",
+            "severity": "error",
+            "message": "Type \"Sequence[ExperienceCardChild]\" is not assignable to return type \"list[ExperienceCardChild]\"\nÂ Â \"Sequence[ExperienceCardChild]\" is not assignable to \"list[ExperienceCardChild]\"",
+            "range": {
+                "start": {
+                    "line": 150,
+                    "character": 11
+                },
+                "end": {
+                    "line": 150,
+                    "character": 33
+                }
+            },
+            "rule": "reportReturnType"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\crud.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 175,
+                    "character": 16
+                },
+                "end": {
+                    "line": 175,
+                    "character": 20
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 34,
+                    "character": 39
+                },
+                "end": {
+                    "line": 34,
+                    "character": 43
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 37,
+                    "character": 14
+                },
+                "end": {
+                    "line": 37,
+                    "character": 18
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 49,
+                    "character": 42
+                },
+                "end": {
+                    "line": 49,
+                    "character": 46
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 52,
+                    "character": 14
+                },
+                "end": {
+                    "line": 52,
+                    "character": 18
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 64,
+                    "character": 49
+                },
+                "end": {
+                    "line": 64,
+                    "character": 53
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 67,
+                    "character": 14
+                },
+                "end": {
+                    "line": 67,
+                    "character": 18
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 117,
+                    "character": 18
+                },
+                "end": {
+                    "line": 117,
+                    "character": 22
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 118,
+                    "character": 19
+                },
+                "end": {
+                    "line": 118,
+                    "character": 23
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 119,
+                    "character": 19
+                },
+                "end": {
+                    "line": 119,
+                    "character": 23
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 143,
+                    "character": 16
+                },
+                "end": {
+                    "line": 143,
+                    "character": 20
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 229,
+                    "character": 29
+                },
+                "end": {
+                    "line": 229,
+                    "character": 33
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 229,
+                    "character": 38
+                },
+                "end": {
+                    "line": 229,
+                    "character": 42
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 242,
+                    "character": 33
+                },
+                "end": {
+                    "line": 242,
+                    "character": 37
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 253,
+                    "character": 55
+                },
+                "end": {
+                    "line": 253,
+                    "character": 59
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 253,
+                    "character": 88
+                },
+                "end": {
+                    "line": 253,
+                    "character": 92
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 253,
+                    "character": 103
+                },
+                "end": {
+                    "line": 253,
+                    "character": 107
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 285,
+                    "character": 45
+                },
+                "end": {
+                    "line": 285,
+                    "character": 49
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 285,
+                    "character": 60
+                },
+                "end": {
+                    "line": 285,
+                    "character": 64
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 286,
+                    "character": 23
+                },
+                "end": {
+                    "line": 286,
+                    "character": 27
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 322,
+                    "character": 38
+                },
+                "end": {
+                    "line": 322,
+                    "character": 42
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 322,
+                    "character": 47
+                },
+                "end": {
+                    "line": 322,
+                    "character": 51
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 364,
+                    "character": 23
+                },
+                "end": {
+                    "line": 364,
+                    "character": 27
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 444,
+                    "character": 47
+                },
+                "end": {
+                    "line": 444,
+                    "character": 51
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "error",
+            "message": "Argument of type \"Unknown | list[Unknown] | None\" cannot be assigned to parameter \"iterable\" of type \"Iterable[_T@enumerate]\" in function \"__new__\"\nÂ Â Type \"Unknown | list[Unknown] | None\" is not assignable to type \"Iterable[Unknown]\"\nÂ Â Â Â \"None\" is incompatible with protocol \"Iterable[Unknown]\"\nÂ Â Â Â Â Â \"__iter__\" is not present",
+            "range": {
+                "start": {
+                    "line": 464,
+                    "character": 33
+                },
+                "end": {
+                    "line": 464,
+                    "character": 44
+                }
+            },
+            "rule": "reportArgumentType"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "error",
+            "message": "Argument of type \"Unknown | list[Unknown] | None\" cannot be assigned to parameter \"iterable\" of type \"Iterable[_T@enumerate]\" in function \"__new__\"\nÂ Â Type \"Unknown | list[Unknown] | None\" is not assignable to type \"Iterable[_T@enumerate]\"\nÂ Â Â Â \"None\" is incompatible with protocol \"Iterable[_T@enumerate]\"\nÂ Â Â Â Â Â \"__iter__\" is not present",
+            "range": {
+                "start": {
+                    "line": 464,
+                    "character": 33
+                },
+                "end": {
+                    "line": 464,
+                    "character": 44
+                }
+            },
+            "rule": "reportArgumentType"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 491,
+                    "character": 10
+                },
+                "end": {
+                    "line": 491,
+                    "character": 14
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\extraction.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 527,
+                    "character": 37
+                },
+                "end": {
+                    "line": 527,
+                    "character": 41
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\fill_missing.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 33,
+                    "character": 18
+                },
+                "end": {
+                    "line": 33,
+                    "character": 22
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\fill_missing.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 35,
+                    "character": 5
+                },
+                "end": {
+                    "line": 35,
+                    "character": 9
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\experience\\search_document.py",
+            "severity": "error",
+            "message": "Object of type \"None\" is not subscriptable",
+            "range": {
+                "start": {
+                    "line": 139,
+                    "character": 16
+                },
+                "end": {
+                    "line": 139,
+                    "character": 21
+                }
+            },
+            "rule": "reportOptionalSubscript"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\candidates.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 341,
+                    "character": 11
+                },
+                "end": {
+                    "line": 341,
+                    "character": 15
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\candidates.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 341,
+                    "character": 17
+                },
+                "end": {
+                    "line": 341,
+                    "character": 21
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\candidates.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 341,
+                    "character": 23
+                },
+                "end": {
+                    "line": 341,
+                    "character": 27
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\candidates.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 425,
+                    "character": 11
+                },
+                "end": {
+                    "line": 425,
+                    "character": 15
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\candidates.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 425,
+                    "character": 17
+                },
+                "end": {
+                    "line": 425,
+                    "character": 21
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\candidates.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 425,
+                    "character": 23
+                },
+                "end": {
+                    "line": 425,
+                    "character": 27
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\candidates.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 463,
+                    "character": 16
+                },
+                "end": {
+                    "line": 463,
+                    "character": 20
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\candidates.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 463,
+                    "character": 22
+                },
+                "end": {
+                    "line": 463,
+                    "character": 26
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\candidates.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 463,
+                    "character": 28
+                },
+                "end": {
+                    "line": 463,
+                    "character": 32
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\graph_view.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"Pattern\"",
+            "range": {
+                "start": {
+                    "line": 56,
+                    "character": 33
+                },
+                "end": {
+                    "line": 56,
+                    "character": 43
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\graph_view.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"Pattern\"",
+            "range": {
+                "start": {
+                    "line": 65,
+                    "character": 26
+                },
+                "end": {
+                    "line": 65,
+                    "character": 36
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\graph_view.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"Pattern\"",
+            "range": {
+                "start": {
+                    "line": 201,
+                    "character": 48
+                },
+                "end": {
+                    "line": 201,
+                    "character": 58
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\results.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 161,
+                    "character": 18
+                },
+                "end": {
+                    "line": 161,
+                    "character": 22
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\results.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 360,
+                    "character": 25
+                },
+                "end": {
+                    "line": 360,
+                    "character": 29
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\results.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 378,
+                    "character": 25
+                },
+                "end": {
+                    "line": 378,
+                    "character": 29
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\scoring.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 105,
+                    "character": 40
+                },
+                "end": {
+                    "line": 105,
+                    "character": 44
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\scoring.py",
+            "severity": "error",
+            "message": "Cannot access attribute \"intent_secondary\" for class \"ExperienceCardChild\"\nÂ Â Attribute \"intent_secondary\" is unknown",
+            "range": {
+                "start": {
+                    "line": 127,
+                    "character": 26
+                },
+                "end": {
+                    "line": 127,
+                    "character": 42
+                }
+            },
+            "rule": "reportAttributeAccessIssue"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\scoring.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 135,
+                    "character": 56
+                },
+                "end": {
+                    "line": 135,
+                    "character": 60
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\scoring.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 152,
+                    "character": 10
+                },
+                "end": {
+                    "line": 152,
+                    "character": 14
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\scoring.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 174,
+                    "character": 16
+                },
+                "end": {
+                    "line": 174,
+                    "character": 20
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\scoring.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 175,
+                    "character": 25
+                },
+                "end": {
+                    "line": 175,
+                    "character": 29
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\scoring.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 217,
+                    "character": 25
+                },
+                "end": {
+                    "line": 217,
+                    "character": 29
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\scoring.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 298,
+                    "character": 10
+                },
+                "end": {
+                    "line": 298,
+                    "character": 14
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\scoring.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 299,
+                    "character": 16
+                },
+                "end": {
+                    "line": 299,
+                    "character": 20
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\scoring.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 300,
+                    "character": 25
+                },
+                "end": {
+                    "line": 300,
+                    "character": 29
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\why_matched_helpers.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 627,
+                    "character": 27
+                },
+                "end": {
+                    "line": 627,
+                    "character": 31
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\why_matched_helpers.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"list\"",
+            "range": {
+                "start": {
+                    "line": 628,
+                    "character": 20
+                },
+                "end": {
+                    "line": 628,
+                    "character": 24
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\why_matched_helpers.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 629,
+                    "character": 5
+                },
+                "end": {
+                    "line": 629,
+                    "character": 9
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\why_matched_helpers.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 631,
+                    "character": 27
+                },
+                "end": {
+                    "line": 631,
+                    "character": 31
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\why_matched_helpers.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 643,
+                    "character": 26
+                },
+                "end": {
+                    "line": 643,
+                    "character": 30
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\why_matched_helpers.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 664,
+                    "character": 27
+                },
+                "end": {
+                    "line": 664,
+                    "character": 31
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\why_matched_helpers.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 665,
+                    "character": 19
+                },
+                "end": {
+                    "line": 665,
+                    "character": 23
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\why_matched_helpers.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 684,
+                    "character": 26
+                },
+                "end": {
+                    "line": 684,
+                    "character": 30
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        },
+        {
+            "file": "c:\\Users\\Lenovo\\Desktop\\Search_Engine\\apps\\api\\src\\services\\search\\why_matched_helpers.py",
+            "severity": "warning",
+            "message": "Expected type arguments for generic class \"dict\"",
+            "range": {
+                "start": {
+                    "line": 750,
+                    "character": 26
+                },
+                "end": {
+                    "line": 750,
+                    "character": 30
+                }
+            },
+            "rule": "reportMissingTypeArgument"
+        }
+    ],
+    "summary": {
+        "filesAnalyzed": 38,
+        "errorCount": 9,
+        "warningCount": 131,
+        "informationCount": 0,
+        "timeInSec": 3.873
+    }
+}

@@ -1,26 +1,37 @@
 """Profile view business logic for search results and public people pages."""
 
 import asyncio
+from collections.abc import Sequence
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models import Person, PersonProfile, ExperienceCard, ExperienceCardChild, UnlockContact
+from src.db.models import ExperienceCard, ExperienceCardChild, Person, PersonProfile, UnlockContact
 from src.schemas import (
-    PersonProfileResponse,
+    BioResponse,
+    CardFamilyResponse,
+    ContactDetailsResponse,
+    PastCompanyItem,
     PersonListItem,
     PersonListResponse,
+    PersonProfileResponse,
     PersonPublicProfileResponse,
     UnlockedCardItem,
     UnlockedCardsResponse,
-    CardFamilyResponse,
-    BioResponse,
-    ContactDetailsResponse,
-    PastCompanyItem,
 )
 from src.serializers import experience_card_to_response
-from .search_logic import _validate_search_session, _card_families_from_parents_and_children
+
+from ._runtime_values import (
+    attr_bool,
+    attr_datetime,
+    attr_decimal,
+    attr_nonempty_str,
+    attr_str,
+    attr_str_list,
+)
+from .results import _card_families_from_parents_and_children
+from .search_logic import _validate_search_session
 
 
 async def get_person_profile(
@@ -28,6 +39,7 @@ async def get_person_profile(
     searcher_id: str,
     person_id: str,
     search_id: str | None = None,
+    viewer_language: str = "en",
 ) -> PersonProfileResponse:
     """Load profile for person view; validate search context only when search_id is provided."""
     if search_id:
@@ -46,10 +58,12 @@ async def get_person_profile(
         db.execute(select(Person).where(Person.id == person_id)),
         db.execute(select(PersonProfile).where(PersonProfile.person_id == person_id)),
         db.execute(
-            select(ExperienceCard).where(
+            select(ExperienceCard)
+            .where(
                 ExperienceCard.user_id == person_id,
-                ExperienceCard.experience_card_visibility == True,
-            ).order_by(ExperienceCard.created_at.desc())
+                ExperienceCard.experience_card_visibility,
+            )
+            .order_by(ExperienceCard.created_at.desc())
         ),
         db.execute(unlock_stmt),
     )
@@ -58,23 +72,23 @@ async def get_person_profile(
         raise HTTPException(status_code=404, detail="Person not found")
 
     profile = profile_result.scalar_one_or_none()
-    cards = cards_result.scalars().all()
+    cards = list(cards_result.scalars().all())
 
     contact = None
-    open_to_work = profile.open_to_work if profile else False
-    open_to_contact = profile.open_to_contact if profile else False
+    open_to_work = attr_bool(profile, "open_to_work") if profile else False
+    open_to_contact = attr_bool(profile, "open_to_contact") if profile else False
     if (open_to_work or open_to_contact) and unlock_result.scalar_one_or_none() and profile:
         contact = ContactDetailsResponse(
-            email_visible=profile.email_visible,
-            email=person.email if profile.email_visible else None,
-            phone=profile.phone,
-            linkedin_url=profile.linkedin_url,
-            other=profile.other,
+            email_visible=attr_bool(profile, "email_visible"),
+            email=attr_str(person, "email") if attr_bool(profile, "email_visible") else None,
+            phone=attr_str(profile, "phone"),
+            linkedin_url=attr_str(profile, "linkedin_url"),
+            other=attr_str(profile, "other"),
         )
 
     if open_to_work and profile:
-        locs = profile.work_preferred_locations or []
-        sal_min = profile.work_preferred_salary_min
+        locs = attr_str_list(profile, "work_preferred_locations")
+        sal_min = attr_decimal(profile, "work_preferred_salary_min")
     else:
         locs = []
         sal_min = None
@@ -87,12 +101,12 @@ async def get_person_profile(
                 ExperienceCardChild.parent_experience_id.in_([c.id for c in cards])
             )
         )
-        children_list = children_result.scalars().all()
+        children_list = list(children_result.scalars().all())
         card_families = _card_families_from_parents_and_children(cards, children_list)
 
-    return PersonProfileResponse(
-        id=person.id,
-        display_name=person.display_name,
+    resp = PersonProfileResponse(
+        id=str(person.id),
+        display_name=attr_str(person, "display_name"),
         open_to_work=open_to_work,
         open_to_contact=open_to_contact,
         work_preferred_locations=locs,
@@ -103,13 +117,32 @@ async def get_person_profile(
         contact=contact,
     )
 
+    raw_lang = (viewer_language or "en").strip()
+    if raw_lang.lower() in ("en", "english"):
+        pref_row = await db.execute(
+            select(PersonProfile.preferred_language).where(
+                PersonProfile.person_id == searcher_id
+            )
+        )
+        pref = pref_row.scalar_one_or_none()
+        if pref and str(pref).lower() not in ("en", "english"):
+            raw_lang = str(pref).strip()
+    if raw_lang.lower() not in ("en", "english"):
+        from src.services.locale_display import localize_person_profile_response_for_viewer
 
-async def list_people_for_discover(db: AsyncSession) -> PersonListResponse:
+        await localize_person_profile_response_for_viewer(db, resp, raw_lang)
+
+    return resp
+
+
+async def list_people_for_discover(
+    db: AsyncSession,
+    viewer_id: str,
+    viewer_language: str = "en",
+) -> PersonListResponse:
     """List people who have at least one visible experience card."""
     subq = (
-        select(ExperienceCard.person_id)
-        .where(ExperienceCard.experience_card_visibility == True)
-        .distinct()
+        select(ExperienceCard.person_id).where(ExperienceCard.experience_card_visibility).distinct()
     )
     people_ids_result = await db.execute(select(Person.id).where(Person.id.in_(subq)))
     person_ids = [str(r[0]) for r in people_ids_result.all()]
@@ -129,13 +162,15 @@ async def list_people_for_discover(db: AsyncSession) -> PersonListResponse:
             select(ExperienceCard.person_id, ExperienceCard.summary, ExperienceCard.created_at)
             .where(
                 ExperienceCard.person_id.in_(person_ids),
-                ExperienceCard.experience_card_visibility == True,
+                ExperienceCard.experience_card_visibility,
             )
             .order_by(ExperienceCard.person_id, ExperienceCard.created_at.desc())
         )
         return r.all()
 
-    people, profiles, card_rows = await asyncio.gather(get_people(), get_profiles(), get_card_summaries())
+    people, profiles, card_rows = await asyncio.gather(
+        get_people(), get_profiles(), get_card_summaries()
+    )
 
     summaries_by_person: dict[str, list[str]] = {pid: [] for pid in person_ids}
     for row in card_rows:
@@ -149,18 +184,34 @@ async def list_people_for_discover(db: AsyncSession) -> PersonListResponse:
     people_list = [
         PersonListItem(
             id=pid,
-            display_name=p.display_name,
-            current_location=profiles[pid].current_city if pid in profiles else None,
+            display_name=attr_str(p, "display_name"),
+            current_location=attr_str(profiles[pid], "current_city") if pid in profiles else None,
             experience_summaries=summaries_by_person.get(pid, [])[:5],
         )
         for pid, p in people.items()
     ]
-    return PersonListResponse(people=people_list)
+    resp = PersonListResponse(people=people_list)
+
+    raw_lang = (viewer_language or "en").strip()
+    if raw_lang.lower() in ("en", "english"):
+        pref_row = await db.execute(
+            select(PersonProfile.preferred_language).where(PersonProfile.person_id == viewer_id)
+        )
+        pref = pref_row.scalar_one_or_none()
+        if pref and str(pref).lower() not in ("en", "english"):
+            raw_lang = str(pref).strip()
+    if raw_lang.lower() not in ("en", "english"):
+        from src.services.locale_display import localize_discover_people_for_viewer
+
+        await localize_discover_people_for_viewer(db, resp.people, raw_lang)
+
+    return resp
 
 
 async def list_unlocked_cards_for_searcher(
     db: AsyncSession,
     searcher_id: str,
+    viewer_language: str = "en",
 ) -> UnlockedCardsResponse:
     """List unique people unlocked by the searcher (latest unlock first)."""
     unlocks_result = await db.execute(
@@ -188,7 +239,9 @@ async def list_unlocked_cards_for_searcher(
         return {str(person.id): person for person in result.scalars().all()}
 
     async def get_profiles():
-        result = await db.execute(select(PersonProfile).where(PersonProfile.person_id.in_(person_ids)))
+        result = await db.execute(
+            select(PersonProfile).where(PersonProfile.person_id.in_(person_ids))
+        )
         return {str(profile.person_id): profile for profile in result.scalars().all()}
 
     async def get_card_summaries():
@@ -196,7 +249,7 @@ async def list_unlocked_cards_for_searcher(
             select(ExperienceCard.person_id, ExperienceCard.summary, ExperienceCard.created_at)
             .where(
                 ExperienceCard.person_id.in_(person_ids),
-                ExperienceCard.experience_card_visibility == True,
+                ExperienceCard.experience_card_visibility,
             )
             .order_by(ExperienceCard.person_id, ExperienceCard.created_at.desc())
         )
@@ -228,23 +281,40 @@ async def list_unlocked_cards_for_searcher(
             UnlockedCardItem(
                 person_id=person_id,
                 search_id=str(unlock.search_id),
-                display_name=person.display_name,
-                current_location=profile.current_city if profile else None,
-                open_to_work=bool(profile.open_to_work) if profile else False,
-                open_to_contact=bool(profile.open_to_contact) if profile else False,
+                display_name=attr_str(person, "display_name"),
+                current_location=attr_str(profile, "current_city") if profile else None,
+                open_to_work=attr_bool(profile, "open_to_work") if profile else False,
+                open_to_contact=attr_bool(profile, "open_to_contact") if profile else False,
                 experience_summaries=summaries_by_person.get(person_id, [])[:5],
-                unlocked_at=unlock.created_at,
+                unlocked_at=attr_datetime(unlock, "created_at"),
             )
         )
 
-    return UnlockedCardsResponse(cards=cards)
+    resp = UnlockedCardsResponse(cards=cards)
+    raw_lang = (viewer_language or "en").strip()
+    if raw_lang.lower() in ("en", "english"):
+        pref_row = await db.execute(
+            select(PersonProfile.preferred_language).where(PersonProfile.person_id == searcher_id)
+        )
+        pref = pref_row.scalar_one_or_none()
+        if pref and str(pref).lower() not in ("en", "english"):
+            raw_lang = str(pref).strip()
+    if raw_lang.lower() not in ("en", "english") and resp.cards:
+        from src.services.locale_display import localize_unlocked_cards_for_viewer
+
+        await localize_unlocked_cards_for_viewer(db, resp.cards, raw_lang)
+
+    return resp
 
 
 def _bio_response_for_public(person: Person, profile: PersonProfile | None) -> BioResponse:
     """Build BioResponse for public profile."""
     past: list[PastCompanyItem] = []
-    if profile and profile.past_companies:
-        for p in profile.past_companies:
+    past_companies = getattr(profile, "past_companies", None) if profile else None
+    if isinstance(past_companies, Sequence) and not isinstance(
+        past_companies, (str, bytes, bytearray)
+    ):
+        for p in past_companies:
             if isinstance(p, dict):
                 past.append(
                     PastCompanyItem(
@@ -254,21 +324,22 @@ def _bio_response_for_public(person: Person, profile: PersonProfile | None) -> B
                     )
                 )
 
-    has_photo = profile is not None and profile.profile_photo is not None
+    has_photo = profile is not None and getattr(profile, "profile_photo", None) is not None
+    profile_school = attr_str(profile, "school") if profile else None
     return BioResponse(
-        first_name=profile.first_name if profile else None,
-        last_name=profile.last_name if profile else None,
-        date_of_birth=profile.date_of_birth if profile else None,
-        current_city=profile.current_city if profile else None,
+        first_name=attr_str(profile, "first_name") if profile else None,
+        last_name=attr_str(profile, "last_name") if profile else None,
+        date_of_birth=attr_str(profile, "date_of_birth") if profile else None,
+        current_city=attr_str(profile, "current_city") if profile else None,
         profile_photo_url=f"/people/{person.id}/photo" if has_photo else None,
-        school=profile.school if profile else None,
-        college=profile.college if profile else None,
-        current_company=profile.current_company if profile else None,
+        school=profile_school,
+        college=attr_str(profile, "college") if profile else None,
+        current_company=attr_str(profile, "current_company") if profile else None,
         past_companies=past or None,
         email=None,
-        linkedin_url=profile.linkedin_url if profile else None,
-        phone=profile.phone if profile else None,
-        complete=bool(profile and (profile.school or "").strip() and (person.email or "").strip()),
+        linkedin_url=attr_str(profile, "linkedin_url") if profile else None,
+        phone=attr_str(profile, "phone") if profile else None,
+        complete=bool(profile and profile_school and attr_nonempty_str(person, "email")),
     )
 
 
@@ -282,19 +353,21 @@ async def get_public_profile_impl(db: AsyncSession, person_id: str) -> PersonPub
     profile_result, cards_result = await asyncio.gather(
         db.execute(select(PersonProfile).where(PersonProfile.person_id == person_id)),
         db.execute(
-            select(ExperienceCard).where(
+            select(ExperienceCard)
+            .where(
                 ExperienceCard.user_id == person_id,
-                ExperienceCard.experience_card_visibility == True,
-            ).order_by(ExperienceCard.created_at.desc())
+                ExperienceCard.experience_card_visibility,
+            )
+            .order_by(ExperienceCard.created_at.desc())
         ),
     )
     profile = profile_result.scalar_one_or_none()
     bio_resp = _bio_response_for_public(person, profile)
-    parents = cards_result.scalars().all()
+    parents = list(cards_result.scalars().all())
     if not parents:
         return PersonPublicProfileResponse(
-            id=person.id,
-            display_name=person.display_name,
+            id=str(person.id),
+            display_name=attr_str(person, "display_name"),
             bio=bio_resp,
             card_families=[],
         )
@@ -304,11 +377,11 @@ async def get_public_profile_impl(db: AsyncSession, person_id: str) -> PersonPub
             ExperienceCardChild.parent_experience_id.in_([c.id for c in parents])
         )
     )
-    children_list = children_result.scalars().all()
+    children_list = list(children_result.scalars().all())
     card_families = _card_families_from_parents_and_children(parents, children_list)
     return PersonPublicProfileResponse(
-        id=person.id,
-        display_name=person.display_name,
+        id=str(person.id),
+        display_name=attr_str(person, "display_name"),
         bio=bio_resp,
         card_families=card_families,
     )

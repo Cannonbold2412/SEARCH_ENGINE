@@ -7,19 +7,17 @@ Flow:
   3. embed_experience_cards(db, parents, children) runs 1+2, assigns vectors, flushes DB
 
 Used by:
-  - run_draft_single (after persist_families)
   - PATCH experience card / child (after apply_card_patch / apply_child_patch)
   - clarify-experience and fill-missing-from-text (after persisting filled data)
 """
 
 import logging
 from dataclasses import dataclass
-from typing import Union
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import ExperienceCard, ExperienceCardChild
-from src.providers import get_embedding_provider, EmbeddingServiceError
+from src.providers import EmbeddingServiceError, get_embedding_provider
 from src.utils import normalize_embedding
 
 from .errors import PipelineError, PipelineStage
@@ -31,12 +29,13 @@ logger = logging.getLogger(__name__)
 # Types
 # ---------------------------------------------------------------------------
 
-ExperienceCardOrChild = Union[ExperienceCard, ExperienceCardChild]
+ExperienceCardOrChild = ExperienceCard | ExperienceCardChild
 
 
 @dataclass(frozen=True)
 class EmbeddingInput:
     """One text-to-embed with its target card or child (for assigning the vector later)."""
+
     text: str
     target: ExperienceCardOrChild
 
@@ -44,6 +43,7 @@ class EmbeddingInput:
 # ---------------------------------------------------------------------------
 # Step 1: Build inputs (texts + targets)
 # ---------------------------------------------------------------------------
+
 
 def build_embedding_inputs(
     parents: list[ExperienceCard],
@@ -76,6 +76,7 @@ def build_embedding_inputs(
 # Step 2: Fetch vectors from provider
 # ---------------------------------------------------------------------------
 
+
 async def fetch_embedding_vectors(texts: list[str]) -> list[list[float]]:
     """
     Call the embedding provider and return normalized vectors in the same order as texts.
@@ -93,6 +94,7 @@ async def fetch_embedding_vectors(texts: list[str]) -> list[list[float]]:
 # ---------------------------------------------------------------------------
 # Step 3: Main API – embed and persist
 # ---------------------------------------------------------------------------
+
 
 async def embed_experience_cards(
     db: AsyncSession,
@@ -142,7 +144,3 @@ async def embed_experience_cards(
 
     await db.flush()
     logger.info("Successfully embedded %d documents", len(texts))
-
-
-# Backward-compatible alias
-embed_cards = embed_experience_cards

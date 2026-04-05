@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import type { ExperienceCard, ExperienceCardChild, ChildValueItem } from "@/types";
+import type { ExperienceCard, ExperienceCardChild, ChildValueItem } from "@/lib/types";
 
 const MONTH_LOOKUP: Record<string, number> = {
   jan: 1,

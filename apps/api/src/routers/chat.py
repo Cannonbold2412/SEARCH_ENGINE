@@ -5,18 +5,17 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.dependencies import get_current_user, get_db
 from src.db.models import Person
+from src.dependencies import get_current_user, get_db
 from src.schemas import (
+    ConversationDetail,
+    ConversationSummary,
+    MessageItem,
+    SendMessageRequest,
     StartChatRequest,
     StartChatResponse,
-    ConversationSummary,
-    ConversationDetail,
-    SendMessageRequest,
-    MessageItem,
 )
 from src.services import chat as chat_service
-
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -62,5 +61,3 @@ async def send_message(
 ) -> MessageItem:
     """Send a new message in an existing conversation."""
     return await chat_service.send_message(db, current_user, conversation_id, body)
-
-

@@ -41,22 +41,19 @@ def normalize_child_items(items: Any) -> list[dict]:
             continue
         # Prefer new keys; fall back to old keys for backward compat
         title = _trim(
-            item.get("title")
-            or item.get("subtitle")
-            or item.get("label")
-            or item.get("text")
+            item.get("title") or item.get("subtitle") or item.get("label") or item.get("text")
         )
         if not title:
             continue
         description = _trim(
-            item.get("description")
-            or item.get("sub_summary")
-            or item.get("summary")
+            item.get("description") or item.get("sub_summary") or item.get("summary")
         )
-        out.append({
-            "title": title,
-            "description": description,
-        })
+        out.append(
+            {
+                "title": title,
+                "description": description,
+            }
+        )
     return out
 
 
@@ -90,7 +87,9 @@ def normalize_child_value(value: Any) -> dict | None:
         return None
 
     items_raw = value.get("items")
-    items = dedupe_child_items(normalize_child_items(items_raw)) if isinstance(items_raw, list) else []
+    items = (
+        dedupe_child_items(normalize_child_items(items_raw)) if isinstance(items_raw, list) else []
+    )
 
     raw_text = _trim(value.get("raw_text"))
 
@@ -108,12 +107,6 @@ def merge_child_items(a: list[dict], b: list[dict]) -> list[dict]:
     """Merge two item lists and dedupe. Preserves order (a first, then b)."""
     combined = list(a) + list(b)
     return dedupe_child_items(normalize_child_items(combined))
-
-
-def is_child_value_empty(value: Any) -> bool:
-    """True if value has no meaningful content (no items, no raw_text)."""
-    norm = normalize_child_value(value)
-    return norm is None or (not norm.get("items") and not norm.get("raw_text"))
 
 
 def get_child_label(value: Any, child_type: str = "") -> str:

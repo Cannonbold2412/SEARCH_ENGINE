@@ -4,14 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core import get_settings, limiter
 from src.dependencies import get_db
 from src.schemas import (
+    LoginRequest,
+    ResendVerificationRequest,
+    ResendVerificationResponse,
     SignupRequest,
     SignupResponse,
-    LoginRequest,
     TokenResponse,
     VerifyEmailRequest,
     VerifyEmailResponse,
-    ResendVerificationRequest,
-    ResendVerificationResponse,
 )
 from src.services.auth import auth_service
 

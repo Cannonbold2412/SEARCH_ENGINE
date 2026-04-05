@@ -65,11 +65,10 @@ const DropdownMenuTrigger = React.forwardRef<
     return React.cloneElement(
       children,
       {
-        ref,
         onClick: handleClick as unknown as React.MouseEventHandler<HTMLElement>,
         "aria-expanded": open,
         ...props,
-      } as React.Attributes
+      } as React.HTMLAttributes<HTMLElement>
     );
   }
 

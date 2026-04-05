@@ -5,10 +5,10 @@ from typing import Any
 
 from src.core import EMBEDDING_DIM
 
-
 # ---------------------------------------------------------------------------
 # JSON extraction from LLM responses
 # ---------------------------------------------------------------------------
+
 
 def extract_json_from_llm_response(raw: str) -> str:
     """
@@ -83,6 +83,7 @@ def parse_llm_json(raw: str) -> Any:
 # ---------------------------------------------------------------------------
 # Embedding helpers
 # ---------------------------------------------------------------------------
+
 
 def normalize_embedding(vec: list[float], dim: int = EMBEDDING_DIM) -> list[float]:
     """Truncate or zero-pad *vec* to exactly *dim* dimensions for DB storage."""

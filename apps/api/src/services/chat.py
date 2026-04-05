@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Iterable, List
+from collections.abc import Iterable
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, or_, select
@@ -11,13 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Conversation, Message, Person
 from src.schemas import (
-    StartChatRequest,
-    StartChatResponse,
-    ConversationSummary,
     ConversationDetail,
     ConversationPeer,
+    ConversationSummary,
     MessageItem,
     SendMessageRequest,
+    StartChatRequest,
+    StartChatResponse,
 )
 from src.services.credits import deduct_credits
 
@@ -97,7 +97,7 @@ async def start_chat(
 async def list_conversations(
     db: AsyncSession,
     current_user: Person,
-) -> List[ConversationSummary]:
+) -> list[ConversationSummary]:
     """List all conversations for the current user, with latest message previews."""
     stmt = (
         select(Conversation)
@@ -116,14 +116,13 @@ async def list_conversations(
 
     # Load peers and last messages in batches
     peer_ids = {
-        _peer_for(conv, current_user.id) for conv in conversations  # type: ignore[arg-type]
+        _peer_for(conv, current_user.id)
+        for conv in conversations  # type: ignore[arg-type]
     }
-    peers = (
-        await db.execute(select(Person).where(Person.id.in_(peer_ids)))
-    ).scalars().all()
+    peers = (await db.execute(select(Person).where(Person.id.in_(peer_ids)))).scalars().all()
     peer_map = {p.id: p for p in peers}
 
-    summaries: List[ConversationSummary] = []
+    summaries: list[ConversationSummary] = []
     for conv in conversations:
         peer_id = _peer_for(conv, current_user.id)
         peer = peer_map.get(peer_id)
@@ -216,7 +215,7 @@ async def send_message(
     msg = Message(conversation_id=conv.id, sender_id=current_user.id, body=text)
     db.add(msg)
 
-    conv.last_message_at = datetime.now(timezone.utc)
+    conv.last_message_at = datetime.now(UTC)
     db.add(conv)
 
     await db.flush()
@@ -229,5 +228,3 @@ async def send_message(
         created_at=msg.created_at,
         is_mine=True,
     )
-
-
