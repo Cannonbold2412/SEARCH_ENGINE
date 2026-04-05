@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight } from "lucide-react";
 import { apiAssetUrl } from "@/lib/constants";
 import type { PersonSearchResult } from "@/lib/types";
 
@@ -41,9 +40,9 @@ export function PersonResultCard({ person, searchId, index = 0 }: PersonResultCa
     >
       <Link
         href={`/people/${person.id}?search_id=${searchId}`}
-        className="flex h-full min-h-[44px] items-start justify-between gap-4 rounded-xl border border-border/60 bg-card p-4 sm:p-5 transition-all duration-200 hover:bg-accent/50 hover:border-border/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group active:bg-accent/70"
+        className="block h-full min-h-[44px] rounded-xl border border-border/60 bg-card p-4 sm:p-5 transition-all duration-200 hover:bg-accent/50 hover:border-border/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:bg-accent/70"
       >
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
           <div className="flex items-center gap-3 min-w-0">
             {profilePhotoSrc ? (
               <div className="h-11 w-11 rounded-full bg-muted overflow-hidden flex-shrink-0 ring-1 ring-border/50">
@@ -89,10 +88,6 @@ export function PersonResultCard({ person, searchId, index = 0 }: PersonResultCa
             </div>
           </div>
         </div>
-        <span className="flex shrink-0 items-center gap-1 mt-1 text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-          <span className="hidden sm:inline">View</span>
-          <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 transition-transform group-hover:translate-x-0.5" />
-        </span>
       </Link>
     </motion.li>
   );
