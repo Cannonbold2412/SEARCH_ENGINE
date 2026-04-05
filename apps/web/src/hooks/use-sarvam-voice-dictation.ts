@@ -37,11 +37,25 @@ function pickRecorderMime(): string | undefined {
   return undefined;
 }
 
-function getSpeechRecognitionCtor(): typeof window.webkitSpeechRecognition | null {
+/** Web Speech API constructor (standard + webkit); not always on TS's Window. */
+type BrowserSpeechRecognitionCtor = new () => BrowserSpeechRecognitionLike;
+
+interface BrowserSpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((this: BrowserSpeechRecognitionLike, ev: Event) => void) | null;
+  onerror: ((this: BrowserSpeechRecognitionLike, ev: Event) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+function getSpeechRecognitionCtor(): BrowserSpeechRecognitionCtor | null {
   if (typeof window === "undefined") return null;
   const w = window as Window & {
-    SpeechRecognition?: typeof window.webkitSpeechRecognition;
-    webkitSpeechRecognition?: typeof window.webkitSpeechRecognition;
+    SpeechRecognition?: BrowserSpeechRecognitionCtor;
+    webkitSpeechRecognition?: BrowserSpeechRecognitionCtor;
   };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
@@ -71,9 +85,7 @@ export function useSarvamVoiceDictation({
   const recordBaselineRef = useRef("");
   const queryRef = useRef(query);
   const stillRecordingRef = useRef(false);
-  const speechRef = useRef<InstanceType<NonNullable<ReturnType<typeof getSpeechRecognitionCtor>>> | null>(
-    null
-  );
+  const speechRef = useRef<BrowserSpeechRecognitionLike | null>(null);
   const speechCommittedRef = useRef("");
   const liveTranscriptRef = useRef("");
   const skipUploadRef = useRef(false);
@@ -147,7 +159,7 @@ export function useSarvamVoiceDictation({
     sr.lang = browserSttLang(languageCode);
 
     sr.onresult = (event: Event) => {
-      const ev = event as {
+      const ev = event as unknown as {
         resultIndex: number;
         results: { length: number; [i: number]: { isFinal: boolean; 0: { transcript: string } } };
       };
@@ -166,7 +178,7 @@ export function useSarvamVoiceDictation({
     };
 
     sr.onerror = (event: Event) => {
-      const errEv = event as { error: string };
+      const errEv = event as unknown as { error: string };
       if (errEv.error === "aborted" || errEv.error === "no-speech") return;
       if (errEv.error === "not-allowed") {
         setError("Speech recognition blocked — allow the mic to see live captions.");
