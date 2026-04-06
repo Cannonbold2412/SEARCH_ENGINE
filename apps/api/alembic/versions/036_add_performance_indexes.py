@@ -9,23 +9,25 @@ Adds indexes for two frequently used query patterns:
 2. searches: (searcher_id) - used in load_search_more and list_saved_searches.
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "036"
-down_revision: Union[str, None] = "035"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "035"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
     # Composite index for "load children for a list of parent IDs" pattern
+    # (Plain CREATE INDEX — not CONCURRENTLY — so this runs inside Alembic's transaction.)
     op.execute(
         sa.text(
             """
-            CREATE INDEX CONCURRENTLY IF NOT EXISTS
+            CREATE INDEX IF NOT EXISTS
             ix_experience_card_children_parent_person
             ON experience_card_children (parent_experience_id, person_id)
             """
@@ -36,7 +38,7 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             """
-            CREATE INDEX CONCURRENTLY IF NOT EXISTS
+            CREATE INDEX IF NOT EXISTS
             ix_searches_searcher_id
             ON searches (searcher_id)
             """
@@ -47,11 +49,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(
         sa.text(
-            "DROP INDEX CONCURRENTLY IF EXISTS ix_searches_searcher_id"
+            "DROP INDEX IF EXISTS ix_searches_searcher_id"
         )
     )
     op.execute(
         sa.text(
-            "DROP INDEX CONCURRENTLY IF EXISTS ix_experience_card_children_parent_person"
+            "DROP INDEX IF EXISTS ix_experience_card_children_parent_person"
         )
     )

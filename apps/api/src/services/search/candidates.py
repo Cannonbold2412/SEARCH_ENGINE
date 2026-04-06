@@ -73,8 +73,8 @@ _LEXICAL_STOP = frozenset(
     }
 )
 
-# When migration 035 has been applied, experience_cards.search_doc is a STORED generated
-# tsvector column backed by a GIN index.  We use it directly so Postgres can skip the
+# When migration 035 has been applied, experience_cards.search_doc is a tsvector column
+# maintained by DB triggers and backed by a GIN index.  We use it directly so Postgres can skip the
 # per-row concat_ws + to_tsvector computation.  The COALESCE fall-through handles the
 # period before the migration is applied (or on fresh empty tables).
 _PARENT_TSVEC_SQL = """COALESCE(ec.search_doc,
