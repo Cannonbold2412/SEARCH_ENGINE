@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import re
-import uuid
-from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -19,7 +15,6 @@ from src.core.config import get_settings
 from src.db.models import ExperienceCard, ExperienceCardChild
 from src.serializers import experience_card_child_to_response, experience_card_to_response
 from src.services.experience import (
-    detect_experiences,
     embed_experience_cards,
     experience_card_service,
     run_draft_single,
@@ -27,26 +22,14 @@ from src.services.experience import (
 
 logger = logging.getLogger(__name__)
 
+_vapi_client = httpx.AsyncClient(
+    timeout=30.0,
+    limits=httpx.Limits(max_connections=5, max_keepalive_connections=2),
+)
+
 
 def _debug_log(hypothesis_id: str, location: str, message: str, data: dict[str, Any]) -> None:
-    # #region agent log
-    try:
-        payload = {
-            "id": f"log_{uuid.uuid4().hex}",
-            "runId": "pre-fix",
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(datetime.now(UTC).timestamp() * 1000),
-        }
-        log_path = r"c:\Users\Lenovo\Desktop\Search_Engine\.cursor\debug.log"
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
-    except Exception:
-        pass
-    # #endregion
+    pass
 
 
 def _normalize_adjacent_duplicate_phrases(text: str, *, max_window: int = 12) -> str:
@@ -151,14 +134,13 @@ async def _fetch_vapi_transcript_by_call_id(call_id: str) -> str:
         {"hasApiKey": bool(api_key), "baseUrl": base_url, "callIdLength": len(call_id or "")},
     )
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                url,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                },
-            )
-            response.raise_for_status()
+        response = await _vapi_client.get(
+            url,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+        response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         logger.warning(
             "vapi call fetch failed for call_id=%s status=%s", call_id, exc.response.status_code
@@ -200,21 +182,14 @@ async def _fetch_vapi_transcript_by_call_id(call_id: str) -> str:
 
 
 async def _finalize_card(
-    db: AsyncSession, *, person_id: str, card_id: str
-) -> ExperienceCard | None:
-    card = await experience_card_service.get_card(db, card_id, person_id)
-    if not card:
-        return None
+    db: AsyncSession,
+    *,
+    card: ExperienceCard,
+    children: list[ExperienceCardChild],
+) -> None:
+    """Set visibility=True and embed parent + children in-place (no extra DB queries)."""
     card.experience_card_visibility = True
-    children_result = await db.execute(
-        select(ExperienceCardChild).where(
-            ExperienceCardChild.parent_experience_id == card.id,
-            ExperienceCardChild.person_id == person_id,
-        )
-    )
-    children = list(children_result.scalars().all())
     await embed_experience_cards(db, parents=[card], children=children)
-    return card
 
 
 async def _commit_extraction_input(
@@ -224,42 +199,46 @@ async def _commit_extraction_input(
     extraction_input: str,
     log_context: str,
 ) -> dict[str, Any]:
-    try:
-        detect_result = await detect_experiences(extraction_input)
-    except Exception as exc:
-        logger.warning("builder commit detect failed (%s): %s", log_context, exc)
-        detect_result = {"count": 0, "experiences": []}
-
-    experience_count = int(detect_result.get("count") or 0)
-    if experience_count <= 0:
-        experience_count = 1
-
+    """One card per commit: rewrite + extract single (``run_draft_single`` index 1 of 1)."""
+    logger.info(
+        "builder commit extraction (%s) chars=%s",
+        log_context,
+        len((extraction_input or "").strip()),
+    )
     committed_cards: list[ExperienceCard] = []
     committed_children: list[ExperienceCardChild] = []
-    for experience_index in range(1, experience_count + 1):
-        families = await run_draft_single(
-            db,
-            person_id,
-            extraction_input,
-            experience_index,
-            experience_count,
-        )
-        for family in families:
-            parent = family.get("parent") or {}
-            card_id = str(parent.get("id") or "").strip()
+    families = await run_draft_single(
+        db,
+        person_id,
+        extraction_input,
+        1,
+        1,
+    )
+    for family in families:
+        parent_orm = family.get("_parent_orm")
+        children_orm: list[ExperienceCardChild] = list(family.get("_children_orm") or [])
+
+        # Fall back to a DB fetch when the pipeline does not attach ORM objects.
+        if parent_orm is None:
+            parent_meta = family.get("parent") or {}
+            card_id = str(parent_meta.get("id") or "").strip()
             if not card_id:
                 continue
-            card = await _finalize_card(db, person_id=person_id, card_id=card_id)
-            if not card:
+            parent_orm = await experience_card_service.get_card(db, card_id, person_id)
+            if parent_orm is None:
                 continue
-            committed_cards.append(card)
-            children_result = await db.execute(
-                select(ExperienceCardChild).where(
-                    ExperienceCardChild.parent_experience_id == card.id,
-                    ExperienceCardChild.person_id == person_id,
+            if not children_orm:
+                children_result = await db.execute(
+                    select(ExperienceCardChild).where(
+                        ExperienceCardChild.parent_experience_id == parent_orm.id,
+                        ExperienceCardChild.person_id == person_id,
+                    )
                 )
-            )
-            committed_children.extend(list(children_result.scalars().all()))
+                children_orm = list(children_result.scalars().all())
+
+        await _finalize_card(db, card=parent_orm, children=children_orm)
+        committed_cards.append(parent_orm)
+        committed_children.extend(children_orm)
 
     return {
         "committed_card_ids": [card.id for card in committed_cards],

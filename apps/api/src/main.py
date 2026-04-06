@@ -10,12 +10,16 @@ from slowapi.errors import RateLimitExceeded
 from starlette.responses import Response
 
 from src.core import get_settings, limiter
+from src.providers import close_chat_provider, close_embedding_provider, close_translation_provider
 from src.routers import ROUTERS
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
+    await close_chat_provider()
+    await close_embedding_provider()
+    await close_translation_provider()
 
 
 def handle_rate_limit_exceeded(

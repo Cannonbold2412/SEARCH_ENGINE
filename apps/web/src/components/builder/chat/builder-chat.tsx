@@ -12,7 +12,7 @@ import type { ChatMessage, PersistedBuilderChatState } from "./builder-chat-type
 
 const BUILDER_CHAT_STORAGE_KEY = "builder-chat-state";
 
-export type { ChatMessage, ClarifyHistoryEntry, ClarifyOption } from "./builder-chat-types";
+export type { ChatMessage } from "./builder-chat-types";
 
 interface BuilderChatProps {
   onCardsSaved?: () => void;

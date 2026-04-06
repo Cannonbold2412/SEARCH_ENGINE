@@ -1,12 +1,13 @@
 "use client";
 
 import { useRef, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { Coins, Mic, Send, Square, X } from "lucide-react";
 import { useSearch } from "@/contexts/search-context";
 import { SearchResults } from "@/components/search";
 import { ErrorMessage } from "@/components/feedback";
 import { Button } from "@/components/ui/button";
-import { useCredits, useSarvamVoiceDictation } from "@/hooks";
+import { useCredits, useVoiceDictation } from "@/hooks";
 import { useLanguage } from "@/contexts";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +20,7 @@ const SUGGESTIONS = [
 ];
 
 export default function HomePage() {
+  const pathname = usePathname();
   const {
     query,
     setQuery,
@@ -32,11 +34,14 @@ export default function HomePage() {
   const { data: credits } = useCredits();
   const { language } = useLanguage();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const mountedPathnameRef = useRef<string | null>(null);
 
-  const voice = useSarvamVoiceDictation({
+  const voice = useVoiceDictation({
     query,
     setQuery,
     languageCode: language,
+    preferLiveStreaming: true,
+    silenceQuietMs: 3000,
   });
 
   const autoResize = useCallback(() => {
@@ -50,6 +55,17 @@ export default function HomePage() {
     const id = setTimeout(autoResize, 0);
     return () => clearTimeout(id);
   }, [query, voice.displayValue, voice.isRecording, autoResize]);
+
+  useEffect(() => {
+    if (mountedPathnameRef.current === null) {
+      mountedPathnameRef.current = pathname;
+      return;
+    }
+    if (pathname === mountedPathnameRef.current) return;
+    if (voice.isRecording || voice.isTranscribing) {
+      voice.cancelRecording();
+    }
+  }, [pathname, voice]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,12 +194,12 @@ export default function HomePage() {
                 <div className="absolute right-2 bottom-2 top-2 sm:top-auto flex items-center gap-0.5">
                   <button
                     type="button"
-                    onClick={() => voice.toggleRecording()}
+                    onClick={() => {
+                      voice.toggleRecording();
+                    }}
                     disabled={voice.isTranscribing}
                     aria-pressed={voice.isRecording}
-                    aria-label={
-                      voice.isRecording ? "Stop recording and transcribe" : "Record voice query"
-                    }
+                    aria-label={voice.isRecording ? "Stop recording" : "Record voice query"}
                     className={cn(
                       "h-8 w-8 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors",
                       voice.isRecording &&

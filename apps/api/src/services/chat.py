@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Conversation, Message, Person
@@ -114,13 +114,30 @@ async def list_conversations(
     if not conversations:
         return []
 
-    # Load peers and last messages in batches
+    conv_ids = [conv.id for conv in conversations]
+
+    # Batch-load peers
     peer_ids = {
         _peer_for(conv, current_user.id)
         for conv in conversations  # type: ignore[arg-type]
     }
     peers = (await db.execute(select(Person).where(Person.id.in_(peer_ids)))).scalars().all()
     peer_map = {p.id: p for p in peers}
+
+    # Batch-load last message per conversation (window function avoids N+1)
+    ranked = (
+        select(
+            Message.conversation_id,
+            Message.body,
+            func.row_number()
+            .over(partition_by=Message.conversation_id, order_by=Message.created_at.desc())
+            .label("rn"),
+        )
+        .where(Message.conversation_id.in_(conv_ids))
+        .subquery()
+    )
+    last_msgs_stmt = select(ranked.c.conversation_id, ranked.c.body).where(ranked.c.rn == 1)
+    last_msgs = {row.conversation_id: row.body for row in (await db.execute(last_msgs_stmt)).all()}
 
     summaries: list[ConversationSummary] = []
     for conv in conversations:
@@ -131,20 +148,11 @@ async def list_conversations(
             display_name=peer.display_name if peer else None,
         )
 
-        # Fetch latest message for preview
-        msg_stmt = (
-            select(Message)
-            .where(Message.conversation_id == conv.id)
-            .order_by(Message.created_at.desc())
-            .limit(1)
-        )
-        last_msg = (await db.execute(msg_stmt)).scalar_one_or_none()
-
         summaries.append(
             ConversationSummary(
                 id=conv.id,
                 peer=peer_schema,
-                last_message_preview=last_msg.body if last_msg else None,
+                last_message_preview=last_msgs.get(conv.id),
                 last_message_at=conv.last_message_at,
             )
         )

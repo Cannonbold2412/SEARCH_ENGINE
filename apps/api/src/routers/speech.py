@@ -1,20 +1,27 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, WebSocket
 
 from src.core import get_settings, limiter
 from src.db.models import Person
 from src.dependencies import get_current_user
 from src.schemas.speech import SpeechTranscribeResponse
-from src.services.speech import transcribe_with_sarvam
+from src.services.speech import transcribe_upload
+from src.services.speech.deepgram_stream import handle_speech_stream
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/speech", tags=["speech"])
 _settings = get_settings()
 
-_MAX_AUDIO_BYTES = 12 * 1024 * 1024  # stay under Sarvam short-audio limits
+_MAX_AUDIO_BYTES = 12 * 1024 * 1024
+
+
+@router.websocket("/stream")
+async def speech_stream_ws(websocket: WebSocket):
+    """Live PCM → Deepgram (Nova) → transcript JSON; auth in first JSON message."""
+    await handle_speech_stream(websocket)
 
 
 @router.post("/transcribe", response_model=SpeechTranscribeResponse)
@@ -24,11 +31,11 @@ async def transcribe_audio(
     audio_file: Annotated[UploadFile, File(description="Audio (webm, wav, mp3, etc.)")],
     language_code: Annotated[
         str | None,
-        Form(description="Optional app language (ISO 639-1); forwarded to Sarvam"),
+        Form(description="Optional app language (ISO 639-1); forwarded to the STT provider"),
     ] = None,
     current_user: Person = Depends(get_current_user),
 ):
-    """Proxy to Sarvam speech-to-text using server-side API key (never exposed to the client)."""
+    """Speech-to-text via Sarvam or Deepgram (server-side key; never exposed to the client)."""
     _ = current_user  # auth + rate limit per user
     content = await audio_file.read()
     if len(content) > _MAX_AUDIO_BYTES:
@@ -38,7 +45,7 @@ async def transcribe_audio(
 
     filename = audio_file.filename or "audio.webm"
     try:
-        result = await transcribe_with_sarvam(
+        result = await transcribe_upload(
             content,
             filename=filename,
             content_type=audio_file.content_type,

@@ -2,7 +2,7 @@
 Experience Card pipeline prompts.
 
 Designed to take messy, informal, noisy, or incomplete human text and produce:
-  rewrite -> detect experiences -> extract single (parent + children) -> validate -> clarify.
+  rewrite -> extract single (parent + children) -> validate.
 
 The system converts free-form text into structured Experience Cards
 (parent + dimension-based children), with structured parent and child cards.
@@ -51,64 +51,14 @@ INPUT:
 
 
 # -----------------------------------------------------------------------------
-# 2. Detect distinct experiences (count + labels for "which one to process")
-# -----------------------------------------------------------------------------
-
-PROMPT_DETECT_EXPERIENCES = """You are an experience detection engine.
-
-Read the cleaned text below and identify every DISTINCT experience block — any bounded period of activity tied to a role, project, organization, or pursuit. This includes jobs, freelance work, education, side projects, business ventures, research, or any other meaningful engagement.
-
-RULES:
-1. Each distinct role, organization, or project = one experience.
-2. Split on: different employers or clients, different projects, "then", "after that", "also", "another role", "meanwhile", or different time ranges.
-3. Do NOT merge experiences that happened in parallel if they are clearly distinct.
-4. Do NOT split a single experience just because the person changed responsibilities within the same role/org.
-5. If no experiences are found, return count 0 and an empty array.
-6. Return ONLY valid JSON. No markdown, no commentary, no preamble.
-
-OUTPUT FORMAT:
-{
-  "count": <number of distinct experiences>,
-  "experiences": [
-    {
-      "index": 1,
-      "label": "<short one-line summary: org/role/duration if available>",
-      "suggested": false
-    },
-    {
-      "index": 2,
-      "label": "<short one-line summary>",
-      "suggested": true
-    }
-  ]
-}
-
-LABEL RULES:
-- Keep labels short and scannable (one line).
-- Include whatever is available: org name, role, time range, or project name.
-- Do not fabricate details not present in the text.
-
-SUGGESTED RULES:
-- Set "suggested": true for exactly ONE experience.
-- Prefer the one with the most structured detail (clear dates, org name, role).
-- If all are equally detailed, prefer the most recent.
-- If only one experience exists, it is always suggested.
-
-CLEANED TEXT:
-{{CLEANED_TEXT}}
-
-Return valid JSON only:
-"""
-
-# -----------------------------------------------------------------------------
-# 3. Extract SINGLE experience by index (one at a time)
+# 2. Extract SINGLE experience by index (builder commit uses 1 of 1)
 # -----------------------------------------------------------------------------
 
 PROMPT_EXTRACT_SINGLE_CARDS = """You are a structured data extraction system.
 
-The cleaned text below describes one or more distinct experiences. Your task is to extract ONLY ONE of them — the experience at position {{EXPERIENCE_INDEX}} of {{EXPERIENCE_COUNT}}.
+The cleaned text may mention more than one role or project. Extract exactly ONE experience — the one at position {{EXPERIENCE_INDEX}} of {{EXPERIENCE_COUNT}}. When the count is 1, treat this as a single pass over the full narrative: prefer the primary or most salient experience.
 
-Ignore all other experiences entirely.
+Ignore other experiences in the text for this extraction.
 
 ---
 
@@ -218,7 +168,7 @@ Extract ONLY the {{EXPERIENCE_INDEX}}-th experience (of {{EXPERIENCE_COUNT}}). R
 
 
 # -----------------------------------------------------------------------------
-# 4. Fill missing fields only (no full extract; for edit-form "Update from messy text")
+# 3. Fill missing fields only (no full extract; for edit-form "Update from messy text")
 # -----------------------------------------------------------------------------
 
 PROMPT_FILL_MISSING_FIELDS = """You are a targeted field-filling extractor. Your only job is to find values for fields that are currently empty. You do not rewrite, summarize, or create new cards.
@@ -275,315 +225,7 @@ FILL_MISSING_ITEMS_APPEND_INSTRUCTION = (
 )
 
 # -----------------------------------------------------------------------------
-# 5. Clarify flow: Planner (JSON only)
-# -----------------------------------------------------------------------------
-PROMPT_CLARIFY_PLANNER = """You are a curious clarification planner. A card has already been extracted. Your job is to decide the single best next action: ask, autofill, or stop.
-
-Your deeper goal is to understand the person behind the experience, not just complete a form. Use the card as grounding, but prefer questions that reveal skills, motivations, working style, interests, strengths, and opportunities when they can still be asked precisely.
-
-Be curious and thorough. You want to extract as much rich information as possible. Keep asking relevant questions until you truly cannot get more.
-
----
-
-ACTIONS:
-"ask"      → a field is missing, applicable, and not yet asked — PREFER asking over stopping
-"autofill" → the text explicitly and unambiguously contains the value
-"stop"     → nothing more worth extracting, all applicable fields resolved, OR limits reached
-
----
-
-STOP CONDITION:
-Stop ONLY when ALL of the following are true:
-- Every applicable field has a value, OR has already been asked, OR has been set to null as inapplicable
-- No high-value child dimensions remain unasked within limits
-- Limits are reached
-
-Do NOT stop early. Stay curious. If there is any valuable field you haven't asked about and it applies to this experience, choose "ask". Extract as much relevant and applicable data as possible.
-
----
-
-INAPPLICABILITY RULES:
-When a field does not apply given the nature of the experience, set it to null silently. Never ask about it.
-
-Examples:
-- company_name, team      → null when person is freelance, self-employed, or independent
-- end_date                → null when experience is explicitly ongoing
-- location.city/region    → null when experience is explicitly fully remote with no base
-- seniority_level         → null when experience is non-hierarchical (volunteer, hobbyist, student)
-- employment_type         → null when context makes categorization meaningless
-- relations               → NEVER ask — handled separately after all cards exist
-
-General rule: if asking would be confusing or irrelevant given what the text already tells
-you about the nature of this experience → inapplicable → null.
-
----
-
-PRIORITY ORDER:
-1. Parent fields: title/role → summary → company_name → employment_type → company_type →
-                  time → location.city → location.is_remote → domain → intent_primary →
-                  seniority_level
-2. Child fields (if limits allow): metrics → tools → achievements → responsibilities →
-                  collaborations → domain_knowledge → exposure → education → certifications
-
----
-
-RULES:
-1. Ask at most ONE thing per turn. Never combine questions.
-2. Never ask about a field in asked_history.
-3. Never ask about a field already filled in the card.
-4. Never ask about an inapplicable field — set it to null instead.
-5. Never ask about relations — handled after all cards exist.
-6. Never ask generic or lazy questions ("tell me more", "what did you build").
-7. Prefer revealing questions over administrative ones when both are possible.
-8. ASKED_HISTORY may contain profile_axes. If some axes such as skills, motivations, personality_traits, interests, or opportunities have not been explored yet, prefer a precise question that expands one of those.
-9. When you choose a child dimension, think of it as evidence about the person, not just metadata for the card.
-10. AUTOFILL only when text explicitly and unambiguously states the value:
-   - Company name verbatim → autofill
-   - Specific dates ("Jan 2020 to March 2022") → autofill
-   - "fully remote" or "work from home" explicitly stated → autofill is_remote: true
-   - Duration only ("2 months", "a couple of years") → ask instead
-   - Do not infer, guess, or hallucinate
-11. autofill_patch must contain ONLY the target field.
-12. Never propose choose_focus or discovery actions — handled upstream.
-
----
-
-ALLOWED VALUES:
-
-action: "ask" | "autofill" | "stop"
-target_type: "parent" | "child" | null
-
-parent target_field:
-  title, role, summary, company_name, team, time, location,
-  location.is_remote, domain, sub_domain, intent_primary,
-  seniority_level, employment_type, company_type
-
-target_child_type:
-  metrics, tools, achievements, responsibilities, collaborations,
-  domain_knowledge, exposure, education, certifications
-
----
-
-OUTPUT FORMAT (return this JSON object only):
-{
-  "action": "ask | autofill | stop",
-  "target_type": "parent | child | null",
-  "target_field": "<field name> | null",
-  "target_child_type": "<child type> | null",
-  "reason": "<one short sentence explaining why>",
-  "confidence": "high | medium | low",
-  "autofill_patch": null
-}
-
-When action=autofill:
-  autofill_patch is a flat object with only the target field.
-  Examples:
-    {"company_name": "ABC Inc"}
-    {"company_type": "family_business"}
-    {"location": {"is_remote": true, "city": null}}
-    {"company_name": null}  <- inapplicable field
-
-When action=ask or stop:
-  autofill_patch must be null.
-
----
-
-CANONICAL CARD FAMILY:
-{{CANONICAL_CARD_JSON}}
-
-CLEANED TEXT:
-{{CLEANED_TEXT}}
-
-ASKED HISTORY:
-{{ASKED_HISTORY_JSON}}
-
-LIMITS:
-Max parent questions: {{MAX_PARENT}} | Asked so far: {{PARENT_ASKED_COUNT}}
-Max child questions: {{MAX_CHILD}}  | Asked so far: {{CHILD_ASKED_COUNT}}
-
-Return valid JSON only:
-"""
-
-# -----------------------------------------------------------------------------
-# 6. Clarify flow: Question writer (phrasing only)
-# -----------------------------------------------------------------------------
-
-PROMPT_CLARIFY_QUESTION_WRITER = """You are a curious clarification question writer. A planner has decided what to ask next. Your job is to write exactly one natural, conversational question that sounds genuinely curious and interested.
-
----
-
-TONE:
-Sound like a thoughtful connector or colleague trying to understand the person, not a form wizard. Ask questions that invite the user to share, not to fill a box. Use phrasing like "I'm curious…", "I'd love to know…", "What was that like?", "Did that feel energizing?", or "Does that resonate?" when it fits naturally.
-
----
-
-RULES:
-1. Write ONE question only. Never combine multiple questions.
-2. Be conversational and brief — this is a chat interface, not a form.
-3. The question must target ONLY the field or child type specified in the plan.
-4. Never ask generic questions ("tell me more", "anything else?").
-5. For parent fields: ask directly and specifically about that field, with a curious tone.
-6. For child dimensions: invite the user to share naturally—make them want to add details.
-   - Good: "You mentioned mentoring others—was that something you really enjoyed, or just part of the role?"
-   - Good: "What kinds of results did you see? I'd love to capture what changed because of your work."
-   - Good: "This makes you sound strong in messy environments. Is that fair, or am I reading too much into it?"
-   - Bad:  "Please list your tools."
-   - Bad:  "What tools did you use, and what were your responsibilities?"
-7. Reference card context naturally to make the question feel informed, not robotic.
-8. Do NOT explain why you are asking. Just ask, with genuine curiosity.
-9. Output the question as plain text only. No JSON, no preamble, no formatting.
-
----
-
-PLAN:
-{{CLARIFY_PLAN_JSON}}
-
-CANONICAL CARD FAMILY (for context):
-{{CANONICAL_CARD_JSON}}
-
-Write the question now:
-"""
-
-# -----------------------------------------------------------------------------
-# 7. Clarify flow: Apply answer (patch only)
-# -----------------------------------------------------------------------------
-
-PROMPT_CLARIFY_APPLY_ANSWER = """You are a clarification answer processor. Convert the user's answer into a minimal patch for the experience card. You ONLY update the target field — nothing else.
-
----
-
-INPUTS:
-- Validated plan: what field or child dimension was asked about
-- User's answer: raw text from the user
-- Current canonical card: for context only — do not modify fields not in the plan
-
----
-
-RULES:
-1. Patch ONLY the target field specified in the plan. Never touch other fields.
-2. For nested fields, patch only the relevant sub-fields:
-   - time     → time.start, time.end, time.ongoing, time.text
-   - location → location.city, location.country, location.is_remote, location.text
-3. Preserve the user's original wording where appropriate. Do not paraphrase.
-4. Do NOT hallucinate. If the user's answer does not contain the value, do not invent it.
-5. If the user indicates the field is not applicable → set field to null.
-6. If the answer is unclear, off-topic, or unusable → set needs_retry: true. Write one short retry_question that sounds curious and helpful—e.g. "I'd love to capture that—do you remember roughly when that was?" rather than "Please provide more details."
-7. Dates MUST be YYYY-MM or YYYY-MM-DD only:
-   - "Jan 2020" → "2020-01"
-   - "March 2022" → "2022-03"
-   - "2 years ago" → do not guess → set needs_retry: true
-8. Return valid JSON only. No markdown, no commentary, no preamble.
-
----
-
-OUTPUT FORMAT:
-{
-  "patch": { ... only target field updates ... },
-  "confidence": "high | medium | low",
-  "needs_retry": false,
-  "retry_question": null
-}
-
-When needs_retry=true:
-{
-  "patch": {},
-  "confidence": "low",
-  "needs_retry": true,
-  "retry_question": "<one short clarifying question>"
-}
-
-Examples:
-
-Target = time, user says "Jan 2020 to March 2022":
-{ "patch": { "time": { "start": "2020-01", "end": "2022-03", "ongoing": false, "text": "Jan 2020 to March 2022" } }, "confidence": "high", "needs_retry": false, "retry_question": null }
-
-Target = company_name, user says "I was freelancing, no company":
-{ "patch": { "company_name": null }, "confidence": "high", "needs_retry": false, "retry_question": null }
-
-Target = time, user says "about 2 years":
-{ "patch": {}, "confidence": "low", "needs_retry": true, "retry_question": "I'm curious—do you remember roughly when you started and when it ended? Even approximate dates help." }
-
-For target_child_type (child dimension), patch adds items to that child. Append to value.items[]:
-Target = tools, user says "I used Python and SQL for analytics":
-{
-  "patch": {
-    "value": {
-      "items": [
-        { "title": "Python", "description": "Used for analytics" },
-        { "title": "SQL", "description": "Used for analytics" }
-      ]
-    }
-  },
-  "confidence": "high",
-  "needs_retry": false,
-  "retry_question": null
-}
-
-Target = metrics, user says "15 lakh in 2 months":
-{
-  "patch": {
-    "value": {
-      "items": [
-        { "title": "₹15 lakh", "description": "Generated in 2 months." }
-      ]
-    }
-  },
-  "confidence": "high",
-  "needs_retry": false,
-  "retry_question": null
-}
-
----
-
-VALIDATED PLAN:
-{{VALIDATED_PLAN_JSON}}
-
-USER'S ANSWER:
-{{USER_ANSWER}}
-
-CANONICAL CARD (for context):
-{{CANONICAL_CARD_JSON}}
-
-Return valid JSON only:
-"""
-
-# -----------------------------------------------------------------------------
-# 8. Profile update extractor (person-level insights)
-# -----------------------------------------------------------------------------
-
-PROMPT_PROFILE_REFLECTION = """You are a warm, perceptive coach reading someone’s experience story.
-
-Your only job is to write a single short reflection that mirrors back the themes you notice about the person — not a card summary, but a human observation about who they seem to be.
-
-RULES:
-1. Use only evidence grounded in the text and conversation.
-2. One to two sentences maximum. Warm, curious tone.
-3. Do NOT list skills or enumerate facts — speak to character, drive, or pattern.
-4. Return valid JSON only. No markdown, no commentary.
-5. If there is not yet enough signal, return null for profile_reflection.
-
-OUTPUT FORMAT:
-{
-  "profile_reflection": "<short reflection or null>"
-}
-
-Good example:
-"From what you’ve shared so far, I’m seeing someone who likes ownership, ambiguity, and building useful things with other people."
-
-CANONICAL CARD FAMILY:
-{{CANONICAL_CARD_JSON}}
-
-CLEANED TEXT:
-{{CLEANED_TEXT}}
-
-ASKED HISTORY:
-{{ASKED_HISTORY_JSON}}
-
-Return valid JSON only:
-"""
-
-# -----------------------------------------------------------------------------
-# 9. Helper: fill_prompt
+# 4. Helper: fill_prompt
 # -----------------------------------------------------------------------------
 
 _DEFAULT_REPLACEMENTS: dict[str, str] = {
@@ -604,14 +246,6 @@ def fill_prompt(
     allowed_keys: str | None = None,
     experience_index: int | None = None,
     experience_count: int | None = None,
-    canonical_card_json: str | None = None,
-    asked_history_json: str | None = None,
-    max_parent: int | None = None,
-    max_child: int | None = None,
-    parent_asked_count: int | None = None,
-    child_asked_count: int | None = None,
-    validated_plan_json: str | None = None,
-    user_answer: str | None = None,
     items_instruction: str | None = None,
 ) -> str:
     kwargs_map = {
@@ -621,15 +255,6 @@ def fill_prompt(
         "{{ALLOWED_KEYS}}": allowed_keys,
         "{{EXPERIENCE_INDEX}}": experience_index,
         "{{EXPERIENCE_COUNT}}": experience_count,
-        "{{CANONICAL_CARD_JSON}}": canonical_card_json,
-        "{{ASKED_HISTORY_JSON}}": asked_history_json,
-        "{{MAX_PARENT}}": max_parent,
-        "{{MAX_CHILD}}": max_child,
-        "{{PARENT_ASKED_COUNT}}": parent_asked_count,
-        "{{CHILD_ASKED_COUNT}}": child_asked_count,
-        "{{VALIDATED_PLAN_JSON}}": validated_plan_json,
-        "{{CLARIFY_PLAN_JSON}}": validated_plan_json,
-        "{{USER_ANSWER}}": user_answer,
         "{{ITEMS_INSTRUCTION}}": items_instruction or "",
     }
     out = template

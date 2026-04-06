@@ -13,10 +13,24 @@ if "asyncpg" not in database_url:
     else:
         database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+_use_null_pool = "render.com" in database_url
+
+_pool_kwargs: dict = (
+    {"poolclass": NullPool}
+    if _use_null_pool
+    else {
+        "pool_size": 10,
+        "max_overflow": 20,
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+    }
+)
+
 engine = create_async_engine(
     database_url,
     echo=os.getenv("SQL_ECHO", "0") == "1",
-    poolclass=NullPool if "render.com" in database_url else None,
+    connect_args={"server_settings": {"statement_timeout": "30000"}},
+    **_pool_kwargs,
 )
 
 async_session: async_sessionmaker[AsyncSession] = async_sessionmaker(

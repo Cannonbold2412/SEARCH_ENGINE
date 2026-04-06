@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ParentCardEditForm } from "../forms/parent-card-edit-form";
@@ -10,7 +10,7 @@ import {
   getLocationFromCard,
   isPlaceholderChildCard,
 } from "../card/card-details";
-import { PenLine, Trash2, ChevronDown } from "lucide-react";
+import { PenLine, Trash2, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ExperienceCard, ExperienceCardChild } from "@/lib/types";
 import type { ParentCardForm, ChildCardForm } from "@/hooks/use-card-forms";
@@ -43,9 +43,11 @@ interface SavedCardFamilyProps {
   onUpdateParentFromMessyText?: (text: string) => Promise<void>;
   onUpdateChildFromMessyText?: (text: string) => Promise<void>;
   isUpdatingFromMessyText?: boolean;
+  /** True while navigating to enhance and preloading voice (Your Cards pencil). */
+  isWarmingVoice?: boolean;
 }
 
-export function SavedCardFamily({
+export const SavedCardFamily = memo(function SavedCardFamily({
   parent,
   childCards,
   readOnly = false,
@@ -68,6 +70,7 @@ export function SavedCardFamily({
   onUpdateParentFromMessyText,
   onUpdateChildFromMessyText,
   isUpdatingFromMessyText = false,
+  isWarmingVoice = false,
 }: SavedCardFamilyProps) {
   const parentId = String(
     (parent as { id?: string })?.id ?? (parent as Record<string, unknown>)?.card_id ?? ""
@@ -169,49 +172,63 @@ export function SavedCardFamily({
             />
           </div>
           {!isEditingParent && (
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {hasChildren && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground tabular-nums">{visibleChildren.length}</span>
-                  <motion.div
-                    animate={{ rotate: isExpanded ? 180 : 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="text-muted-foreground"
-                  >
-                    <ChevronDown className="h-4 w-4" aria-hidden />
-                  </motion.div>
-                </div>
-              )}
-              {!readOnly && (
-                <div className="flex gap-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="text-muted-foreground hover:text-foreground h-7 w-7 p-0"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onStartEditing?.(parent);
-                    }}
-                  >
-                    <PenLine className="h-3.5 w-3.5" aria-hidden />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="text-muted-foreground hover:text-destructive h-7 w-7 p-0"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      openParentDeleteConfirmation();
-                    }}
-                    disabled={!parentId}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                  </Button>
-                </div>
+            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                {hasChildren && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground tabular-nums">{visibleChildren.length}</span>
+                    <motion.div
+                      animate={{ rotate: isExpanded ? 180 : 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="text-muted-foreground"
+                    >
+                      <ChevronDown className="h-4 w-4" aria-hidden />
+                    </motion.div>
+                  </div>
+                )}
+                {!readOnly && (
+                  <div className="flex gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-foreground h-7 w-7 p-0"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onStartEditing?.(parent);
+                      }}
+                      disabled={isWarmingVoice}
+                      aria-busy={isWarmingVoice}
+                      aria-label={isWarmingVoice ? "Warming voice" : "Edit experience"}
+                    >
+                      {isWarmingVoice ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                      ) : (
+                        <PenLine className="h-3.5 w-3.5" aria-hidden />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-destructive h-7 w-7 p-0"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openParentDeleteConfirmation();
+                      }}
+                      disabled={!parentId || isWarmingVoice}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {isWarmingVoice && (
+                <p className="text-[11px] text-muted-foreground tabular-nums leading-none max-w-[9rem] text-right">
+                  Warming voice…
+                </p>
               )}
             </div>
           )}
@@ -500,4 +517,4 @@ export function SavedCardFamily({
       </AnimatePresence>
     </motion.div>
   );
-}
+});

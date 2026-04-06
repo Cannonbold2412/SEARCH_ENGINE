@@ -25,6 +25,8 @@ from src.providers import (
 from src.schemas import (
     BuilderSessionCommitResponse,
     BuilderTranscriptCommitRequest,
+    CardFamilyResponse,
+    CommitCardDraftRequest,
     ExperienceCardChildPatch,
     ExperienceCardChildResponse,
     ExperienceCardCreate,
@@ -45,6 +47,10 @@ from src.services.experience import (
     embed_experience_cards,
     experience_card_service,
     fill_missing_fields_from_text,
+)
+from src.services.experience.crud import (
+    create_experience_card_child,
+    list_children_for_parent,
 )
 from src.services.experience.form_merge import (
     PARENT_MERGE_KEYS,
@@ -226,6 +232,81 @@ async def patch_experience_card(
     await _reembed_cards_after_update(db, parents=[card], context="PATCH card")
     await _invalidate_localized_ui(db, card.user_id)
     return experience_card_to_response(card)
+
+
+@router.post("/experience-cards/{card_id}/commit-draft", response_model=CardFamilyResponse)
+async def commit_card_draft(
+    card_id: str,
+    body: CommitCardDraftRequest,
+    current_user: Person = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Persist a full parent + children draft from the enhance editor in one transaction.
+
+    - Applies all parent patch fields and re-embeds.
+    - For each child entry with an ``id``: updates the existing row.
+    - For each child entry without an ``id``: upserts by ``child_type``
+      (updates the existing row for that type, or creates a new one).
+    - Re-embeds parent + all children after all writes.
+    - Returns the full card family so the frontend can update its cache.
+    """
+    card = await experience_card_service.get_card(db, card_id, current_user.id)
+    if not card:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Card not found")
+
+    # ── 1. Apply parent patch ──────────────────────────────────────────────
+    await apply_card_patch(card, body.parent, db)
+
+    # ── 2. Load all existing children for this parent ─────────────────────
+    existing_children = await list_children_for_parent(
+        db, parent_experience_id=card.id, person_id=current_user.id
+    )
+    by_id: dict[str, ExperienceCardChild] = {c.id: c for c in existing_children}
+    by_type: dict[str, ExperienceCardChild] = {c.child_type: c for c in existing_children}
+    new_children: list[ExperienceCardChild] = []
+
+    # ── 3. Upsert children (batch changes, single flush) ──────────────────
+    for entry in body.children:
+        patch = ExperienceCardChildPatch(items=entry.items)  # type: ignore[arg-type]
+        if entry.id:
+            child = by_id.get(entry.id)
+            if child and child.person_id == current_user.id:
+                apply_child_patch(child, patch)
+        else:
+            existing = by_type.get(entry.child_type)
+            if existing:
+                apply_child_patch(existing, patch)
+            else:
+                new_child = await create_experience_card_child(
+                    db,
+                    person_id=current_user.id,
+                    parent_experience_id=card.id,
+                    child_type=entry.child_type,
+                    items=list(entry.items),
+                )
+                new_children.append(new_child)
+                by_id[new_child.id] = new_child
+                by_type[new_child.child_type] = new_child
+
+    # Single flush for parent patch + all child updates
+    await db.flush()
+
+    # ── 4. Re-embed parent + all children ────────────────────────────────
+    # Combine existing children with newly created ones (avoids second DB query)
+    all_children = list(by_id.values())
+    await _reembed_cards_after_update(
+        db, parents=[card], children=all_children, context="commit-draft"
+    )
+    await _invalidate_localized_ui(db, current_user.id)
+
+    # ── 5. Build response ─────────────────────────────────────────────────
+    from src.serializers import experience_card_child_to_response
+
+    return CardFamilyResponse(
+        parent=experience_card_to_response(card),
+        children=[experience_card_child_to_response(c) for c in all_children],
+    )
 
 
 @router.delete("/experience-cards/{card_id}", response_model=ExperienceCardResponse)

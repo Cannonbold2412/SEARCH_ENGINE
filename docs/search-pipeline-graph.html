@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>CONXA Search Pipeline</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f1117; font-family: 'Segoe UI', system-ui, sans-serif; color: #e2e8f0; }
+
+  h1 {
+    text-align: center; padding: 28px 16px 8px;
+    font-size: 1.45rem; font-weight: 700; letter-spacing: .02em;
+    color: #f8fafc;
+  }
+  p.subtitle {
+    text-align: center; font-size: .82rem; color: #64748b; padding-bottom: 18px;
+  }
+
+  .canvas-wrap { overflow-x: auto; padding: 0 24px 40px; }
+  svg { display: block; margin: 0 auto; }
+
+  /* ── node styles ── */
+  .node-box   { rx: 10; ry: 10; }
+  .lbl        { font-size: 12px; font-weight: 600; fill: #f1f5f9; text-anchor: middle; dominant-baseline: middle; }
+  .lbl-sub    { font-size: 10px; fill: #94a3b8; text-anchor: middle; dominant-baseline: middle; }
+  .lbl-sm     { font-size: 10.5px; font-weight: 600; fill: #f1f5f9; text-anchor: middle; dominant-baseline: middle; }
+
+  /* colours */
+  .c-purple { fill: #6d28d9; }
+  .c-blue   { fill: #1d4ed8; }
+  .c-teal   { fill: #0f766e; }
+  .c-green  { fill: #15803d; }
+  .c-amber  { fill: #b45309; }
+  .c-rose   { fill: #be123c; }
+  .c-slate  { fill: #334155; }
+  .c-sky    { fill: #0369a1; }
+  .c-diamond{ fill: #7c3aed; }
+  .c-exit   { fill: #166534; }
+  .c-empty  { fill: #7f1d1d; }
+
+  /* arrows */
+  .arrow { stroke: #475569; stroke-width: 1.8; fill: none; marker-end: url(#arr); }
+  .arrow-green { stroke: #22c55e; stroke-width: 1.6; fill: none; marker-end: url(#arr-g); }
+  .arrow-red   { stroke: #f87171; stroke-width: 1.6; fill: none; marker-end: url(#arr-r); }
+  .arrow-amber { stroke: #fbbf24; stroke-width: 1.6; fill: none; marker-end: url(#arr-a); }
+
+  .edge-lbl { font-size: 10px; fill: #94a3b8; text-anchor: middle; }
+  .edge-lbl-g { font-size: 10px; fill: #4ade80; text-anchor: middle; }
+  .edge-lbl-r { font-size: 10px; fill: #f87171; text-anchor: middle; }
+
+  /* legend */
+  .legend { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; padding: 0 24px 32px; }
+  .leg-item { display:flex; align-items:center; gap:6px; font-size:.78rem; color:#94a3b8; }
+  .leg-swatch { width:14px; height:14px; border-radius:3px; flex-shrink:0; }
+</style>
+</head>
+<body>
+
+<h1>CONXA — Search Query Pipeline</h1>
+<p class="subtitle">End-to-end flow from HTTP request → ranked results with "why matched" explanations</p>
+
+<div class="canvas-wrap">
+<svg width="1100" height="2320" viewBox="0 0 1100 2320">
+<defs>
+  <marker id="arr"   markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#475569"/></marker>
+  <marker id="arr-g" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#22c55e"/></marker>
+  <marker id="arr-r" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#f87171"/></marker>
+  <marker id="arr-a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#fbbf24"/></marker>
+
+  <filter id="glow">
+    <feGaussianBlur stdDeviation="3" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+
+  <!-- subtle grid -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+  </pattern>
+</defs>
+
+<rect width="1100" height="2320" fill="#0f1117"/>
+<rect width="1100" height="2320" fill="url(#grid)"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 0 — HTTP Request
+══════════════════════════════════════════════════════════════ -->
+<rect class="node-box c-purple" x="370" y="30" width="360" height="64" filter="url(#glow)"/>
+<text class="lbl" x="550" y="52">POST /search</text>
+<text class="lbl-sub" x="550" y="70">SearchRequest { query, language, idempotency_key,</text>
+<text class="lbl-sub" x="550" y="83">num_cards, salary_max, open_to_work }</text>
+
+<!-- step label -->
+<text x="20" y="65" font-size="10" fill="#475569" font-weight="700">STEP 0</text>
+
+<!-- arrow down -->
+<line class="arrow" x1="550" y1="94" x2="550" y2="128"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 1 — Language Resolution + Optional Translation
+══════════════════════════════════════════════════════════════ -->
+<rect class="node-box c-slate" x="340" y="128" width="420" height="58"/>
+<text class="lbl" x="550" y="150">① Resolve Viewer Language</text>
+<text class="lbl-sub" x="550" y="166">body.language or searcher's preferred_language</text>
+<text class="lbl-sub" x="550" y="180">→ translate query to English if non-EN (Sarvam/OpenAI)</text>
+<text x="20" y="160" font-size="10" fill="#475569" font-weight="700">STEP 1</text>
+
+<line class="arrow" x1="550" y1="186" x2="550" y2="220"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 2 — Idempotency Check
+══════════════════════════════════════════════════════════════ -->
+<!-- diamond -->
+<polygon class="c-diamond" points="550,220 680,256 550,292 420,256" filter="url(#glow)"/>
+<text class="lbl-sm" x="550" y="252">② Idempotency Hit?</text>
+<text class="lbl-sub" x="550" y="268">get_idempotent_response("POST /search", key)</text>
+<text x="20" y="258" font-size="10" fill="#475569" font-weight="700">STEP 2</text>
+
+<!-- YES → early return (right) -->
+<line class="arrow-green" x1="680" y1="256" x2="840" y2="256"/>
+<rect class="node-box c-exit" x="840" y="230" width="220" height="52"/>
+<text class="lbl" x="950" y="250">Return Cached</text>
+<text class="lbl-sub" x="950" y="266">SearchResponse (no credits charged)</text>
+<text class="edge-lbl-g" x="762" y="248">YES</text>
+
+<!-- NO → continue down -->
+<line class="arrow-red" x1="550" y1="292" x2="550" y2="328"/>
+<text class="edge-lbl-r" x="560" y="312">NO</text>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 3 — LLM Parse
+══════════════════════════════════════════════════════════════ -->
+<rect class="node-box c-blue" x="330" y="328" width="440" height="72"/>
+<text class="lbl" x="550" y="349">③ LLM Parse Search Filters</text>
+<text class="lbl-sub" x="550" y="365">get_chat_provider() → parse_search_filters(query)</text>
+<text class="lbl-sub" x="550" y="380">→ validate_and_normalize() → ParsedConstraintsPayload</text>
+<text class="lbl-sub" x="550" y="394">{ MUST, SHOULD, EXCLUDE constraints }</text>
+<text x="20" y="370" font-size="10" fill="#475569" font-weight="700">STEP 3</text>
+
+<line class="arrow" x1="550" y1="400" x2="550" y2="434"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 4 — num_cards + Credit pre-check
+══════════════════════════════════════════════════════════════ -->
+<rect class="node-box c-amber" x="340" y="434" width="420" height="60"/>
+<text class="lbl" x="550" y="455">④ Resolve num_cards + Credit Pre-check</text>
+<text class="lbl-sub" x="550" y="471">body.num_cards or parsed or regex or DEFAULT (6), cap at 24</text>
+<text class="lbl-sub" x="550" y="486">get_balance() ≥ num_cards  or  HTTP 402</text>
+<text x="20" y="466" font-size="10" fill="#475569" font-weight="700">STEP 4</text>
+
+<line class="arrow" x1="550" y1="494" x2="550" y2="528"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 5 — Parallel: Embed + Lexical
+══════════════════════════════════════════════════════════════ -->
+<!-- parallel box outline -->
+<rect x="100" y="528" width="900" height="106" rx="8" ry="8" fill="#1e293b" stroke="#334155" stroke-width="1.5" stroke-dasharray="6,3"/>
+<text x="550" y="544" font-size="11" fill="#64748b" text-anchor="middle">⑤  PARALLEL  (asyncio.gather)</text>
+<text x="20" y="582" font-size="10" fill="#475569" font-weight="700">STEP 5</text>
+
+<!-- embed box -->
+<rect class="node-box c-teal" x="120" y="552" width="400" height="68"/>
+<text class="lbl" x="320" y="574">Embed Query Vector</text>
+<text class="lbl-sub" x="320" y="590">_embed_query_vector(query, embedding_text)</text>
+<text class="lbl-sub" x="320" y="606">get_embedding_provider() → normalize_embedding()</text>
+
+<!-- lexical box -->
+<rect class="node-box c-sky" x="560" y="552" width="420" height="68"/>
+<text class="lbl" x="770" y="574">Lexical FTS Candidates</text>
+<text class="lbl-sub" x="770" y="590">_lexical_candidates(db, query_ts)</text>
+<text class="lbl-sub" x="770" y="606">plainto_tsquery + ts_rank_cd → score [0, 0.25]</text>
+
+<line class="arrow" x1="320" y1="634" x2="320" y2="668"/>
+<line class="arrow" x1="770" y1="634" x2="770" y2="668"/>
+<!-- join lines -->
+<line class="arrow" x1="320" y1="668" x2="550" y2="700"/>
+<line class="arrow" x1="770" y1="668" x2="550" y2="700"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 6 — Empty vector guard
+══════════════════════════════════════════════════════════════ -->
+<polygon class="c-diamond" points="550,700 680,736 550,772 420,736" />
+<text class="lbl-sm" x="550" y="732">⑥ query_vec empty?</text>
+<text class="lbl-sub" x="550" y="748">(embedding failed)</text>
+<text x="20" y="740" font-size="10" fill="#475569" font-weight="700">STEP 6</text>
+
+<!-- YES → empty response -->
+<line class="arrow-red" x1="680" y1="736" x2="840" y2="736"/>
+<rect class="node-box c-empty" x="840" y="710" width="220" height="52"/>
+<text class="lbl" x="950" y="730">Empty SearchResponse</text>
+<text class="lbl-sub" x="950" y="746">Search row created, no credits</text>
+<text class="edge-lbl-r" x="762" y="728">YES</text>
+
+<!-- NO → continue -->
+<line class="arrow-green" x1="550" y1="772" x2="550" y2="806"/>
+<text class="edge-lbl-g" x="560" y="791">NO</text>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 7 — Tiered Vector Fetch
+══════════════════════════════════════════════════════════════ -->
+<rect class="node-box c-blue" x="300" y="806" width="500" height="100"/>
+<text class="lbl" x="550" y="826">⑦ _fetch_candidates_with_fallback()</text>
+<text class="lbl-sub" x="550" y="843">Tier 0 (strict)  → Tier 1 (time soft)</text>
+<text class="lbl-sub" x="550" y="859">→ Tier 2 (location soft)  → Tier 3 (company/team soft)</text>
+<text class="lbl-sub" x="550" y="875">ExperienceCard cosine_distance(query_vec) ORDER BY dist LIMIT 10</text>
+<text class="lbl-sub" x="550" y="891">+ child aggregate min dist + top-3 child evidence per person</text>
+<text class="lbl-sub" x="550" y="905">Retry next tier if unique_persons &lt; MIN_RESULTS (15)</text>
+<text x="20" y="860" font-size="10" fill="#475569" font-weight="700">STEP 7</text>
+
+<line class="arrow" x1="550" y1="906" x2="550" y2="940"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 8 — Zero-person fallback guard
+══════════════════════════════════════════════════════════════ -->
+<polygon class="c-diamond" points="550,940 680,976 550,1012 420,976" />
+<text class="lbl-sm" x="550" y="972">⑧ 0 vector persons?</text>
+<text x="20" y="978" font-size="10" fill="#475569" font-weight="700">STEP 8</text>
+
+<!-- YES → lexical-only fallback -->
+<line class="arrow-amber" x1="420" y1="976" x2="160" y2="976"/>
+<rect class="node-box c-amber" x="10" y="952" width="150" height="48"/>
+<text class="lbl-sm" x="85" y="970">Lexical-only</text>
+<text class="lbl-sub" x="85" y="984">_lexical_candidates_relaxed</text>
+<text class="edge-lbl" x="295" y="968">YES</text>
+<!-- loop back down -->
+<line class="arrow-amber" x1="85" y1="1000" x2="85" y2="1044"/>
+<line class="arrow-amber" x1="85" y1="1044" x2="420" y2="1044"/>
+
+<!-- NO → continue -->
+<line class="arrow-green" x1="550" y1="1012" x2="550" y2="1044"/>
+<text class="edge-lbl-g" x="560" y="1030">NO</text>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 9 — Collapse & Rank
+══════════════════════════════════════════════════════════════ -->
+<rect class="node-box c-teal" x="260" y="1044" width="580" height="130"/>
+<text class="lbl" x="550" y="1064">⑨ _collapse_and_rank_persons()</text>
+<!-- scoring formula -->
+<text class="lbl-sub" x="550" y="1082">sim = 1 / (1 + cosine_distance)</text>
+<text class="lbl-sub" x="550" y="1098">card_score = sim + min(SHOULD hits × 0.05, 0.10×SHOULD_CAP)</text>
+<text class="lbl-sub" x="550" y="1114">base = 0.55 × parent_best + 0.30 × child_best + 0.15 × avg_top3</text>
+<text class="lbl-sub" x="550" y="1130">score = base + lexical_bonus[0–.25] + should_bonus[0–.25] + graph_bonus[0–.10]</text>
+<text class="lbl-sub" x="550" y="1146">         − MISSING_DATE_PENALTY(0.15) − LOCATION_MISMATCH_PENALTY(0.15)</text>
+<text class="lbl-sub" x="550" y="1162">Rank all persons ↓ score  →  keep top 24 (TOP_PEOPLE_STORED)</text>
+<text x="20" y="1112" font-size="10" fill="#475569" font-weight="700">STEP 9</text>
+
+<line class="arrow" x1="550" y1="1174" x2="550" y2="1208"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 10 — Ranked empty guard
+══════════════════════════════════════════════════════════════ -->
+<polygon class="c-diamond" points="550,1208 680,1244 550,1280 420,1244" />
+<text class="lbl-sm" x="550" y="1240">⑩ Ranked list empty?</text>
+<text x="20" y="1246" font-size="10" fill="#475569" font-weight="700">STEP 10</text>
+
+<line class="arrow-red" x1="680" y1="1244" x2="840" y2="1244"/>
+<rect class="node-box c-empty" x="840" y="1218" width="220" height="52"/>
+<text class="lbl" x="950" y="1238">Empty SearchResponse</text>
+<text class="lbl-sub" x="950" y="1254">Search row, no credits</text>
+<text class="edge-lbl-r" x="762" y="1236">YES</text>
+
+<line class="arrow-green" x1="550" y1="1280" x2="550" y2="1314"/>
+<text class="edge-lbl-g" x="560" y="1299">NO</text>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 11 — Load Profiles + Tiebreakers
+══════════════════════════════════════════════════════════════ -->
+<rect class="node-box c-slate" x="320" y="1314" width="460" height="62"/>
+<text class="lbl" x="550" y="1334">⑪ Load Profiles + Tiebreakers</text>
+<text class="lbl-sub" x="550" y="1350">_load_people_profiles_and_children()</text>
+<text class="lbl-sub" x="550" y="1366">_apply_post_rank_tiebreakers()  (salary / date overlap)</text>
+<text x="20" y="1348" font-size="10" fill="#475569" font-weight="700">STEP 11</text>
+
+<line class="arrow" x1="550" y1="1376" x2="550" y2="1410"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 12 — Persist Search + Deduct Credits
+══════════════════════════════════════════════════════════════ -->
+<rect class="node-box c-rose" x="310" y="1410" width="480" height="68"/>
+<text class="lbl" x="550" y="1430">⑫ Persist Search Record + Deduct Credits</text>
+<text class="lbl-sub" x="550" y="1446">_create_search_record()  →  Search row (parsed_constraints_json,</text>
+<text class="lbl-sub" x="550" y="1462">fallback_tier, expires_at = 9999)</text>
+<text class="lbl-sub" x="550" y="1478">deduct_credits(num_cards, "search", search_id)</text>
+<text x="20" y="1448" font-size="10" fill="#475569" font-weight="700">STEP 12</text>
+
+<line class="arrow" x1="550" y1="1478" x2="550" y2="1512"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 13 — Why Matched
+══════════════════════════════════════════════════════════════ -->
+<rect class="node-box c-blue" x="290" y="1512" width="520" height="106"/>
+<text class="lbl" x="550" y="1532">⑬ Generate "Why Matched"</text>
+<text class="lbl-sub" x="550" y="1548">_prepare_pending_search_rows()  →  build_match_explanation_payload()</text>
+<text class="lbl-sub" x="550" y="1564">_generate_llm_why_matched(chat, constraints, evidence)</text>
+<text class="lbl-sub" x="550" y="1580">  → get_why_matched_prompt() → chat.chat() → validate_why_matched_output()</text>
+<text class="lbl-sub" x="550" y="1596">  → fallback_build_why_matched() on per-person failure</text>
+<text class="lbl-sub" x="550" y="1612">  → boost_query_matching_reasons()  (company / outcome lines)</text>
+<text x="20" y="1566" font-size="10" fill="#475569" font-weight="700">STEP 13</text>
+
+<!-- background async task indicator -->
+<rect x="830" y="1530" width="230" height="70" rx="8" fill="#1e293b" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="5,3"/>
+<text x="945" y="1552" font-size="10" fill="#fbbf24" text-anchor="middle" font-weight="700">ASYNC FALLBACK</text>
+<text x="945" y="1567" font-size="9.5" fill="#94a3b8" text-anchor="middle">_update_why_matched_async()</text>
+<text x="945" y="1581" font-size="9.5" fill="#94a3b8" text-anchor="middle">if sync LLM fails or empty,</text>
+<text x="945" y="1595" font-size="9.5" fill="#94a3b8" text-anchor="middle">retries in background session</text>
+<line x1="810" y1="1560" x2="830" y2="1565" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="4,2"/>
+
+<line class="arrow" x1="550" y1="1618" x2="550" y2="1652"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 14 — Persist SearchResult rows
+══════════════════════════════════════════════════════════════ -->
+<rect class="node-box c-teal" x="310" y="1652" width="480" height="72"/>
+<text class="lbl" x="550" y="1672">⑭ Persist SearchResult Rows</text>
+<text class="lbl-sub" x="550" y="1688">_persist_search_results()  →  SearchResult per person</text>
+<text class="lbl-sub" x="550" y="1704">extra = { why_matched, matched_parent_ids, matched_child_ids,</text>
+<text class="lbl-sub" x="550" y="1720">          graph_features, similarity_percent }</text>
+<text x="20" y="1690" font-size="10" fill="#475569" font-weight="700">STEP 14</text>
+
+<line class="arrow" x1="550" y1="1724" x2="550" y2="1758"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 15 — Build People List
+══════════════════════════════════════════════════════════════ -->
+<rect class="node-box c-slate" x="310" y="1758" width="480" height="62"/>
+<text class="lbl" x="550" y="1778">⑮ Build People List (top num_cards)</text>
+<text class="lbl-sub" x="550" y="1794">_build_search_people_list() → PersonSearchResult[]</text>
+<text class="lbl-sub" x="550" y="1810">name, headline, bio, photo, similarity%, why_matched, matched_cards</text>
+<text x="20" y="1792" font-size="10" fill="#475569" font-weight="700">STEP 15</text>
+
+<line class="arrow" x1="550" y1="1820" x2="550" y2="1854"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 16 — Locale Pass
+══════════════════════════════════════════════════════════════ -->
+<polygon class="c-diamond" points="550,1854 680,1890 550,1926 420,1890" />
+<text class="lbl-sm" x="550" y="1886">⑯ Non-EN viewer?</text>
+<text class="lbl-sub" x="550" y="1902">should_translate_response</text>
+<text x="20" y="1892" font-size="10" fill="#475569" font-weight="700">STEP 16</text>
+
+<!-- YES → locale -->
+<line class="arrow-amber" x1="680" y1="1890" x2="850" y2="1890"/>
+<rect class="node-box c-amber" x="850" y="1864" width="220" height="52"/>
+<text class="lbl" x="960" y="1884">Localize Results</text>
+<text class="lbl-sub" x="960" y="1900">localize_person_search_results</text>
+<text class="lbl-sub" x="960" y="1912">_for_viewer(target_lang)</text>
+<text class="edge-lbl" x="766" y="1882">YES</text>
+<!-- join back -->
+<line class="arrow-amber" x1="960" y1="1916" x2="960" y2="1960"/>
+<line class="arrow-amber" x1="960" y1="1960" x2="680" y2="1960"/>
+
+<line class="arrow-green" x1="550" y1="1926" x2="550" y2="1960"/>
+<text class="edge-lbl-g" x="560" y="1944">NO</text>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 17 — Return + Save Idempotency
+══════════════════════════════════════════════════════════════ -->
+<rect class="node-box c-exit" x="320" y="1960" width="480" height="68" filter="url(#glow)"/>
+<text class="lbl" x="560" y="1980">⑰ Return SearchResponse + Save Idempotency</text>
+<text class="lbl-sub" x="560" y="1996">{ search_id, people: PersonSearchResult[], num_cards }</text>
+<text class="lbl-sub" x="560" y="2012">if idempotency_key → save_idempotent_response(key, 200, body)</text>
+<text class="lbl-sub" x="560" y="2028">future duplicate calls → cached instantly</text>
+<text x="20" y="1998" font-size="10" fill="#475569" font-weight="700">STEP 17</text>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STEP 18 — Client
+══════════════════════════════════════════════════════════════ -->
+<line class="arrow" x1="550" y1="2028" x2="550" y2="2062"/>
+<rect class="node-box c-purple" x="360" y="2062" width="380" height="56" filter="url(#glow)"/>
+<text class="lbl" x="550" y="2082">Client receives ranked results</text>
+<text class="lbl-sub" x="550" y="2098">Sorted by blended score, up to num_cards people</text>
+<text class="lbl-sub" x="550" y="2112">each with why_matched bullets, matched cards, similarity %</text>
+
+<!-- ══════════════════════════════════════════════════════════════
+     SCORE LEGEND / FORMULA BOX
+══════════════════════════════════════════════════════════════ -->
+<rect x="10" y="1044" width="238" height="172" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.2"/>
+<text x="129" y="1062" font-size="11" fill="#f8fafc" text-anchor="middle" font-weight="700">Scoring Formula</text>
+<text x="20" y="1082" font-size="9.5" fill="#94a3b8">sim  =  1 / (1 + cosine_dist)</text>
+<text x="20" y="1098" font-size="9.5" fill="#94a3b8">card = sim + SHOULD×0.05</text>
+<text x="20" y="1116" font-size="9.5" fill="#64748b">──────────────────────</text>
+<text x="20" y="1132" font-size="9.5" fill="#94a3b8">base = 0.55 × parent_best</text>
+<text x="20" y="1147" font-size="9.5" fill="#94a3b8">     + 0.30 × child_best</text>
+<text x="20" y="1162" font-size="9.5" fill="#94a3b8">     + 0.15 × avg_top3</text>
+<text x="20" y="1179" font-size="9.5" fill="#64748b">──────────────────────</text>
+<text x="20" y="1195" font-size="9.5" fill="#4ade80">+ lexical  [0 – 0.25]</text>
+<text x="20" y="1210" font-size="9.5" fill="#4ade80">+ SHOULD   [0 – 0.25]</text>
+<text x="20" y="1225" font-size="9.5" fill="#4ade80">+ graph    [0 – 0.10]</text>
+<text x="20" y="1209" font-size="9.5" fill="#4ade80"/>
+<text x="20" y="1199" font-size="9.5" fill="#4ade80"/>
+
+<!-- ══════════════════════════════════════════════════════════════
+     TIER LEGEND
+══════════════════════════════════════════════════════════════ -->
+<rect x="852" y="806" width="230" height="130" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1.2"/>
+<text x="967" y="824" font-size="11" fill="#f8fafc" text-anchor="middle" font-weight="700">Fallback Tiers</text>
+<text x="862" y="842" font-size="9.5" fill="#94a3b8">Tier 0 — ALL filters (strict)</text>
+<text x="862" y="858" font-size="9.5" fill="#94a3b8">Tier 1 — skip time filter</text>
+<text x="862" y="874" font-size="9.5" fill="#94a3b8">Tier 2 — skip location filter</text>
+<text x="862" y="890" font-size="9.5" fill="#94a3b8">Tier 3 — skip company/team</text>
+<text x="862" y="910" font-size="9.5" fill="#64748b">Retry while persons &lt; 15</text>
+<text x="862" y="926" font-size="9.5" fill="#64748b">  → penalty added to score</text>
+<text x="862" y="942" font-size="9.5" fill="#f87171">     for missing date/loc</text>
+
+</svg>
+</div>
+
+<div class="legend">
+  <div class="leg-item"><div class="leg-swatch" style="background:#6d28d9"></div>Entry / Exit</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:#1d4ed8"></div>LLM / AI step</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:#0f766e"></div>DB query / persist</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:#b45309"></div>Validation / credits / locale</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:#be123c"></div>Persist &amp; deduct credits</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:#7c3aed"></div>Decision diamond</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:#166534"></div>Success path</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:#7f1d1d"></div>Empty / no-result path</div>
+  <div class="leg-item"><div class="leg-swatch" style="background:#334155"></div>Utility / load step</div>
+</div>
+
+</body>
+</html>

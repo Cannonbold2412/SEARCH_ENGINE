@@ -47,7 +47,6 @@ export function useCardMutations(
       if (context?.prevFamilies != null) queryClient.setQueryData(EXPERIENCE_CARD_FAMILIES_QUERY_KEY, context.prevFamilies);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
     },
   });
@@ -56,7 +55,6 @@ export function useCardMutations(
     mutationFn: ({ cardId, body }: { cardId: string; body: ExperienceCardPatch }) =>
       api<ExperienceCard>(`/experience-cards/${cardId}`, { method: "PATCH", body }),
     onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
       setEditingSavedCardId(null);
       const timeRange =

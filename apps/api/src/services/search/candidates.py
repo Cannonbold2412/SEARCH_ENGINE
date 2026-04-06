@@ -48,8 +48,8 @@ from .scoring import (
 logger = logging.getLogger(__name__)
 
 # Candidate query limits
-MIN_RESULTS = 15
-OVERFETCH_CARDS = 10
+MIN_RESULTS = 15  # absolute floor; dynamic floor = max(num_cards*2, MIN_RESULTS) at call site
+OVERFETCH_CARDS = 30  # increased from 10 to reduce fallback tier loop iterations
 
 # Minimal English stopwords for relaxed OR query
 _LEXICAL_STOP = frozenset(
@@ -73,6 +73,33 @@ _LEXICAL_STOP = frozenset(
     }
 )
 
+# When migration 035 has been applied, experience_cards.search_doc is a STORED generated
+# tsvector column backed by a GIN index.  We use it directly so Postgres can skip the
+# per-row concat_ws + to_tsvector computation.  The COALESCE fall-through handles the
+# period before the migration is applied (or on fresh empty tables).
+_PARENT_TSVEC_SQL = """COALESCE(ec.search_doc,
+    to_tsvector('english', concat_ws(' ',
+        ec.title, ec.normalized_role, ec.domain, ec.sub_domain, ec.company_name, ec.company_type,
+        ec.location, ec.employment_type, ec.summary, ec.raw_text, ec.intent_primary,
+        array_to_string(COALESCE(ec.intent_secondary, '{}'::text[]), ' '),
+        ec.seniority_level,
+        CASE WHEN ec.start_date IS NOT NULL AND ec.end_date IS NOT NULL THEN ec.start_date::text || ' - ' || ec.end_date::text
+             WHEN ec.start_date IS NOT NULL THEN ec.start_date::text
+             WHEN ec.end_date IS NOT NULL THEN ec.end_date::text ELSE NULL END,
+        CASE WHEN ec.is_current = true THEN 'current' ELSE NULL END
+    ))
+)"""
+
+_CHILD_TSVEC_SQL = """COALESCE(ecc.search_doc,
+    to_tsvector('english', concat_ws(' ',
+        COALESCE((ecc.value->'items'->0->>'title'), (ecc.value->'items'->0->>'subtitle'), ecc.value->>'summary', ''),
+        ecc.value->>'summary', ecc.value->>'raw_text',
+        (SELECT string_agg(COALESCE(elem->>'title','') || ' ' || COALESCE(elem->>'subtitle','') || ' ' || COALESCE(elem->>'description','') || ' ' || COALESCE(elem->>'sub_summary',''), ' ')
+         FROM jsonb_array_elements(COALESCE(ecc.value->'items', '[]'::jsonb)) elem)
+    ))
+)"""
+
+# Keep the raw concat_ws form available for places that need the text (not the tsvector)
 _PARENT_SEARCH_DOC_SQL = """concat_ws(' ',
     ec.title, ec.normalized_role, ec.domain, ec.sub_domain, ec.company_name, ec.company_type,
     ec.location, ec.employment_type, ec.summary, ec.raw_text, ec.intent_primary,
@@ -143,29 +170,29 @@ async def _lexical_candidates(
     if not query_ts:
         return {}
     person_scores: dict[str, float] = {}
+    # Use the stored search_doc tsvector (GIN-indexed after migration 035) with a
+    # COALESCE fallback to on-the-fly computation for pre-migration rows.
     stmt_parents = text(f"""
-        SELECT ec.person_id, ts_rank_cd(to_tsvector('english', COALESCE({_PARENT_SEARCH_DOC_SQL}, '')), plainto_tsquery('english', :q)) AS r
+        SELECT ec.person_id, ts_rank_cd({_PARENT_TSVEC_SQL}, plainto_tsquery('english', :q)) AS r
         FROM experience_cards ec
         WHERE ec.experience_card_visibility = true
-          AND to_tsvector('english', COALESCE({_PARENT_SEARCH_DOC_SQL}, '')) @@ plainto_tsquery('english', :q)
+          AND {_PARENT_TSVEC_SQL} @@ plainto_tsquery('english', :q)
         ORDER BY r DESC
         LIMIT :lim
     """)
     stmt_children = text(f"""
-        SELECT ecc.person_id, ts_rank_cd(to_tsvector('english', COALESCE({_CHILD_SEARCH_DOC_SQL}, '')), plainto_tsquery('english', :q)) AS r
+        SELECT ecc.person_id, ts_rank_cd({_CHILD_TSVEC_SQL}, plainto_tsquery('english', :q)) AS r
         FROM experience_card_children ecc
         JOIN experience_cards ec ON ec.id = ecc.parent_experience_id AND ec.experience_card_visibility = true
-        WHERE to_tsvector('english', COALESCE({_CHILD_SEARCH_DOC_SQL}, '')) @@ plainto_tsquery('english', :q)
+        WHERE {_CHILD_TSVEC_SQL} @@ plainto_tsquery('english', :q)
         ORDER BY r DESC
         LIMIT :lim
     """)
     params = {"q": query_ts, "lim": limit_per_table}
     try:
         _scores: dict[str, float] = defaultdict(float)
-        rp, rc = await asyncio.gather(
-            db.execute(stmt_parents, params),
-            db.execute(stmt_children, params),
-        )
+        rp = await db.execute(stmt_parents, params)
+        rc = await db.execute(stmt_children, params)
         for row in rp.all():
             pid = str(row.person_id)
             _scores[pid] = max(_scores[pid], float(row.r or 0))
@@ -215,18 +242,18 @@ async def _lexical_candidates_relaxed(
         return {}
     or_ts = " | ".join(safe_parts)
     stmt_parents = text(f"""
-        SELECT ec.person_id, ts_rank_cd(to_tsvector('english', COALESCE({_PARENT_SEARCH_DOC_SQL}, '')), to_tsquery('english', :q)) AS r
+        SELECT ec.person_id, ts_rank_cd({_PARENT_TSVEC_SQL}, to_tsquery('english', :q)) AS r
         FROM experience_cards ec
         WHERE ec.experience_card_visibility = true
-          AND to_tsvector('english', COALESCE({_PARENT_SEARCH_DOC_SQL}, '')) @@ to_tsquery('english', :q)
+          AND {_PARENT_TSVEC_SQL} @@ to_tsquery('english', :q)
         ORDER BY r DESC
         LIMIT :lim
     """)
     stmt_children = text(f"""
-        SELECT ecc.person_id, ts_rank_cd(to_tsvector('english', COALESCE({_CHILD_SEARCH_DOC_SQL}, '')), to_tsquery('english', :q)) AS r
+        SELECT ecc.person_id, ts_rank_cd({_CHILD_TSVEC_SQL}, to_tsquery('english', :q)) AS r
         FROM experience_card_children ecc
         JOIN experience_cards ec ON ec.id = ecc.parent_experience_id AND ec.experience_card_visibility = true
-        WHERE to_tsvector('english', COALESCE({_CHILD_SEARCH_DOC_SQL}, '')) @@ to_tsquery('english', :q)
+        WHERE {_CHILD_TSVEC_SQL} @@ to_tsquery('english', :q)
         ORDER BY r DESC
         LIMIT :lim
     """)
@@ -235,10 +262,8 @@ async def _lexical_candidates_relaxed(
 
     _scores: dict[str, float] = defaultdict(float)
     try:
-        rp, rc = await asyncio.gather(
-            db.execute(stmt_parents, params),
-            db.execute(stmt_children, params),
-        )
+        rp = await db.execute(stmt_parents, params)
+        rc = await db.execute(stmt_children, params)
         for row in rp.all():
             pid = str(row.person_id)
             _scores[pid] = max(_scores[pid], float(row.r or 0))
@@ -445,11 +470,9 @@ async def _fetch_candidate_rows_for_filter_ctx(
         .where(ranked_children.c.rn <= MATCHED_CARDS_PER_PERSON)
     )
 
-    parent_result, child_dist_result, child_evidence_result = await asyncio.gather(
-        db.execute(parent_stmt),
-        db.execute(child_dist_stmt),
-        db.execute(top_children_stmt),
-    )
+    parent_result = await db.execute(parent_stmt)
+    child_dist_result = await db.execute(child_dist_stmt)
+    child_evidence_result = await db.execute(top_children_stmt)
     return (
         list(parent_result.all()),
         list(child_dist_result.all()),
@@ -499,8 +522,13 @@ async def _fetch_candidates_with_fallback(
     norm_terms_exclude: list[str],
     open_to_work_only: bool,
     offer_salary_inr_per_year: float | None,
+    effective_min_results: int = MIN_RESULTS,
 ) -> tuple[int, list, list, list]:
-    """Run candidate generation while relaxing MUST tiers until enough unique persons are found."""
+    """Run candidate generation while relaxing MUST tiers until enough unique persons are found.
+
+    ``effective_min_results`` lets the caller pass a dynamic floor (e.g. num_cards * 2) so that
+    tightly-filtered queries don't trigger unnecessary extra DB round-trips.
+    """
     fallback_tier = FALLBACK_TIER_STRICT
     while True:
         filter_ctx = _build_filter_context_for_tier(
@@ -522,13 +550,13 @@ async def _fetch_candidates_with_fallback(
         all_person_ids = set(str(r[0].person_id) for r in rows) | set(
             str(r.person_id) for r in child_rows
         )
-        if len(all_person_ids) >= MIN_RESULTS or fallback_tier >= FALLBACK_TIER_COMPANY_TEAM_SOFT:
+        if len(all_person_ids) >= effective_min_results or fallback_tier >= FALLBACK_TIER_COMPANY_TEAM_SOFT:
             return fallback_tier, rows, child_rows, child_evidence_rows
         fallback_tier += 1
         logger.info(
-            "Search fallback: results %s < MIN_RESULTS %s, relaxing to tier %s",
+            "Search fallback: results %s < effective_min_results %s, relaxing to tier %s",
             len(all_person_ids),
-            MIN_RESULTS,
+            effective_min_results,
             fallback_tier,
         )
 

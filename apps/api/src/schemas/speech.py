@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class SpeechTranscribeResponse(BaseModel):
-    """Sarvam speech-to-text result for search dictation."""
+    """Speech-to-text result for search dictation (Sarvam or Deepgram)."""
 
     transcript: str = Field(description="Full transcript text")
     chunks: list[str] = Field(

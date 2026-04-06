@@ -12,7 +12,7 @@ export { ParentCardEditForm } from "./forms";
 export { ChildCardEditForm } from "./forms";
 
 export { BuilderChat } from "./chat";
-export type { ChatMessage, ClarifyHistoryEntry, ClarifyOption } from "./chat";
+export type { ChatMessage } from "./chat";
 
 export { AiSphere } from "./ai-sphere";
 

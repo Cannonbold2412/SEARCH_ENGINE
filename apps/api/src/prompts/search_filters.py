@@ -30,9 +30,13 @@ def get_cleanup_prompt(user_text: str) -> str:
 # Maps directly to DB columns: company_norm, team_norm, intent_primary, domain, etc. + person_profiles
 # ---------------------------------------------------------------------------
 
-PROMPT_SEARCH_SINGLE_EXTRACT = """You are a structured search-query parser for CONXA (intent-based people search).
+PROMPT_SEARCH_CLEANUP_AND_EXTRACT = """You are a structured search-query parser for CONXA (intent-based people search).
 
-Convert the user query into JSON constraints that map to our DB.
+STEP 1 — CLEANUP:
+Clean the user query: fix typos/spacing, preserve meaning, keep names/companies/tools/numbers exactly.
+
+STEP 2 — EXTRACT:
+Convert the cleaned query into JSON constraints that map to our DB.
 
 IMPORTANT:
 - Return ONLY valid JSON.
@@ -111,18 +115,22 @@ Do not add new facts.
 7) search_phrases
 Generate 5–15 concise phrases combining the key constraints.
 
+8) query_cleaned
+Set query_cleaned to the cleaned version of the user query (from STEP 1).
+Set query_original to the original raw query exactly as provided.
+
 INPUT:
 query_original:
 {{QUERY_ORIGINAL}}
-
-query_cleaned:
-{{QUERY_CLEANED}}
 """
 
 
-def get_single_extract_prompt(query_original: str, query_cleaned: str) -> str:
-    return (
-        PROMPT_SEARCH_SINGLE_EXTRACT.replace("{{INTENT_ENUM}}", INTENT_ENUM)
-        .replace("{{QUERY_ORIGINAL}}", query_original or "")
-        .replace("{{QUERY_CLEANED}}", query_cleaned or query_original or "")
-    )
+def get_single_extract_prompt(query_original: str, query_cleaned: str | None = None) -> str:
+    """Build the combined cleanup+extract prompt.
+
+    ``query_cleaned`` is accepted for backward-compat but ignored since the
+    LLM now produces it internally.
+    """
+    return PROMPT_SEARCH_CLEANUP_AND_EXTRACT.replace(
+        "{{INTENT_ENUM}}", INTENT_ENUM
+    ).replace("{{QUERY_ORIGINAL}}", query_original or "")

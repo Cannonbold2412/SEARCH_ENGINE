@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     embed_model: str = "text-embedding-3-large"
     embed_dimension: int = 324  # match DB (migration 018)
 
+    # Search dictation: Sarvam or Deepgram (see SPEECH_TRANSCRIBE_PROVIDER)
+    speech_transcribe_provider: str = "sarvam"  # "sarvam" or "deepgram"
+    deepgram_api_key: str | None = None
+    deepgram_model: str = "nova-3"
+
     # Translation (Sarvam AI or OpenAI-compatible endpoint)
     translation_provider: str = "sarvam"  # "sarvam" or "openai"
     translation_api_key: str | None = None

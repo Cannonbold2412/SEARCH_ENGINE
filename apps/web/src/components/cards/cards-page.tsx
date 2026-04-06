@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,6 +23,7 @@ import type {
   ExperienceCardPatch,
   ExperienceCardChildPatch,
 } from "@/lib/types";
+import { preloadVapiWeb } from "@/lib/vapi-client";
 
 function getParentId(parent: ExperienceCard | Record<string, unknown>): string {
   const p = parent as Record<string, unknown>;
@@ -205,6 +206,8 @@ export default function CardsPage() {
   const [editingSavedCardId, setEditingSavedCardId] = useState<string | null>(null);
   const [editingSavedChildId, setEditingSavedChildId] = useState<string | null>(null);
   const [isUpdatingFromMessyText, setIsUpdatingFromMessyText] = useState(false);
+  /** Pencil → enhance: show per-card “Warming voice…” until navigation completes or times out. */
+  const [warmingVoiceCardId, setWarmingVoiceCardId] = useState<string | null>(null);
 
   const noop = useCallback(() => {}, []);
   const { editForm, setEditForm, childEditForm, setChildEditForm, populateChildForm } = useCardForms();
@@ -275,10 +278,21 @@ export default function CardsPage() {
     (card: ExperienceCard) => {
       const id = getParentId(card);
       if (!id) return;
-      router.push(`/cards/${encodeURIComponent(id)}/enhance`);
+      setWarmingVoiceCardId(id);
+      const target = `/cards/${encodeURIComponent(id)}/enhance`;
+      // Warm route + Vapi SDK before navigating so voice starts faster on enhance.
+      router.prefetch(target);
+      void preloadVapiWeb().catch(() => {});
+      router.push(target);
     },
     [router]
   );
+
+  useEffect(() => {
+    if (!warmingVoiceCardId) return;
+    const t = window.setTimeout(() => setWarmingVoiceCardId(null), 12000);
+    return () => window.clearTimeout(t);
+  }, [warmingVoiceCardId]);
 
   const onStartEditingChild = useCallback(
     (child: ExperienceCardChild) => {
@@ -356,6 +370,7 @@ export default function CardsPage() {
                 key={getParentId(family.parent) || `family-${i}`}
                 parent={family.parent as ExperienceCard}
                 childCards={family.children ?? []}
+                isWarmingVoice={warmingVoiceCardId === getParentId(family.parent as ExperienceCard)}
                 deletedId={null}
                 editingSavedCardId={editingSavedCardId}
                 editingSavedChildId={editingSavedChildId}

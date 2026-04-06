@@ -35,7 +35,7 @@ from src.services.credits import (
     save_idempotent_response,
 )
 
-from ._runtime_values import as_dict, attr_bool, attr_decimal, attr_str, attr_str_list
+from ._runtime_values import as_dict, attr_bool, attr_decimal, attr_str, attr_str_list, resolve_viewer_language
 from .candidates import (
     MIN_RESULTS,
     _build_embedding_text,
@@ -171,15 +171,9 @@ async def run_search(
     idempotency_key: str | None,
 ) -> SearchResponse:
     """Production hybrid search."""
-    # Viewer language: explicit body.language, else searcher's profile preference if not English
-    target_language = (body.language or "en").strip()
-    if target_language.lower() in ("en", "english"):
-        prof_lang = await db.execute(
-            select(PersonProfile.preferred_language).where(PersonProfile.person_id == searcher_id)
-        )
-        pref = prof_lang.scalar_one_or_none()
-        if pref and str(pref).lower() not in ("en", "english"):
-            target_language = str(pref).strip()
+    # Viewer language resolution.
+    # If the client explicitly sends a non-EN language we trust it immediately.
+    target_language = await resolve_viewer_language(db, searcher_id, body.language)
     should_translate_response = target_language.lower() not in ("en", "english")
 
     # Translate query to English if needed
@@ -203,8 +197,53 @@ async def run_search(
         if response_body:
             return SearchResponse(**response_body)
 
+    # ── PARALLEL: LLM parse + embed + lexical FTS ─────────────────────────────
+    # These three are fully independent: fire them all at once and gather.
+    # We use a raw query string for the initial embed/lexical so they can start
+    # before the LLM parse completes; the parse may refine the embedding text, but
+    # the raw query is a good-enough approximation for the first pass.
+    raw_query_for_embed = (body.query or "").strip()
     chat = get_chat_provider()
-    payload = await _parse_search_payload(chat, body.query)
+
+    parse_task = asyncio.create_task(_parse_search_payload(chat, body.query))
+    embed_task = asyncio.create_task(_embed_query_vector(raw_query_for_embed, raw_query_for_embed))
+    lexical_task = asyncio.create_task(_lexical_candidates(db, raw_query_for_embed))
+
+    parse_exc: Exception | None = None
+    embed_exc: Exception | None = None
+
+    try:
+        payload, query_vec, lexical_scores = await asyncio.gather(
+            parse_task, embed_task, lexical_task, return_exceptions=True
+        )
+    except Exception as exc:
+        raise exc
+
+    # Unpack gather results (may be Exception instances when return_exceptions=True)
+    if isinstance(payload, BaseException):
+        parse_exc = payload  # type: ignore[assignment]
+        payload = None  # type: ignore[assignment]
+    if isinstance(query_vec, BaseException):
+        embed_exc = query_vec  # type: ignore[assignment]
+        query_vec = []
+    if isinstance(lexical_scores, BaseException):
+        logger.warning("Lexical search task failed, continuing without lexical bonus: %s", lexical_scores)
+        lexical_scores = {}
+
+    if parse_exc is not None:
+        # LLM parse failure: delegate to the parse function's own fallback path
+        logger.warning("Search query parse failed in parallel gather, retrying with fallback: %s", parse_exc)
+        payload = await _parse_search_payload(chat, body.query)
+
+    # If the LLM produced a better embedding text, re-embed only when it materially differs
+    refined_embedding_text = _build_embedding_text(payload, body)
+    if refined_embedding_text and refined_embedding_text != raw_query_for_embed and not embed_exc:
+        try:
+            query_vec = await _embed_query_vector(body.query, refined_embedding_text)
+        except Exception as exc:
+            embed_exc = exc
+            query_vec = []
+
     filters_dict = payload.model_dump(mode="json")
 
     if body.num_cards is not None:
@@ -221,29 +260,6 @@ async def run_search(
     if await get_balance(db, searcher_id) < num_cards:
         raise HTTPException(status_code=402, detail="Insufficient credits")
 
-    must = payload.must
-    exclude = payload.exclude
-
-    embedding_text = _build_embedding_text(payload, body)
-    open_to_work_only = _resolve_open_to_work_only(body, must)
-    offer_salary_inr_per_year = _resolve_offer_salary_inr_per_year(body, must)
-    query_ts = _build_query_ts(payload, body)
-
-    embed_task = asyncio.create_task(_embed_query_vector(body.query, embedding_text))
-    lexical_task = asyncio.create_task(_lexical_candidates(db, query_ts))
-    embed_exc: Exception | None = None
-    try:
-        query_vec = await embed_task
-    except Exception as exc:
-        embed_exc = exc
-        query_vec = []
-
-    try:
-        lexical_scores = await lexical_task
-    except Exception as exc:
-        logger.warning("Lexical search task failed, continuing without lexical bonus: %s", exc)
-        lexical_scores = {}
-
     if embed_exc:
         raise embed_exc
     if not query_vec:
@@ -257,11 +273,28 @@ async def run_search(
             saved_query_text=original_query,
         )
 
+    must = payload.must
+    exclude = payload.exclude
+
+    open_to_work_only = _resolve_open_to_work_only(body, must)
+    offer_salary_inr_per_year = _resolve_offer_salary_inr_per_year(body, must)
+
     term_ctx = _collect_constraint_terms(
         must=must,
         exclude_company_norm=exclude.company_norm,
         exclude_keywords=exclude.keywords,
     )
+
+    # Also refine the lexical scores with the parsed query_ts when it differs from raw
+    query_ts = _build_query_ts(payload, body)
+    if query_ts and query_ts != raw_query_for_embed:
+        try:
+            lexical_scores = await _lexical_candidates(db, query_ts)
+        except Exception as exc:
+            logger.warning("Refined lexical search failed, keeping initial scores: %s", exc)
+
+    # Dynamic min_results floor: no need to over-fetch when num_cards is small
+    effective_min_results = max(num_cards * 2, MIN_RESULTS)
 
     fallback_tier, rows, child_rows, child_evidence_rows = await _fetch_candidates_with_fallback(
         db=db,
@@ -276,6 +309,7 @@ async def run_search(
         norm_terms_exclude=term_ctx.exclude_keyword_terms,
         open_to_work_only=open_to_work_only,
         offer_salary_inr_per_year=offer_salary_inr_per_year,
+        effective_min_results=effective_min_results,
     )
 
     all_person_ids = set(str(r[0].person_id) for r in rows) | set(
@@ -370,23 +404,16 @@ async def run_search(
     pending_to_persist = pending_search_rows[:num_cards]
     llm_evidence_to_persist = llm_people_evidence[:num_cards] if llm_people_evidence else []
 
-    llm_why_by_person: dict[str, list[str]] = {}
-    if llm_evidence_to_persist:
-        try:
-            chat = get_chat_provider()
-            llm_why_by_person = await _generate_llm_why_matched(
-                chat, payload, llm_evidence_to_persist
-            )
-        except Exception as exc:
-            logger.warning(
-                "why_matched sync LLM skipped (will use fallback and optional async): %s", exc
-            )
-
+    # ── Why-matched: always return fallback bullets immediately ───────────────
+    # We persist fallback bullets now so the response is fast, then fire the LLM
+    # in a background task to overwrite SearchResult.extra["why_matched"] after
+    # the response is already on its way to the client.
+    # (Previously the LLM call blocked the entire response for 500–1500 ms.)
     why_matched_by_person = _persist_search_results(
         db=db,
         search_id=str(search_rec.id),
         pending_search_rows=pending_to_persist,
-        llm_why_by_person=llm_why_by_person,
+        llm_why_by_person={},  # always use fallback for initial response
         graph_features_map=graph_features_map,
     )
     if llm_evidence_to_persist:
@@ -400,7 +427,7 @@ async def run_search(
         why_matched_by_person = boost_query_matching_reasons(
             why_matched_by_person, boost_payloads, payload.query_original or ""
         )
-    if llm_evidence_to_persist and not llm_why_by_person:
+        # Always fire async LLM why-matched to update DB in background
         asyncio.create_task(
             _update_why_matched_async(
                 search_id=str(search_rec.id),
@@ -475,22 +502,18 @@ async def load_search_more(
         dict.fromkeys(cid for r in rows for cid in (r.extra or {}).get("matched_parent_ids") or [])
     )
 
+    people_result = await db.execute(select(Person).where(Person.id.in_(person_ids)))
+    profiles_result = await db.execute(
+        select(PersonProfile).where(PersonProfile.person_id.in_(person_ids))
+    )
+    people_map = {str(p.id): p for p in people_result.scalars().all()}
+    vis_map = {str(p.person_id): p for p in profiles_result.scalars().all()}
     if card_ids:
-        people_result, profiles_result, cards_result = await asyncio.gather(
-            db.execute(select(Person).where(Person.id.in_(person_ids))),
-            db.execute(select(PersonProfile).where(PersonProfile.person_id.in_(person_ids))),
-            db.execute(select(ExperienceCard).where(ExperienceCard.id.in_(card_ids))),
+        cards_result = await db.execute(
+            select(ExperienceCard).where(ExperienceCard.id.in_(card_ids))
         )
-        people_map = {str(p.id): p for p in people_result.scalars().all()}
-        vis_map = {str(p.person_id): p for p in profiles_result.scalars().all()}
         cards_by_id = {str(c.id): c for c in cards_result.scalars().all()}
     else:
-        people_result, profiles_result = await asyncio.gather(
-            db.execute(select(Person).where(Person.id.in_(person_ids))),
-            db.execute(select(PersonProfile).where(PersonProfile.person_id.in_(person_ids))),
-        )
-        people_map = {str(p.id): p for p in people_result.scalars().all()}
-        vis_map = {str(p.person_id): p for p in profiles_result.scalars().all()}
         cards_by_id = {}
 
     out: list[PersonSearchResult] = []
@@ -527,16 +550,7 @@ async def load_search_more(
             )
         )
 
-    raw_lang = (language or "en").strip()
-    if raw_lang.lower() in ("en", "english"):
-        pref_row = await db.execute(
-            select(PersonProfile.preferred_language).where(
-                PersonProfile.person_id == searcher_id
-            )
-        )
-        pref = pref_row.scalar_one_or_none()
-        if pref and str(pref).lower() not in ("en", "english"):
-            raw_lang = str(pref).strip()
+    raw_lang = await resolve_viewer_language(db, searcher_id, language)
     if raw_lang.lower() not in ("en", "english") and out:
         from src.services.locale_display import localize_person_search_results_for_viewer
 

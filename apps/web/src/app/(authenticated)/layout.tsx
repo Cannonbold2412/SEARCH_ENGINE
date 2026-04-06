@@ -2,14 +2,39 @@
 
 import { Suspense, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 import { getPostAuthPath, isPathAllowedForStep } from "@/lib/auth-flow";
 import { SearchProvider } from "@/contexts/search-context";
 import { AppNav } from "@/components/navigation";
 import { SidebarWidthProvider, useSidebarWidth } from "@/contexts/sidebar-width-context";
 import { LoadingScreen } from "@/components/feedback";
+import { EXPERIENCE_CARD_FAMILIES_QUERY_KEY } from "@/hooks/use-experience-card-families";
+import { api } from "@/lib/api";
+import { preloadVapiWeb } from "@/lib/vapi-client";
+import type { SavedCardFamily } from "@/lib/types";
 
 import type { ReactNode } from "react";
+
+const CARD_FAMILIES_STALE_MS = 2 * 60 * 1000;
+
+/** Prefetch card families + Vapi SDK on /cards* so enhance voice connects sooner. */
+function CardsRouteWarmup() {
+  const pathname = usePathname();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!pathname?.startsWith("/cards")) return;
+    void preloadVapiWeb().catch(() => {});
+    void queryClient.prefetchQuery({
+      queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY,
+      queryFn: () => api<SavedCardFamily[]>("/me/experience-card-families"),
+      staleTime: CARD_FAMILIES_STALE_MS,
+    });
+  }, [pathname, queryClient]);
+
+  return null;
+}
 
 export default function AuthenticatedLayout({
   children,
@@ -51,6 +76,7 @@ function AuthenticatedLayoutBody({ children }: { children: ReactNode }) {
 
   return (
     <div className="overflow-x-hidden">
+      <CardsRouteWarmup />
       <Suspense fallback={null}>
         <AppNav />
       </Suspense>

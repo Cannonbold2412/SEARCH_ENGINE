@@ -22,11 +22,12 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession]:
-    """Yield an async DB session; auto-commit on success, rollback on error."""
+    """Yield an async DB session; commit only when changes were made, rollback on error."""
     async with async_session() as session:
         try:
             yield session
-            await session.commit()
+            if session.dirty or session.new or session.deleted:
+                await session.commit()
         except Exception:
             await session.rollback()
             raise
@@ -35,6 +36,28 @@ async def get_db() -> AsyncGenerator[AsyncSession]:
 # ---------------------------------------------------------------------------
 # Authentication helpers
 # ---------------------------------------------------------------------------
+
+
+async def resolve_user_from_user_id(
+    db: AsyncSession,
+    user_id: str,
+) -> Person | None:
+    """
+    Load ``Person`` by id and enforce email-verification if required by settings.
+
+    Returns ``None`` when the user does not exist or email verification is
+    required but not completed.
+    """
+    result = await db.execute(select(Person).where(Person.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        return None
+
+    settings = get_settings()
+    if settings.email_verification_required and not user.email_verified_at:
+        return None
+
+    return user
 
 
 async def _resolve_user_from_token(
@@ -52,16 +75,7 @@ async def _resolve_user_from_token(
     if not user_id:
         return None
 
-    result = await db.execute(select(Person).where(Person.id == user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        return None
-
-    settings = get_settings()
-    if settings.email_verification_required and not user.email_verified_at:
-        return None
-
-    return user
+    return await resolve_user_from_user_id(db, user_id)
 
 
 async def get_current_user(

@@ -26,17 +26,20 @@ A beautiful, reusable vertical scroll-wheel language selector with smooth animat
 - Smooth transitions and hover states
 - Accessibility features (tabIndex, role, aria-label)
 
-🌍 **Supported Languages** (10 total)
-- English (en) 🇺🇸
-- Hindi (hi) 🇮🇳
-- Spanish (es) 🇪🇸
-- French (fr) 🇫🇷
-- German (de) 🇩🇪
-- Portuguese (pt) 🇵🇹
-- Arabic (ar) 🇸🇦
-- Chinese (zh) 🇨🇳
-- Japanese (ja) 🇯🇵
-- Korean (ko) 🇰🇷
+🌍 **Supported Languages** (8 total)
+
+These match `SUPPORTED_LANGUAGES` in `apps/web/src/lib/languages.ts` (the codes the API accepts for `preferred_language` and that translation supports).
+
+| Code | English name | Native name |
+|------|----------------|-------------|
+| `en` | English | English |
+| `hi` | Hindi | हिंदी |
+| `bn` | Bengali | বাংলা |
+| `mr` | Marathi | मराठी |
+| `ta` | Tamil | தமிழ் |
+| `te` | Telugu | తెలుగు |
+| `kn` | Kannada | ಕನ್ನಡ |
+| `ur` | Urdu | اردو |
 
 ## Usage
 
@@ -117,16 +120,16 @@ const lang = getLanguageByCode("hi");
 // { code: "hi", name: "Hindi", nativeName: "हिंदी", flag: "🇮🇳" }
 
 // Get English name
-const name = getLanguageName("fr"); // "French"
+const name = getLanguageName("mr"); // "Marathi"
 
 // Get native name
-const native = getLanguageNativeName("zh"); // "中文"
+const native = getLanguageNativeName("ta"); // "தமிழ்"
 
 // Validate language code
-const isValid = isValidLanguageCode("es"); // true
+const isValid = isValidLanguageCode("te"); // true
 
-// Get language index in array
-const index = getLanguageIndex("ko"); // 9
+// Get language index in array (0-based)
+const index = getLanguageIndex("ur"); // 7
 
 // Access all languages
 SUPPORTED_LANGUAGES.forEach(lang => {
@@ -204,6 +207,8 @@ interface LanguageWheelPickerProps {
 ```
 
 ## Integration Notes
+
+**Source of truth for codes and labels:** `apps/web/src/lib/languages.ts`. The wheel renders whatever is in `SUPPORTED_LANGUAGES`; keep it aligned with API validation if you add server-side checks for `preferred_language`.
 
 ### Dependencies Used
 - **framer-motion** - Smooth animations (already in package.json)

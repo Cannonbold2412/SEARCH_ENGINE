@@ -37,8 +37,6 @@ interface ParentCardEditFormProps {
   /** Optional: paste messy text and click Update to fill missing fields from parsed result. */
   onUpdateFromMessyText?: (text: string) => Promise<void>;
   isUpdatingFromMessyText?: boolean;
-  /** Optional: when set, clarify endpoint can persist filled fields to this saved card. */
-  // Legacy ExperienceClarifyChat integration removed.
 }
 
 export function ParentCardEditForm({

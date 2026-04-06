@@ -16,4 +16,4 @@ export { useCardMutations } from "./use-card-mutations";
 export { useCardForms } from "./use-card-forms";
 export type { ParentCardForm, ChildCardForm } from "./use-card-forms";
 export { useEnhanceVapiVoice } from "./use-enhance-vapi-voice";
-export { useSarvamVoiceDictation } from "./use-sarvam-voice-dictation";
+export { useVoiceDictation } from "./use-voice-dictation";

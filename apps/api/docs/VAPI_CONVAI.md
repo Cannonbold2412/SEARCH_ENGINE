@@ -7,7 +7,7 @@ The web app uses **Vapi** for real-time voice (STT, TTS, WebRTC). The assistant 
 | Layer | Role |
 |--------|------|
 | **Vapi (client)** | `npm` package `@vapi-ai/web` in the Next.js app: connects with the dashboard **public** key + **assistant ID**, handles audio and conversation in Vapi’s cloud. |
-| **This API** | Authenticated **`POST /builder/transcript/commit`**: optional `call_id` → fetch full transcript from Vapi’s REST API using **`VAPI_API_KEY`**; then run `detect_experiences` + `run_draft_single` per detected experience (see `services/builder/engine.py`). |
+| **This API** | Authenticated **`POST /builder/transcript/commit`**: optional `call_id` → fetch full transcript from Vapi’s REST API using **`VAPI_API_KEY`**; then **`run_draft_single`** once (rewrite → extract single card, index 1 of 1) and finalize (see `services/builder/engine.py`). |
 
 So: conversation = Vapi dashboard assistant; card extraction = our Python pipeline on commit—not streaming LLM turns through this repo.
 
@@ -37,7 +37,7 @@ No `VAPI_CALLBACK_BASE_URL` is required for this flow: there is no inbound “cu
    - `call_id`: Vapi call id (server fetches transcript if `VAPI_API_KEY` is set), and/or  
    - `transcript`: full text fallback assembled in the browser.  
    At least one must produce non-empty text.
-4. The API runs **`commit_builder_transcript`** → **`_commit_extraction_input`**: `detect_experiences` then **`run_draft_single`** for each experience index, then finalizes committed cards (see `EXPERIENCE_CARD_FLOW.md`).
+4. The API runs **`commit_builder_transcript`** → **`_commit_extraction_input`**: **`run_draft_single`** once (rewrite → extract single), then finalizes committed cards (see `EXPERIENCE_CARD_FLOW.md`).
 
 ## API endpoint
 

@@ -15,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain import ALLOWED_CHILD_TYPES
 from src.prompts.experience_card import (
-    PROMPT_DETECT_EXPERIENCES,
     PROMPT_EXTRACT_SINGLE_CARDS,
     fill_prompt,
 )
@@ -462,51 +461,6 @@ def inject_metadata_into_family(family: Family, person_id: str) -> Family:
     return family
 
 
-async def detect_experiences(raw_text: str) -> dict[str, Any]:
-    if not raw_text or not raw_text.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="raw_text is required and cannot be empty",
-        )
-    cleaned = await rewrite_raw_text(raw_text)
-    prompt = fill_prompt(PROMPT_DETECT_EXPERIENCES, cleaned_text=cleaned)
-    chat = get_chat_provider()
-    try:
-        response = await chat.chat(prompt, max_tokens=1024)
-    except ChatServiceError as e:
-        raise HTTPException(status_code=503, detail=str(e)) from e
-    if not response or not response.strip():
-        return {"count": 0, "experiences": []}
-    try:
-        json_str = _extract_json_from_text(response)
-        data = json.loads(json_str)
-        if not isinstance(data, dict):
-            return {"count": 0, "experiences": []}
-        count = int(data.get("count", 0)) if data.get("count") is not None else 0
-        experiences_raw = data.get("experiences")
-        experiences = experiences_raw if isinstance(experiences_raw, list) else []
-        out: list[dict[str, Any]] = []
-        for i, item in enumerate(experiences):
-            if not isinstance(item, dict):
-                continue
-            idx = item.get("index")
-            if idx is None and i + 1 <= count:
-                idx = i + 1
-            elif isinstance(idx, (int, float)):
-                idx = int(idx)
-            else:
-                continue
-            label = (item.get("label") or "").strip() or f"Experience {idx}"
-            suggested = bool(item.get("suggested"))
-            out.append({"index": idx, "label": label, "suggested": suggested})
-        if out and not any(e.get("suggested") for e in out):
-            out[0]["suggested"] = True
-        return {"count": count, "experiences": out}
-    except (ValueError, json.JSONDecodeError):
-        logger.warning("detect_experiences: could not parse LLM response")
-        return {"count": 0, "experiences": []}
-
-
 async def run_draft_single(
     db: AsyncSession,
     person_id: str,
@@ -563,6 +517,9 @@ async def run_draft_single(
             "children": [
                 serialize_card_for_response(c) for c in children_by_parent_id.get(parent.id, [])
             ],
+            # ORM objects passed through so callers can avoid re-querying the same rows.
+            "_parent_orm": parent,
+            "_children_orm": children_by_parent_id.get(parent.id, []),
         }
         for parent in parents
     ]

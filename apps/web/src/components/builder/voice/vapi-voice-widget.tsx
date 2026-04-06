@@ -6,7 +6,12 @@ import { Mic, MicOff, Loader2, PhoneOff, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AUTH_TOKEN_KEY } from "@/lib/auth-flow";
 import { getVapiAssistantId, getVapiPublicKey, isVapiVoiceConfigured } from "@/lib/vapi-config";
-import { createPatchedVapiClient, isBenignVapiDisconnectError, type VapiClient } from "@/lib/vapi-client";
+import {
+  createPatchedVapiClient,
+  isBenignVapiDisconnectError,
+  stopVapiClient,
+  type VapiClient,
+} from "@/lib/vapi-client";
 import { isTranscriptPartial, mergePartialTranscriptChunk } from "@/lib/vapi-transcript";
 import { useLanguage } from "@/contexts/language-context";
 import Link from "next/link";
@@ -85,23 +90,24 @@ export function VapiVoiceWidget() {
       const publicKey = getVapiPublicKey();
       const assistantId = getVapiAssistantId(language);
       vapi = await createPatchedVapiClient(publicKey);
-      vapiRef.current = vapi;
+      const client = vapi;
+      vapiRef.current = client;
 
-      vapi.on("call-start", () => {
+      client.on("call-start", () => {
         setError(null);
         setIsConnected(true);
         activeAssistantMessageIdRef.current = null;
         activeUserMessageIdRef.current = null;
       });
 
-      vapi.on("call-end", () => {
-        detachCall(vapi);
+      client.on("call-end", () => {
+        void stopVapiClient(client).finally(() => detachCall(client));
       });
 
-      vapi.on("speech-start", () => setIsSpeaking(true));
-      vapi.on("speech-end", () => setIsSpeaking(false));
+      client.on("speech-start", () => setIsSpeaking(true));
+      client.on("speech-end", () => setIsSpeaking(false));
 
-      vapi.on("message", (msg: unknown) => {
+      client.on("message", (msg: unknown) => {
         if (!isTranscriptMessage(msg)) return;
         const mrec = msg as Record<string, unknown>;
         const isPartial = isTranscriptPartial(mrec);
@@ -155,24 +161,30 @@ export function VapiVoiceWidget() {
         });
       });
 
-      vapi.on("error", (err) => {
+      client.on("error", (err) => {
         const errObj = err as Record<string, unknown>;
         const errType = String(errObj?.type ?? "").toLowerCase();
         const errMsg = (err?.message as string) || "";
         if (errType === "daily-error" && /meeting has ended/i.test(errMsg)) {
           setError(null);
-          detachCall(vapi);
+          void stopVapiClient(client).finally(() => detachCall(client));
           return;
         }
-        detachCall(vapi);
-        setError(errMsg || "Voice connection error");
+        void stopVapiClient(client).finally(() => {
+          detachCall(client);
+          setError(errMsg || "Voice connection error");
+        });
       });
 
-      await vapi.start(assistantId);
+      await client.start(assistantId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not start voice session";
       const isExpectedDisconnect = isBenignVapiDisconnectError(e);
-      detachCall(vapi);
+      if (vapi) {
+        void stopVapiClient(vapi).finally(() => detachCall(vapi));
+      } else {
+        detachCall(vapi);
+      }
       if (isExpectedDisconnect) {
         setError(null);
         return;
@@ -185,28 +197,20 @@ export function VapiVoiceWidget() {
 
   const handleEnd = useCallback(async () => {
     const vapi = vapiRef.current;
-    detachCall(vapi);
     if (!vapi) return;
-    void vapi.stop().catch((error) => {
-      if (!isBenignVapiDisconnectError(error)) {
-        setError("Could not end session");
-      }
-    });
+    await stopVapiClient(vapi);
+    detachCall(vapi);
   }, [detachCall]);
 
   useEffect(() => {
     return () => {
       const vapi = vapiRef.current;
       if (!vapi) return;
-      vapiRef.current = null;
-      resetCallState();
-      void vapi.stop().catch((error) => {
-        if (!isBenignVapiDisconnectError(error)) {
-          console.warn("Vapi stop on unmount:", error);
-        }
+      void stopVapiClient(vapi).finally(() => {
+        detachCall(vapi);
       });
     };
-  }, [resetCallState]);
+  }, [detachCall]);
 
   return (
     <div className="flex flex-col h-full min-h-0 rounded-xl border border-border/60 bg-card overflow-hidden">

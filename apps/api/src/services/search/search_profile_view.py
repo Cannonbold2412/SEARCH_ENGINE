@@ -29,6 +29,7 @@ from ._runtime_values import (
     attr_nonempty_str,
     attr_str,
     attr_str_list,
+    resolve_viewer_language,
 )
 from .results import _card_families_from_parents_and_children
 from .search_logic import _validate_search_session
@@ -54,22 +55,23 @@ async def get_person_profile(
     else:
         unlock_stmt = unlock_stmt.order_by(UnlockContact.created_at.desc()).limit(1)
 
-    p_result, profile_result, cards_result, unlock_result = await asyncio.gather(
-        db.execute(select(Person).where(Person.id == person_id)),
-        db.execute(select(PersonProfile).where(PersonProfile.person_id == person_id)),
-        db.execute(
-            select(ExperienceCard)
-            .where(
-                ExperienceCard.user_id == person_id,
-                ExperienceCard.experience_card_visibility,
-            )
-            .order_by(ExperienceCard.created_at.desc())
-        ),
-        db.execute(unlock_stmt),
-    )
+    p_result = await db.execute(select(Person).where(Person.id == person_id))
     person = p_result.scalar_one_or_none()
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
+
+    profile_result = await db.execute(
+        select(PersonProfile).where(PersonProfile.person_id == person_id)
+    )
+    cards_result = await db.execute(
+        select(ExperienceCard)
+        .where(
+            ExperienceCard.user_id == person_id,
+            ExperienceCard.experience_card_visibility,
+        )
+        .order_by(ExperienceCard.created_at.desc())
+    )
+    unlock_result = await db.execute(unlock_stmt)
 
     profile = profile_result.scalar_one_or_none()
     cards = list(cards_result.scalars().all())
@@ -117,16 +119,7 @@ async def get_person_profile(
         contact=contact,
     )
 
-    raw_lang = (viewer_language or "en").strip()
-    if raw_lang.lower() in ("en", "english"):
-        pref_row = await db.execute(
-            select(PersonProfile.preferred_language).where(
-                PersonProfile.person_id == searcher_id
-            )
-        )
-        pref = pref_row.scalar_one_or_none()
-        if pref and str(pref).lower() not in ("en", "english"):
-            raw_lang = str(pref).strip()
+    raw_lang = await resolve_viewer_language(db, searcher_id, viewer_language)
     if raw_lang.lower() not in ("en", "english"):
         from src.services.locale_display import localize_person_profile_response_for_viewer
 
@@ -168,9 +161,9 @@ async def list_people_for_discover(
         )
         return r.all()
 
-    people, profiles, card_rows = await asyncio.gather(
-        get_people(), get_profiles(), get_card_summaries()
-    )
+    people = await get_people()
+    profiles = await get_profiles()
+    card_rows = await get_card_summaries()
 
     summaries_by_person: dict[str, list[str]] = {pid: [] for pid in person_ids}
     for row in card_rows:
@@ -192,14 +185,7 @@ async def list_people_for_discover(
     ]
     resp = PersonListResponse(people=people_list)
 
-    raw_lang = (viewer_language or "en").strip()
-    if raw_lang.lower() in ("en", "english"):
-        pref_row = await db.execute(
-            select(PersonProfile.preferred_language).where(PersonProfile.person_id == viewer_id)
-        )
-        pref = pref_row.scalar_one_or_none()
-        if pref and str(pref).lower() not in ("en", "english"):
-            raw_lang = str(pref).strip()
+    raw_lang = await resolve_viewer_language(db, viewer_id, viewer_language)
     if raw_lang.lower() not in ("en", "english"):
         from src.services.locale_display import localize_discover_people_for_viewer
 
@@ -255,11 +241,9 @@ async def list_unlocked_cards_for_searcher(
         )
         return result.all()
 
-    people_by_id, profiles_by_id, card_rows = await asyncio.gather(
-        get_people(),
-        get_profiles(),
-        get_card_summaries(),
-    )
+    people_by_id = await get_people()
+    profiles_by_id = await get_profiles()
+    card_rows = await get_card_summaries()
 
     summaries_by_person: dict[str, list[str]] = {person_id: [] for person_id in person_ids}
     for row in card_rows:
@@ -291,14 +275,7 @@ async def list_unlocked_cards_for_searcher(
         )
 
     resp = UnlockedCardsResponse(cards=cards)
-    raw_lang = (viewer_language or "en").strip()
-    if raw_lang.lower() in ("en", "english"):
-        pref_row = await db.execute(
-            select(PersonProfile.preferred_language).where(PersonProfile.person_id == searcher_id)
-        )
-        pref = pref_row.scalar_one_or_none()
-        if pref and str(pref).lower() not in ("en", "english"):
-            raw_lang = str(pref).strip()
+    raw_lang = await resolve_viewer_language(db, searcher_id, viewer_language)
     if raw_lang.lower() not in ("en", "english") and resp.cards:
         from src.services.locale_display import localize_unlocked_cards_for_viewer
 
@@ -350,16 +327,16 @@ async def get_public_profile_impl(db: AsyncSession, person_id: str) -> PersonPub
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
 
-    profile_result, cards_result = await asyncio.gather(
-        db.execute(select(PersonProfile).where(PersonProfile.person_id == person_id)),
-        db.execute(
-            select(ExperienceCard)
-            .where(
-                ExperienceCard.user_id == person_id,
-                ExperienceCard.experience_card_visibility,
-            )
-            .order_by(ExperienceCard.created_at.desc())
-        ),
+    profile_result = await db.execute(
+        select(PersonProfile).where(PersonProfile.person_id == person_id)
+    )
+    cards_result = await db.execute(
+        select(ExperienceCard)
+        .where(
+            ExperienceCard.user_id == person_id,
+            ExperienceCard.experience_card_visibility,
+        )
+        .order_by(ExperienceCard.created_at.desc())
     )
     profile = profile_result.scalar_one_or_none()
     bio_resp = _bio_response_for_public(person, profile)

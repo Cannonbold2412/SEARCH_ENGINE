@@ -68,11 +68,11 @@ async def unlock_contact(
     else:
         unlock_stmt = unlock_stmt.order_by(UnlockContact.created_at.desc()).limit(1)
 
-    profile_result, person_result, u_result = await asyncio.gather(
-        db.execute(select(PersonProfile).where(PersonProfile.person_id == person_id)),
-        db.execute(select(Person).where(Person.id == person_id)),
-        db.execute(unlock_stmt),
+    profile_result = await db.execute(
+        select(PersonProfile).where(PersonProfile.person_id == person_id)
     )
+    person_result = await db.execute(select(Person).where(Person.id == person_id))
+    u_result = await db.execute(unlock_stmt)
     profile = profile_result.scalar_one_or_none()
     person = person_result.scalar_one_or_none()
     if not profile:

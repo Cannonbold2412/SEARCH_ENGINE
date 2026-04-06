@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { apiWithIdempotency } from "@/lib/api";
 import { useCredits } from "@/hooks";
-import { useSarvamVoiceDictation } from "@/hooks/use-sarvam-voice-dictation";
+import { useVoiceDictation } from "@/hooks/use-voice-dictation";
 import { useLanguage } from "@/contexts";
 import { ErrorMessage } from "@/components/feedback";
 import { cn } from "@/lib/utils";
@@ -32,7 +32,7 @@ export function SearchForm({
   const { data: credits } = useCredits();
   const { language } = useLanguage();
 
-  const voice = useSarvamVoiceDictation({
+  const voice = useVoiceDictation({
     query,
     setQuery,
     languageCode: language,
@@ -126,7 +126,7 @@ export function SearchForm({
                 </Button>
               </div>
               <p className="mt-1.5 text-[11px] text-muted-foreground leading-snug">
-                Mic: live preview in Chrome/Edge; stop for Sarvam on the server. Edit, then search.
+                Mic: live preview in Chrome/Edge; stop to transcribe on the server. Edit, then search.
               </p>
             </div>
             {voice.error ? <ErrorMessage message={voice.error} /> : null}

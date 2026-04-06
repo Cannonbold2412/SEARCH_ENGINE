@@ -6,8 +6,10 @@ import { extractUpdateCardDraftPatch } from "@/lib/vapi-card-draft-messages";
 import { extractTranscriptText, isTranscriptPartial } from "@/lib/vapi-transcript";
 import {
   createPatchedVapiClient,
+  getVapiErrorMessage,
+  isBenignVapiClientError,
   isBenignVapiDisconnectError,
-  preloadVapiWeb,
+  stopVapiClient,
   type VapiClient,
 } from "@/lib/vapi-client";
 import {
@@ -54,15 +56,30 @@ export function useEnhanceVapiVoice({
   onTranscriptStreamReset,
 }: UseEnhanceVapiVoiceOptions) {
   const vapiRef = useRef<VapiClient | null>(null);
+  const variableValuesRef = useRef(variableValues);
   const onDraftPatchRef = useRef(onDraftPatch);
   const onTranscriptChunkRef = useRef(onTranscriptChunk);
   const onTranscriptStreamResetRef = useRef(onTranscriptStreamReset);
+  /** Set when `call-start` fires — Vapi sometimes emits a transient `error` with message "Voice error" first. */
+  const callHasStartedRef = useRef(false);
+  const delayedErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearDelayedErrorTimeout = useCallback(() => {
+    if (delayedErrorTimeoutRef.current) {
+      clearTimeout(delayedErrorTimeoutRef.current);
+      delayedErrorTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    variableValuesRef.current = variableValues;
+  }, [variableValues]);
 
   const [connecting, setConnecting] = useState(false);
   const [active, setActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Orb animation (aligned with builder chat). */
-  const [aiSpeaking, setAiSpeaking] = useState(true);
+  /** Orb animation — false until the assistant actually speaks. */
+  const [aiSpeaking, setAiSpeaking] = useState(false);
   const [userSpeaking, setUserSpeaking] = useState(false);
 
   useEffect(() => {
@@ -84,20 +101,17 @@ export function useEnhanceVapiVoice({
   }, []);
 
   const stop = useCallback(async () => {
+    clearDelayedErrorTimeout();
     const vapi = vapiRef.current;
-    detach(vapi);
     if (!vapi) return;
-    try {
-      await vapi.stop();
-    } catch (e) {
-      if (!isBenignVapiDisconnectError(e)) {
-        console.warn("Vapi stop:", e);
-      }
-    }
+    await stopVapiClient(vapi);
+    detach(vapi);
     setActive(false);
     setAiSpeaking(false);
     setUserSpeaking(false);
-  }, [detach]);
+    setError(null);
+    callHasStartedRef.current = false;
+  }, [detach, clearDelayedErrorTimeout]);
 
   const start = useCallback(async () => {
     if (!isVapiEditVoiceConfigured(language)) {
@@ -113,35 +127,43 @@ export function useEnhanceVapiVoice({
     }
     setError(null);
     setConnecting(true);
+    callHasStartedRef.current = false;
+    clearDelayedErrorTimeout();
     let vapi: VapiClient | null = null;
     try {
-      await preloadVapiWeb();
       vapi = await createPatchedVapiClient(publicKey);
-      vapiRef.current = vapi;
+      const client = vapi;
+      vapiRef.current = client;
 
-      vapi.on("call-start", () => {
+      client.on("call-start", () => {
+        callHasStartedRef.current = true;
+        clearDelayedErrorTimeout();
+        setError(null);
         setActive(true);
         setConnecting(false);
         setAiSpeaking(true);
         setUserSpeaking(false);
       });
-      vapi.on("call-end", () => {
+      client.on("call-end", () => {
         onTranscriptStreamResetRef.current?.();
-        detach(vapi);
-        setActive(false);
-        setConnecting(false);
-        setAiSpeaking(false);
-        setUserSpeaking(false);
+        void stopVapiClient(client).finally(() => {
+          detach(client);
+          callHasStartedRef.current = false;
+          setActive(false);
+          setConnecting(false);
+          setAiSpeaking(false);
+          setUserSpeaking(false);
+        });
       });
-      vapi.on("speech-start", () => {
+      client.on("speech-start", () => {
         onTranscriptStreamResetRef.current?.();
         setAiSpeaking(true);
         setUserSpeaking(false);
       });
-      vapi.on("speech-end", () => {
+      client.on("speech-end", () => {
         setAiSpeaking(false);
       });
-      vapi.on("message", (msg: unknown) => {
+      client.on("message", (msg: unknown) => {
         const patch = extractUpdateCardDraftPatch(msg);
         if (patch) {
           onDraftPatchRef.current(patch);
@@ -162,22 +184,67 @@ export function useEnhanceVapiVoice({
           setAiSpeaking(false);
         }
       });
-      vapi.on("error", (err: unknown) => {
-        const msg =
-          err && typeof err === "object" && "message" in err
-            ? String((err as { message?: string }).message)
-            : "Voice error";
-        setError(msg);
-        detach(vapi);
-        setActive(false);
-        setConnecting(false);
-        setAiSpeaking(false);
-        setUserSpeaking(false);
+      client.on("error", (err: unknown) => {
+        if (vapiRef.current !== client) return;
+        if (isBenignVapiClientError(err)) {
+          void stopVapiClient(client).finally(() => {
+            detach(client);
+            setActive(false);
+            setConnecting(false);
+            setAiSpeaking(false);
+            setUserSpeaking(false);
+            setError(null);
+          });
+          return;
+        }
+        const raw = getVapiErrorMessage(err).trim();
+        const msg = raw || "Voice connection error";
+        const isGenericSdkLabel = /^(voice error|error)$/i.test(msg);
+
+        // Often fires right after `call-start`; connection is fine — do not show or tear down.
+        if (callHasStartedRef.current && isGenericSdkLabel) {
+          return;
+        }
+
+        const isGenericPreCallNoise = !callHasStartedRef.current && isGenericSdkLabel;
+
+        if (isGenericPreCallNoise) {
+          clearDelayedErrorTimeout();
+          delayedErrorTimeoutRef.current = setTimeout(() => {
+            delayedErrorTimeoutRef.current = null;
+            if (callHasStartedRef.current) return;
+            if (vapiRef.current !== client) return;
+            void (async () => {
+              await stopVapiClient(client);
+              detach(client);
+              setConnecting(false);
+              setActive(false);
+              setAiSpeaking(false);
+              setUserSpeaking(false);
+              setError(msg);
+            })();
+          }, 550);
+          return;
+        }
+
+        void (async () => {
+          await stopVapiClient(client);
+          detach(client);
+          setConnecting(false);
+          setActive(false);
+          setAiSpeaking(false);
+          setUserSpeaking(false);
+          setError(msg);
+        })();
       });
 
-      await vapi.start(assistantId, { variableValues });
+      await client.start(assistantId, { variableValues: variableValuesRef.current });
     } catch (e) {
+      if (vapi) {
+        await stopVapiClient(vapi).catch(() => {});
+      }
       detach(vapi);
+      clearDelayedErrorTimeout();
       setConnecting(false);
       setActive(false);
       setAiSpeaking(false);
@@ -186,7 +253,7 @@ export function useEnhanceVapiVoice({
         setError(e instanceof Error ? e.message : "Could not start voice");
       }
     }
-  }, [language, variableValues, detach]);
+  }, [language, detach, clearDelayedErrorTimeout]);
 
   const toggle = useCallback(async () => {
     if (active || vapiRef.current) {
@@ -198,9 +265,10 @@ export function useEnhanceVapiVoice({
 
   useEffect(() => {
     return () => {
+      clearDelayedErrorTimeout();
       void stop();
     };
-  }, [stop, voiceSessionKey]);
+  }, [stop, voiceSessionKey, clearDelayedErrorTimeout]);
 
   useEffect(() => {
     if (!enabled && vapiRef.current) {

@@ -2,16 +2,23 @@
 
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { QueryClient } from "@tanstack/react-query";
-import { EXPERIENCE_CARD_FAMILIES_QUERY_KEY, EXPERIENCE_CARDS_QUERY_KEY } from "@/hooks";
+import { EXPERIENCE_CARD_FAMILIES_QUERY_KEY } from "@/hooks";
 import { AUTH_TOKEN_KEY } from "@/lib/auth-flow";
 import { api } from "@/lib/api";
 import { isVapiVoiceConfigured, getVapiAssistantId, getVapiPublicKey } from "@/lib/vapi-config";
-import { createPatchedVapiClient, isBenignVapiDisconnectError, preloadVapiWeb, type VapiClient } from "@/lib/vapi-client";
+import {
+  createPatchedVapiClient,
+  isBenignVapiDisconnectError,
+  preloadVapiWeb,
+  stopVapiClient,
+  type VapiClient,
+} from "@/lib/vapi-client";
 import {
   extractTranscriptText,
   isTranscriptPartial,
   upsertStreamingTranscriptMessage,
 } from "@/lib/vapi-transcript";
+import type { SavedCardFamily } from "@/lib/types";
 import type { BuilderSessionCommitResponse, ChatMessage } from "./builder-chat-types";
 
 type TranscriptRole = "assistant" | "user";
@@ -177,6 +184,18 @@ export function useBuilderChatVoice({
       });
       if (res.committed_card_count > 0) {
         setCommitStatus("success");
+        // Optimistically inject the new card family into the cache so it shows
+        // up on /cards immediately without waiting for the refetch round-trip.
+        if (res.cards?.length) {
+          const newFamily: SavedCardFamily = {
+            parent: res.cards[0],
+            children: res.children ?? [],
+          };
+          queryClient.setQueryData<SavedCardFamily[]>(
+            EXPERIENCE_CARD_FAMILIES_QUERY_KEY,
+            (prev) => (prev ? [newFamily, ...prev] : [newFamily]),
+          );
+        }
       } else {
         setCommitStatus("error");
         addMessage({
@@ -184,7 +203,7 @@ export function useBuilderChatVoice({
           content: "I could not extract a clear experience card from this conversation yet.",
         });
       }
-      queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARDS_QUERY_KEY });
+      // Trigger background refetch to reconcile any server-side differences.
       queryClient.invalidateQueries({ queryKey: EXPERIENCE_CARD_FAMILIES_QUERY_KEY });
       onCardsSaved?.();
     } catch (error) {
@@ -201,12 +220,9 @@ export function useBuilderChatVoice({
 
   const stopVoice = useCallback(() => {
     const vapi = vapiRef.current;
-    detachVoice(vapi);
     if (!vapi) return;
-    void vapi.stop().catch((error) => {
-      if (!isBenignVapiDisconnectError(error)) {
-        setVoiceError(error instanceof Error ? error.message : "Could not end voice session");
-      }
+    void stopVapiClient(vapi).finally(() => {
+      detachVoice(vapi);
     });
   }, [detachVoice]);
 
@@ -234,30 +250,33 @@ export function useBuilderChatVoice({
       const publicKey = getVapiPublicKey();
       const assistantId = getVapiAssistantId(language);
       vapi = await createPatchedVapiClient(publicKey);
-      vapiRef.current = vapi;
+      const client = vapi;
+      vapiRef.current = client;
 
-      vapi.on("call-start", () => {
+      client.on("call-start", () => {
         setVoiceConnecting(false);
         setVoiceConnected(true);
         setVoiceError(null);
         setCommitStatus("idle");
-        const callId = getCurrentVapiCallId(vapi);
+        const callId = getCurrentVapiCallId(client);
         if (callId) activeVapiCallIdRef.current = callId;
         callStartMessageCountRef.current = messagesRef.current.length;
       });
 
-      vapi.on("call-end", () => {
-        const callId = activeVapiCallIdRef.current ?? getCurrentVapiCallId(vapi);
+      client.on("call-end", () => {
+        const callId = activeVapiCallIdRef.current ?? getCurrentVapiCallId(client);
         const transcriptStartIndex = Math.max(0, callStartMessageCountRef.current);
         const transcriptMessages = messagesRef.current.slice(transcriptStartIndex);
         const transcriptFallback = serializeTranscriptFromMessages(transcriptMessages);
         void commitVoiceTranscript(callId, transcriptFallback);
-        detachVoice(vapi);
-        activeVapiCallIdRef.current = null;
-        callStartMessageCountRef.current = 0;
+        void stopVapiClient(client).finally(() => {
+          detachVoice(client);
+          activeVapiCallIdRef.current = null;
+          callStartMessageCountRef.current = 0;
+        });
       });
 
-      vapi.on("speech-start", () => {
+      client.on("speech-start", () => {
         setAiSpeaking(true);
         activeAssistantMessageIdRef.current = null;
         committedAssistantTextRef.current = "";
@@ -265,7 +284,7 @@ export function useBuilderChatVoice({
         committedUserTextRef.current = "";
         setUserSpeaking(false);
       });
-      vapi.on("speech-end", () => {
+      client.on("speech-end", () => {
         setAiSpeaking(false);
         activeAssistantMessageIdRef.current = null;
         committedAssistantTextRef.current = "";
@@ -275,7 +294,7 @@ export function useBuilderChatVoice({
         }
       });
 
-      vapi.on("message", (msg: unknown) => {
+      client.on("message", (msg: unknown) => {
         const m = msg as Record<string, unknown>;
         const isPartial = isTranscriptPartial(m);
         const text = extractTranscriptText(m);
@@ -312,28 +331,35 @@ export function useBuilderChatVoice({
         );
       });
 
-      vapi.on("error", (err) => {
+      client.on("error", (err) => {
         const errObj = err as Record<string, unknown>;
         const errType = String(errObj?.type ?? "").toLowerCase();
         const friendlyMsg = resolveVoiceErrorMessage(err);
         const meetingEnded = errType === "daily-error" && /meeting has ended/i.test(friendlyMsg);
         if (meetingEnded) {
           setVoiceError(null);
+          void stopVapiClient(client).finally(() => detachVoice(client));
           return;
         }
-        detachVoice(vapi);
-        setVoiceError(friendlyMsg);
+        void stopVapiClient(client).finally(() => {
+          detachVoice(client);
+          setVoiceError(friendlyMsg);
+        });
       });
 
-      await vapi.start(assistantId);
+      await client.start(assistantId);
     } catch (e) {
       const isExpectedDisconnect = isBenignVapiDisconnectError(e);
       if (isExpectedDisconnect) {
         setVoiceError(null);
-        detachVoice(vapi);
+        if (vapi) {
+          void stopVapiClient(vapi).finally(() => detachVoice(vapi));
+        }
         return;
       }
-      detachVoice(vapi);
+      if (vapi) {
+        void stopVapiClient(vapi).finally(() => detachVoice(vapi));
+      }
       setVoiceError(e instanceof Error ? e.message : "Could not start voice session");
     }
   }, [

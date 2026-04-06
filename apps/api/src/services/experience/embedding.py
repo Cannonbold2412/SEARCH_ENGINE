@@ -8,7 +8,7 @@ Flow:
 
 Used by:
   - PATCH experience card / child (after apply_card_patch / apply_child_patch)
-  - clarify-experience and fill-missing-from-text (after persisting filled data)
+  - fill-missing-from-text (after persisting filled data)
 """
 
 import logging

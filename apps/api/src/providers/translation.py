@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 
@@ -49,6 +50,13 @@ class OpenAICompatibleTranslationProvider(TranslationProvider):
             self.base_url = f"{self.base_url}/v1"
         self.api_key = api_key
         self.model = model
+        self._client = httpx.AsyncClient(
+            timeout=60.0,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+
+    async def close(self) -> None:
+        await self._client.aclose()
 
     async def translate(self, text: str, source_lang: str, target_lang: str) -> str:
         """Translate a single text."""
@@ -87,44 +95,43 @@ class OpenAICompatibleTranslationProvider(TranslationProvider):
             headers["Authorization"] = f"Bearer {self.api_key}"
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    json={
-                        "model": self.model,
-                        "messages": [{"role": "user", "content": prompt}],
-                        "temperature": 0.0,
-                    },
-                    headers=headers,
-                )
-                response.raise_for_status()
-                data = response.json()
+            response = await self._client.post(
+                f"{self.base_url}/chat/completions",
+                json={
+                    "model": self.model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.0,
+                },
+                headers=headers,
+            )
+            response.raise_for_status()
+            data = response.json()
 
-                choices = data.get("choices") or []
-                if not choices:
-                    raise TranslationServiceError("Translation API returned no choices.")
+            choices = data.get("choices") or []
+            if not choices:
+                raise TranslationServiceError("Translation API returned no choices.")
 
-                message = choices[0].get("message") or {}
-                content = message.get("content", "").strip()
-                if not content:
-                    raise TranslationServiceError("Translation API returned empty content.")
+            message = choices[0].get("message") or {}
+            content = message.get("content", "").strip()
+            if not content:
+                raise TranslationServiceError("Translation API returned empty content.")
 
-                # Parse the translated texts (one per line)
-                translated_lines = [line.strip() for line in content.split("\n") if line.strip()]
+            # Parse the translated texts (one per line)
+            translated_lines = [line.strip() for line in content.split("\n") if line.strip()]
 
-                # Map back to original texts with empty values preserved
-                result = []
-                translated_idx = 0
-                for original_text in texts:
-                    if original_text and original_text.strip():
-                        if translated_idx < len(translated_lines):
-                            result.append(translated_lines[translated_idx])
-                            translated_idx += 1
-                        else:
-                            result.append(original_text)  # Fallback to original
+            # Map back to original texts with empty values preserved
+            result = []
+            translated_idx = 0
+            for original_text in texts:
+                if original_text and original_text.strip():
+                    if translated_idx < len(translated_lines):
+                        result.append(translated_lines[translated_idx])
+                        translated_idx += 1
                     else:
-                        result.append(original_text)  # Preserve empty strings
-                return result
+                        result.append(original_text)  # Fallback to original
+                else:
+                    result.append(original_text)  # Preserve empty strings
+            return result
 
         except httpx.HTTPStatusError as e:
             raise TranslationServiceError(
@@ -178,6 +185,13 @@ class SarvamTranslationProvider(TranslationProvider):
     def __init__(self, api_key: str) -> None:
         self.api_key = api_key
         self.base_url = "https://api.sarvam.ai"
+        self._client = httpx.AsyncClient(
+            timeout=60.0,
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        )
+
+    async def close(self) -> None:
+        await self._client.aclose()
 
     def _to_sarvam_lang(self, lang_code: str) -> str:
         """Convert ISO 639-1 / BCP-47 (or common aliases) to Sarvam language code."""
@@ -205,9 +219,8 @@ class SarvamTranslationProvider(TranslationProvider):
     ) -> list[str]:
         """Translate multiple texts using Sarvam Translate API.
 
-        Note: Sarvam's translate endpoint processes one text at a time.
-        Requests run sequentially to avoid burst rate limits / partial failures
-        that left some strings in English while others translated.
+        Uses controlled concurrency (asyncio.Semaphore) to limit concurrent
+        requests to 3, balancing speed with rate limit safety.
         """
         if not texts:
             return []
@@ -227,41 +240,54 @@ class SarvamTranslationProvider(TranslationProvider):
             "api-subscription-key": self.api_key,
         }
 
+        # Controlled concurrency: max 3 concurrent requests to Sarvam
+        semaphore = asyncio.Semaphore(3)
+        result = list(texts)
+
+        async def _translate_one(idx: int, text: str) -> tuple[int, str | None]:
+            """Translate a single text; returns (index, translated_text_or_none)."""
+            async with semaphore:
+                payload = {
+                    "input": text,
+                    "source_language_code": source_sarvam,
+                    "target_language_code": target_sarvam,
+                }
+                for attempt in range(2):
+                    try:
+                        r = await self._client.post(
+                            f"{self.base_url}/translate",
+                            json=payload,
+                            headers=headers,
+                        )
+                        r.raise_for_status()
+                        data = r.json()
+                        t = data.get("translated_text", "").strip()
+                        if t:
+                            return (idx, t)
+                        logger.warning(
+                            "Sarvam returned empty translation for index %s (attempt %s)",
+                            idx,
+                            attempt + 1,
+                        )
+                    except httpx.HTTPStatusError as e:
+                        logger.warning("Sarvam translation error for index %s: %s", idx, e)
+                    except (httpx.RequestError, KeyError, TypeError) as e:
+                        logger.warning("Sarvam translation error for index %s: %s", idx, e)
+                return (idx, None)
+
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                result = list(texts)
-                for idx in indices_to_translate:
-                    payload = {
-                        "input": texts[idx],
-                        "source_language_code": source_sarvam,
-                        "target_language_code": target_sarvam,
-                    }
-                    translated_out: str | None = None
-                    for attempt in range(2):
-                        try:
-                            r = await client.post(
-                                f"{self.base_url}/translate",
-                                json=payload,
-                                headers=headers,
-                            )
-                            r.raise_for_status()
-                            data = r.json()
-                            t = data.get("translated_text", "").strip()
-                            if t:
-                                translated_out = t
-                                break
-                            logger.warning(
-                                "Sarvam returned empty translation for index %s (attempt %s)",
-                                idx,
-                                attempt + 1,
-                            )
-                        except httpx.HTTPStatusError as e:
-                            logger.warning("Sarvam translation error for index %s: %s", idx, e)
-                        except (httpx.RequestError, KeyError, TypeError) as e:
-                            logger.warning("Sarvam translation error for index %s: %s", idx, e)
-                    if translated_out:
-                        result[idx] = translated_out
-                return result
+            tasks = [
+                _translate_one(idx, texts[idx]) for idx in indices_to_translate
+            ]
+            outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+            for outcome in outcomes:
+                if isinstance(outcome, Exception):
+                    logger.warning("Sarvam translation task failed: %s", outcome)
+                    continue
+                idx, translated = outcome
+                if translated:
+                    result[idx] = translated
+            return result
 
         except httpx.RequestError as e:
             raise TranslationServiceError(
@@ -315,3 +341,10 @@ def get_translation_provider() -> TranslationProvider:
         )
 
     return _translation_provider_cache
+
+
+async def close_translation_provider() -> None:
+    global _translation_provider_cache
+    if _translation_provider_cache is not None and hasattr(_translation_provider_cache, "close"):
+        await _translation_provider_cache.close()
+    _translation_provider_cache = None

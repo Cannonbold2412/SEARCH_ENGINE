@@ -7,6 +7,32 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+async def resolve_viewer_language(
+    db: AsyncSession,
+    person_id: str,
+    explicit_language: str | None,
+) -> str:
+    """Return effective viewer language, falling back to profile preference.
+
+    Avoids a DB round-trip when the caller already passes a non-English language.
+    """
+    raw = (explicit_language or "en").strip()
+    if raw.lower() not in ("en", "english"):
+        return raw
+    from src.db.models import PersonProfile  # deferred to avoid circular import
+
+    row = await db.execute(
+        select(PersonProfile.preferred_language).where(PersonProfile.person_id == person_id)
+    )
+    pref = row.scalar_one_or_none()
+    if pref and str(pref).strip().lower() not in ("en", "english"):
+        return str(pref).strip()
+    return "en"
+
 
 def as_bool(value: Any) -> bool:
     return value if isinstance(value, bool) else False

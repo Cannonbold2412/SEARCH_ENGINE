@@ -1,114 +1,211 @@
-"""Prompt for LLM-generated search match explanations.
-
-Uses a grounded, domain-agnostic prompt that forces compression (not copying),
-dedupes parent/child overlap, and forbids raw labels/prose. Output is strict JSON only.
-"""
-
-import json
-from typing import Any
-
-
 def get_why_matched_prompt(
     query_original: str,
     query_cleaned: str,
-    must: dict[str, Any],
-    should: dict[str, Any],
-    people_evidence: list[dict[str, Any]],
+    must: dict,
+    should: dict,
+    people_evidence: list
 ) -> str:
-    """Build prompt for why_matched explanation. Expects people_evidence to be
-    the cleaned payload from build_match_explanation_payload (compact, deduped)."""
+    import json
+
     query_context = {
         "query_original": query_original or "",
         "query_cleaned": query_cleaned or query_original or "",
         "must": must or {},
         "should": should or {},
     }
-    # Send only person_id + evidence per person to reduce tokens
+
     people_payload = [
         {"person_id": p.get("person_id"), "evidence": p.get("evidence") or {}}
         for p in (people_evidence or [])
     ]
+
     payload = {"query_context": query_context, "people": people_payload}
     payload_json = json.dumps(payload, ensure_ascii=True)
 
-    return f"""You are a grounded match-explanation engine.
+    return f"""
+You are a grounded search match justification engine.
 
-TASK
-Generate short, clear reasons explaining why each person matched a search query.
+YOUR GOAL
+Generate the strongest possible justification for why each person is a good match for the search query.
 
-You MUST use only the evidence provided in the input.
-You MUST compress and summarize noisy evidence into clean reasons.
-Do NOT copy raw labels/headlines verbatim when they are repetitive, duplicated, or poorly formatted.
+You are NOT summarizing the profile.
+You are NOT listing random skills.
+You are PROVING why this person matches the query.
 
-OUTPUT (STRICT)
+You MUST use only the evidence provided.
+You MUST compress noisy evidence into clean, strong reasons.
+You MUST prioritize the most relevant evidence to the query.
+
+--------------------------------------------------
+OUTPUT FORMAT (STRICT JSON ONLY)
+--------------------------------------------------
 Return ONLY valid JSON with this exact schema:
-{
-        "people": [
-    {
-            "person_id": "string",
+
+{{
+  "people": [
+    {{
+      "person_id": "string",
       "why_matched": ["string", "string", "string"]
-    }
+    }}
   ]
-}
+}}
 
+No markdown.
+No comments.
+No extra text.
+Only JSON.
+
+--------------------------------------------------
 GLOBAL RULES (STRICT)
-1) Return 1-3 reasons per person.
+--------------------------------------------------
+1) Return 1–3 reasons per person.
 2) Each reason must be <= 150 characters.
-3) Each reason must be a clean human-readable phrase/sentence fragment.
-4) Do NOT invent facts not present in the input.
-5) Do NOT include markdown, bullet symbols, comments, or prose outside JSON.
-6) Do NOT include field names (e.g., "headline:", "summary:", "skills:") in the output.
-7) Do NOT copy long raw text; summarize it.
-8) Do NOT repeat the same fact across multiple reasons.
-9) If evidence is weak/noisy, return 1 cautious reason using only clearly supported facts.
+3) Each reason must be a clean human-readable phrase.
+4) Do NOT invent facts.
+5) Do NOT include labels like "summary:", "skills:", etc.
+6) Do NOT copy raw text; compress and rewrite.
+7) Do NOT repeat the same fact across reasons.
+8) If evidence is weak, return only 1 cautious reason.
+9) Prefer specific facts over generic statements.
+10) Focus on relevance to the query, not general profile quality.
 
-EVIDENCE STRUCTURE
-Each person has:
-- Parent evidence: headline, summary, company, location, time
-- child_evidence[]: each child has child_type ("metrics", "achievements", "tools", "skills", "responsibilities", etc.), titles[], descriptions[]
-- outcomes[]: parent summaries + all child item titles + descriptions
+--------------------------------------------------
+MATCH STRENGTH RULE (CRITICAL)
+--------------------------------------------------
+Your job is to PROVE the match.
 
-Use child_type to interpret content: skills/tools child types contain skill names; metrics/achievements contain outcomes; etc.
+Always choose evidence that most strongly satisfies the query.
 
-WHAT TO PRIORITIZE IN REASONS
-Prefer the strongest overlaps with the query, in this order:
-1) Hard constraints / explicit filters (role, company, team, location, time, availability, salary)
-2) Skills, tools, methods (from child_evidence where child_type is "skills" or "tools")
-3) Domain / type of work
-4) Outcomes, metrics, achievements (from child_evidence where child_type is "metrics" or "achievements", or from outcomes[])
-5) Supporting context (from child_evidence titles/descriptions)
+If exact or near-exact matches exist, use them first.
 
-QUERY-RELEVANCE RULES (CRITICAL)
-- When the query contains specific terms (e.g., "products sold", "100+ products", "revenue", "sales"), you MUST prefer outcomes that directly match those terms.
-- Example: Query "Sold 100+ products under 3 months" + evidence ["₹15 lakh sales", "Efficiency boost", "200+ products sold"] → prefer "200+ products sold" or "Sold 200+ products in 2 months" because they directly match "products sold"; do NOT lead with "₹15 lakh sales" or "Efficiency boost".
-- Among multiple outcomes/metrics, rank by overlap with query keywords: the more query terms an outcome contains, the higher it should appear in reasons.
+Strong matches include:
+- Same role
+- Same domain
+- Same tools
+- Same skills
+- Same type of work
+- Metrics or outcomes matching query numbers
+- Similar projects
+- Relevant company, industry, or market
+- Location or time match if query requires it
 
+Avoid weak matches if strong matches exist.
+
+--------------------------------------------------
+QUERY ALIGNMENT RULE (VERY IMPORTANT)
+--------------------------------------------------
+Each reason must clearly connect:
+QUERY REQUIREMENT → PROFILE EVIDENCE
+
+Each reason should feel like:
+"This matches because X in the profile directly matches Y in the query."
+
+Do NOT write generic reasons like:
+- "Has experience in sales"
+- "Worked with AI"
+- "Has technical background"
+
+Write specific reasons like:
+- "Sold 200+ products in 2 months, matching high-volume sales requirement"
+- "Built AI wallet with QR-based provider integration, matching AI infra work"
+- "Python + backtesting for crypto research, matching quant research query"
+
+--------------------------------------------------
+OUTCOME PRIORITY RULE (CRITICAL)
+--------------------------------------------------
+If the query includes:
+- numbers
+- revenue
+- growth
+- scale
+- users
+- performance
+- time
+- results
+
+You MUST prioritize:
+- metrics
+- achievements
+- measurable outcomes
+
+Metrics and outcomes are stronger evidence than skills.
+
+Example:
+Query: "Sold 100+ products in 3 months"
+
+Evidence:
+- ₹15L revenue
+- 200+ products sold
+- Sales operations
+
+Best reason:
+"Sold 200+ products in 2 months, exceeding query requirement"
+
+Not:
+"Generated ₹15L revenue"
+Not:
+"Experience in sales"
+
+Because the query is about PRODUCTS SOLD, not revenue.
+
+--------------------------------------------------
 DEDUPLICATION RULES
-- If the same concept appears in parent and child evidence, mention it only once.
-- If labels/headlines repeat words (e.g., "Sales Manager Sales Manager"), rewrite cleanly.
-- Ignore duplicate or near-duplicate evidence snippets.
+--------------------------------------------------
+- If the same concept appears multiple times, mention it once.
+- If parent and child evidence repeat the same idea, merge them.
+- Clean messy labels (e.g., "Sales Manager Sales Manager" → "Sales Manager").
 
+--------------------------------------------------
 NORMALIZATION RULES
-- Prefer normalized facts when both raw + normalized forms exist.
-- Keep currency/metrics concise (e.g., "₹15L sales in 2 months").
-- Keep time/location concise (e.g., "Mumbai", "3 years", "2022-2024").
-- If multiple facts are available, choose the most search-relevant ones.
+--------------------------------------------------
+- Keep metrics short: "₹15L revenue", "200+ users", "3 years"
+- Keep time short: "2022–2024", "2 months"
+- Keep location short: "Mumbai", "Remote"
+- Rewrite messy text into clean phrases.
 
+--------------------------------------------------
+REASON SELECTION ORDER
+--------------------------------------------------
+Pick reasons in this order:
+
+1) Hard constraints / filters (role, company, location, time)
+2) Skills / tools match
+3) Domain / type of work
+4) Outcomes / metrics / achievements
+5) Supporting context
+
+Use the strongest matches first.
+
+--------------------------------------------------
 STYLE RULES
-- Be specific, not generic.
-- Good: "Quant research in crypto using Python and backtesting"
-- Good: "Mumbai studio partnerships with ₹15L sales in 2 months"
-- Good: "Ops + automation work with vendor/process ownership"
-- Bad: "Why this card was shown: ..."
-- Bad: "Sales Manager Sales Manager..."
-- Bad: "Matched because of experience"
+--------------------------------------------------
+Reasons should sound like strong justification.
 
+Use phrases like:
+- "Directly matches..."
+- "Strong overlap with..."
+- "Demonstrates..."
+- "Aligns with..."
+- "Relevant to..."
+
+Avoid:
+- "Has experience in..."
+- "Worked on..."
+- "Was involved in..."
+- "Matched because..."
+
+Write like a search result explanation, not a resume summary.
+
+--------------------------------------------------
 ROBUSTNESS RULES
-- Some evidence may be incomplete, duplicated, or noisy.
-- Some fields may be missing.
-- Some people may match mostly via parent evidence, others via child evidence.
-Handle all cases gracefully and still return valid JSON.
+--------------------------------------------------
+- Evidence may be noisy, duplicated, or incomplete.
+- Some people match via metrics, some via skills, some via domain.
+- Use whatever strongest evidence exists.
+- Always return valid JSON.
 
+--------------------------------------------------
 INPUT JSON
+--------------------------------------------------
 {payload_json}
 """

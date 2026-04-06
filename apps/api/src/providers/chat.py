@@ -7,10 +7,7 @@ from typing import Any
 import httpx
 
 from src.core import get_settings
-from src.prompts.search_filters import (
-    get_cleanup_prompt,
-    get_single_extract_prompt,
-)
+from src.prompts.search_filters import get_single_extract_prompt
 from src.utils import extract_json_from_llm_response
 
 logger = logging.getLogger(__name__)
@@ -71,6 +68,13 @@ class OpenAICompatibleChatProvider(ChatProvider):
             self.base_url = f"{self.base_url}/v1"
         self.api_key = api_key
         self.model = model
+        self._client = httpx.AsyncClient(
+            timeout=60.0,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+
+    async def close(self) -> None:
+        await self._client.aclose()
 
     @staticmethod
     def _extract_text_content(content: Any) -> str | None:
@@ -123,13 +127,12 @@ class OpenAICompatibleChatProvider(ChatProvider):
 
         for attempt in range(retries + 1):
             try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    response = await client.post(
-                        f"{self.base_url}/chat/completions",
-                        json=payload,
-                        headers=headers,
-                    )
-                    response.raise_for_status()
+                response = await self._client.post(
+                    f"{self.base_url}/chat/completions",
+                    json=payload,
+                    headers=headers,
+                )
+                response.raise_for_status()
 
                 data = response.json()
                 choices = data.get("choices") or []
@@ -215,21 +218,10 @@ class OpenAICompatibleChatProvider(ChatProvider):
         return parsed
 
     async def parse_search_filters(self, query: str) -> dict[str, Any]:
-        """Cleanup -> single extract; return parsed search constraints JSON."""
-        cleanup_prompt = get_cleanup_prompt(query)
-        cleaned_text = (
-            await self._chat(
-                [{"role": "user", "content": cleanup_prompt}],
-                max_tokens=500,
-                response_format=None,
-            )
-        ).strip()
-        if not cleaned_text:
-            cleaned_text = query
-
-        extract_prompt = get_single_extract_prompt(query, cleaned_text)
+        """Single combined cleanup+extract LLM call; return parsed search constraints JSON."""
+        prompt = get_single_extract_prompt(query)
         return await self._chat_json(
-            [{"role": "user", "content": extract_prompt}],
+            [{"role": "user", "content": prompt}],
             max_tokens=4096,
         )
 
@@ -250,16 +242,31 @@ _OPENAI_DEFAULT_MODEL = "gpt-4o-mini"
 _OPENAI_COMPATIBLE_DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 
 
+_chat_provider: ChatProvider | None = None
+
+
 def get_chat_provider() -> ChatProvider:
+    global _chat_provider
+    if _chat_provider is not None:
+        return _chat_provider
     settings = get_settings()
     if settings.openai_api_key and not settings.chat_api_base_url:
-        return OpenAIChatProvider()
-    if settings.chat_api_base_url:
-        return OpenAICompatibleChatProvider(
+        _chat_provider = OpenAIChatProvider()
+    elif settings.chat_api_base_url:
+        _chat_provider = OpenAICompatibleChatProvider(
             base_url=settings.chat_api_base_url,
             api_key=settings.chat_api_key,
             model=settings.chat_model or _OPENAI_COMPATIBLE_DEFAULT_MODEL,
         )
-    raise RuntimeError(
-        "Chat LLM not configured. Set OPENAI_API_KEY or CHAT_API_BASE_URL (and CHAT_MODEL)."
-    )
+    else:
+        raise RuntimeError(
+            "Chat LLM not configured. Set OPENAI_API_KEY or CHAT_API_BASE_URL (and CHAT_MODEL)."
+        )
+    return _chat_provider
+
+
+async def close_chat_provider() -> None:
+    global _chat_provider
+    if _chat_provider is not None and hasattr(_chat_provider, "close"):
+        await _chat_provider.close()
+    _chat_provider = None

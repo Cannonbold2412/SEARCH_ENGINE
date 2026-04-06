@@ -1,7 +1,7 @@
 """
 Form-merge helpers for the builder endpoints.
 
-These functions convert frontend form dicts (from the clarify/fill flows) into
+These functions convert frontend form dicts (from fill-missing and edit flows) into
 typed patch objects that can be applied to ORM models.  They live in the service
 layer rather than in the router so they can be tested and reused independently.
 """
@@ -85,7 +85,7 @@ def _parse_date(value: Any) -> date | None:
     """
     Parse a date from a merged form value.
 
-    Accepts ``YYYY-MM-DD`` or ``YYYY-MM`` (clarify can return partial dates).
+    Accepts ``YYYY-MM-DD`` or ``YYYY-MM`` (LLM fill can return partial dates).
     Returns ``None`` on any parse failure.
     """
     if value is None:

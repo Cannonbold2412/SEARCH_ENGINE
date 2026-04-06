@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { ArrowLeft, Sparkles } from "lucide-react";
@@ -41,7 +41,6 @@ import {
 import { buildEditAssistantVariableValues } from "@/lib/build-edit-assistant-variables";
 import { api } from "@/lib/api";
 import { isVapiEditVoiceConfigured } from "@/lib/vapi-config";
-import { preloadVapiWeb } from "@/lib/vapi-client";
 import {
   resetTranscriptStreamRefs,
   upsertStreamingTranscriptMessage,
@@ -52,6 +51,7 @@ import type { ExperienceCard, ExperienceCardChild, ChildValueItem } from "@/lib/
 
 export default function EnhanceCardPage() {
   const params = useParams<{ cardId: string }>();
+  const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
   const cardId = decodeURIComponent(String(params?.cardId ?? ""));
@@ -177,14 +177,18 @@ export default function EnhanceCardPage() {
     onChildPenClick: () => setManualEdit(true),
   };
 
-  const editAssistantVariableValues = useMemo(() => {
+  /** Server snapshot is enough to start Vapi immediately; merged draft after form init. */
+  const variableValuesForVoice = useMemo(() => {
     if (!parent) return {};
+    if (!isEnhanceFormInitialized) {
+      return buildEditAssistantVariableValues(parent, children);
+    }
     const mergedParent = mergeParentForPreview(parent, editForm, parentRawText);
     const mergedChildren = children.map((c) =>
       mergeChildForPreview(c, c.id ? childForms[c.id] : undefined)
     );
     return buildEditAssistantVariableValues(mergedParent, mergedChildren);
-  }, [parent, editForm, parentRawText, children, childForms]);
+  }, [parent, children, isEnhanceFormInitialized, editForm, parentRawText, childForms]);
 
   const draftRef = useRef<EnhanceDraftState>({
     parentForm: editForm,
@@ -220,12 +224,13 @@ export default function EnhanceCardPage() {
     voiceSphereActive,
     voiceSphereIntensity,
     startVoice,
+    stopVoice,
     toggleVoice,
   } = useEnhanceVapiVoice({
     enabled: !manualEdit && !!parent,
     voiceSessionKey: cardId,
     language,
-    variableValues: editAssistantVariableValues,
+    variableValues: variableValuesForVoice,
     onDraftPatch: applyVoiceDraftPatch,
     onTranscriptChunk: onVoiceTranscriptChunk,
     onTranscriptStreamReset: resetVoiceTranscriptRefs,
@@ -236,12 +241,17 @@ export default function EnhanceCardPage() {
   }, [startVoice]);
 
   useEffect(() => {
-    if (!parent || manualEdit || !isVapiEditVoiceConfigured(language) || !isEnhanceFormInitialized) return;
-    const hasVariableValues = editAssistantVariableValues && Object.keys(editAssistantVariableValues).length > 0;
-    if (!hasVariableValues) return;
-    void preloadVapiWeb().catch(() => {});
+    if (!parent || manualEdit || !isVapiEditVoiceConfigured(language)) return;
     void startVoiceRef.current();
-  }, [cardId, parent?.id, manualEdit, isEnhanceFormInitialized, editAssistantVariableValues, language, parent]);
+  }, [cardId, parent?.id, manualEdit, language, parent]);
+
+  useEffect(() => {
+    const encodedCardId = encodeURIComponent(cardId);
+    const expectedPath = `/cards/${encodedCardId}/enhance`;
+    const expectedDecodedPath = `/cards/${cardId}/enhance`;
+    if (!pathname || pathname === expectedPath || pathname === expectedDecodedPath) return;
+    void stopVoice();
+  }, [pathname, cardId, stopVoice]);
 
   const resetDraftFromServer = useCallback(() => {
     if (!parent) return;
