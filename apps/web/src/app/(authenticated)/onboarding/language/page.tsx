@@ -56,10 +56,10 @@ export default function OnboardingLanguagePage() {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-[540px] mx-auto py-8"
+      className="mx-auto w-full max-w-[540px] py-2 sm:py-6"
     >
       <Card className="glass border-border/50 shadow-xl glow-ring overflow-hidden">
-        <CardHeader className="space-y-1.5 border-b border-border/50 text-center">
+        <CardHeader className="space-y-1.5 border-b border-border/50 px-4 text-center sm:px-6">
           <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-2">
             <Globe className="w-6 h-6 text-primary" />
           </div>
@@ -68,7 +68,7 @@ export default function OnboardingLanguagePage() {
             Select your preferred language for the CONXA experience. The AI assistant will speak to you in this language.
           </CardDescription>
         </CardHeader>
-        <CardContent className="py-6">
+        <CardContent className="px-4 py-5 sm:px-6 sm:py-6">
           {serverError && (
             <div className="mb-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
               {serverError}
@@ -88,7 +88,7 @@ export default function OnboardingLanguagePage() {
             
             <Button
               onClick={handleContinue}
-              className="w-full sm:w-auto min-w-[200px]"
+              className="w-full sm:w-auto sm:min-w-[200px]"
               size="lg"
               disabled={patchLanguage.isPending}
             >

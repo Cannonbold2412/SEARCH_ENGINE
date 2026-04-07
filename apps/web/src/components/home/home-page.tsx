@@ -100,16 +100,16 @@ export default function HomePage() {
   const showEmptyState = !hasSearched && !isSearching;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] -my-6 -mx-4 sm:-mx-0">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex-1 min-h-0 overflow-y-auto">
         {searchError && (
-          <div className="container max-w-3xl mx-auto px-4 pt-4">
+          <div className="container mx-auto max-w-3xl px-3 pt-3 sm:px-4 sm:pt-4">
             <ErrorMessage message={searchError} />
           </div>
         )}
 
         {isSearching && !hasSearched ? (
-          <div className="container max-w-6xl mx-auto px-4 py-6">
+          <div className="container mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-6">
             <div className="space-y-4">
               <div className="h-4 w-24 bg-muted rounded animate-pulse" />
               <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -157,14 +157,14 @@ export default function HomePage() {
             </div>
           </div>
         ) : (
-          <div className="container max-w-6xl mx-auto px-4 py-6 space-y-4">
+          <div className="container mx-auto max-w-6xl px-3 py-4 space-y-4 sm:px-4 sm:py-6">
             <SearchResults searchId={searchId} people={searchPeople} />
           </div>
         )}
       </div>
 
-      <div className="flex-shrink-0 border-t border-border/60 bg-background">
-        <div className="container max-w-3xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+      <div className="flex-shrink-0 border-t border-border/60 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="container mx-auto max-w-3xl px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4 sm:py-4">
           <form
             onSubmit={handleSubmit}
             className="relative flex flex-col sm:flex-row sm:items-end gap-2 rounded-2xl border border-border/60 bg-muted/30 hover:bg-muted/50 focus-within:bg-muted/50 focus-within:ring-1 focus-within:ring-ring/30 transition-all shadow-sm"
@@ -185,13 +185,13 @@ export default function HomePage() {
                   placeholder="Describe who you're looking for..."
                   rows={1}
                   className={cn(
-                    "w-full min-h-[48px] sm:min-h-[52px] max-h-[200px] resize-none rounded-2xl bg-transparent pl-4 pr-[7.5rem] sm:pr-32 py-3 sm:py-3.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none overflow-y-auto",
+                    "w-full min-h-[48px] sm:min-h-[52px] max-h-[200px] resize-none rounded-2xl bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none overflow-y-auto sm:py-3.5 sm:pr-32",
                     voice.isRecording && "text-foreground/95"
                   )}
                   style={{ maxHeight: 200 }}
                   aria-label="Search query"
                 />
-                <div className="absolute right-2 bottom-2 top-2 sm:top-auto flex items-center gap-0.5">
+                <div className="flex items-center justify-end gap-0.5 px-2 pb-2 sm:absolute sm:right-2 sm:bottom-2 sm:top-auto sm:px-0 sm:pb-0">
                   <button
                     type="button"
                     onClick={() => {

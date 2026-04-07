@@ -15,7 +15,7 @@ import {
 
 export default function RootPage() {
   return (
-    <main className="bg-background min-h-screen overflow-x-hidden">
+    <main className="min-h-app-screen overflow-x-clip bg-background">
       <LandingNavbar />
       <LandingHero />
       <SocialProofBar />

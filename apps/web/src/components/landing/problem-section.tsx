@@ -8,15 +8,15 @@ export default function ProblemSection() {
   const inView = useInView(ref, { once: true, margin: "-100px" });
 
   return (
-    <section ref={ref} className="py-24 px-6">
+    <section ref={ref} className="px-4 py-16 sm:px-6 sm:py-24">
       <div className="container mx-auto max-w-5xl">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.6 }}
-          className="grid md:grid-cols-2 gap-8"
+          className="grid gap-6 md:grid-cols-2 md:gap-8"
         >
-          <div className="glass-card rounded-2xl p-8 relative overflow-hidden">
+          <div className="glass-card relative overflow-hidden rounded-2xl p-5 sm:p-8">
             <span className="text-xs font-mono text-muted-foreground tracking-wider uppercase mb-4 block">
               What people actually write
             </span>
@@ -28,7 +28,7 @@ also some python stuff freelance 2022-23 did like 3 projects idk"`}
             <div className="absolute inset-0 border border-border/60 rounded-2xl pointer-events-none" />
           </div>
 
-          <div className="glass-card rounded-2xl p-8 relative overflow-hidden glow-violet-subtle">
+          <div className="glass-card relative overflow-hidden rounded-2xl p-5 glow-violet-subtle sm:p-8">
             <span className="text-xs font-mono text-secondary tracking-wider uppercase mb-4 block">
               What CONXA creates
             </span>
@@ -60,7 +60,7 @@ also some python stuff freelance 2022-23 did like 3 projects idk"`}
           initial={{ opacity: 0 }}
           animate={inView ? { opacity: 1 } : {}}
           transition={{ delay: 0.4, duration: 0.6 }}
-          className="text-center text-muted-foreground font-body mt-10 text-lg"
+          className="mt-8 text-center font-body text-base text-muted-foreground sm:mt-10 sm:text-lg"
         >
           No forms. No dropdowns. <span className="text-foreground">Just tell us what you did.</span>
         </motion.p>

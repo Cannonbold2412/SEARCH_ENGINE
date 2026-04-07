@@ -62,7 +62,8 @@
 
 body {
   @apply bg-background text-foreground antialiased;
-  overflow-x: hidden;
+  min-height: 100%;
+  overflow-x: clip;
   /* Remove 300ms tap delay on touch devices */
   touch-action: manipulation;
 }
@@ -78,7 +79,64 @@ body {
 /* Smooth scroll */
 html {
   scroll-behavior: smooth;
-  overflow-x: hidden;
+  min-height: 100%;
+  overflow-x: clip;
+}
+
+@layer utilities {
+  .min-h-app-screen {
+    min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
+  }
+
+  .h-app-screen {
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+  }
+
+  .max-h-app-screen {
+    max-height: 100vh;
+    max-height: 100svh;
+    max-height: 100dvh;
+  }
+
+  .min-h-app-shell {
+    min-height: calc(100vh - 3.5rem);
+    min-height: calc(100svh - 3.5rem);
+    min-height: calc(100dvh - 3.5rem);
+  }
+
+  .h-app-shell {
+    height: calc(100vh - 3.5rem);
+    height: calc(100svh - 3.5rem);
+    height: calc(100dvh - 3.5rem);
+  }
+
+  .max-h-app-shell {
+    max-height: calc(100vh - 3.5rem);
+    max-height: calc(100svh - 3.5rem);
+    max-height: calc(100dvh - 3.5rem);
+  }
+
+  .min-h-app-panel {
+    min-height: calc(100vh - 6rem);
+    min-height: calc(100svh - 6rem);
+    min-height: calc(100dvh - 6rem);
+  }
+
+  .h-app-panel {
+    height: calc(100vh - 6rem);
+    height: calc(100svh - 6rem);
+    height: calc(100dvh - 6rem);
+  }
+
+  .max-h-app-panel {
+    max-height: calc(100vh - 6rem);
+    max-height: calc(100svh - 6rem);
+    max-height: calc(100dvh - 6rem);
+  }
 }
 
 /* Themed scrollbars - match dark/light theme */

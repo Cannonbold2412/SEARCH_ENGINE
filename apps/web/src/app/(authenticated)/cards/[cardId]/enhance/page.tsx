@@ -493,12 +493,12 @@ export default function EnhanceCardPage() {
 
   return (
     <motion.div
-      className="flex flex-col min-h-0 h-[calc(100vh-6rem)] max-h-[calc(100vh-6rem)] overflow-hidden -mt-2 sm:-mt-3"
+      className="flex h-full min-h-0 flex-col overflow-hidden"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.2 }}
     >
-      <div className="flex items-center justify-between gap-3 flex-shrink-0 mb-2 sm:mb-3 px-1">
+      <div className="mb-3 flex shrink-0 flex-col gap-3 px-1 sm:mb-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <Link href="/cards">
             <Button variant="ghost" size="sm" className="shrink-0">
@@ -523,6 +523,7 @@ export default function EnhanceCardPage() {
           size="sm"
           onClick={onSaveAllFamily}
           disabled={isSavingAllFamily || isChatSending}
+          className="w-full sm:w-auto"
         >
           {isSavingAllFamily ? "Saving…" : "Save & exit"}
         </Button>
@@ -536,9 +537,9 @@ export default function EnhanceCardPage() {
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row flex-1 min-h-0 gap-0 md:gap-4">
+      <div className="flex flex-1 min-h-0 flex-col gap-3 md:flex-row md:gap-4">
         {/* Left: live card preview or manual edit */}
-        <div className="flex flex-col min-h-0 h-[42vh] md:h-auto md:flex-1 md:min-w-0 border-b md:border-b-0 md:border-r border-border/60 pb-3 md:pb-0 md:pr-4">
+        <div className="flex min-h-[18rem] max-h-[48svh] flex-col border-b border-border/60 pb-3 md:min-h-0 md:max-h-none md:flex-1 md:min-w-0 md:border-b-0 md:border-r md:pb-0 md:pr-4">
           {!manualEdit ? (
             <div className="flex flex-col min-h-0 h-full overflow-hidden">
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 scrollbar-theme">
@@ -631,7 +632,7 @@ export default function EnhanceCardPage() {
         </div>
 
         {/* Right: chat */}
-        <div className="flex flex-col min-h-0 flex-1 md:min-w-0 min-h-[280px] md:min-h-0">
+        <div className="flex min-h-[20rem] flex-1 flex-col md:min-h-0 md:min-w-0">
           <EnhanceChatPanel
             messages={chatMessages}
             input={chatInput}

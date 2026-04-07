@@ -18,10 +18,10 @@ export default function LandingNavbar() {
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.6, ease: "easeOut" }}
-      className={`fixed top-0 left-0 right-0 z-50 glass-navbar transition-all duration-300 ${scrolled ? "py-3" : "py-5"}`}
+      className={`fixed top-0 left-0 right-0 z-50 glass-navbar transition-all duration-300 ${scrolled ? "py-3" : "py-4 sm:py-5"}`}
     >
-      <div className="container mx-auto flex items-center justify-between px-6">
-        <Link href="/" className="font-display text-2xl font-bold text-gradient-logo tracking-tight">
+      <div className="container mx-auto flex items-center justify-between gap-3 px-4 sm:px-6">
+        <Link href="/" className="font-display text-xl font-bold text-gradient-logo tracking-tight sm:text-2xl">
           CONXA
         </Link>
 
@@ -38,16 +38,16 @@ export default function LandingNavbar() {
           ))}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Link
             href="/login"
-            className="text-sm font-body text-muted-foreground hover:text-foreground transition-colors px-4 py-2"
+            className="px-3 py-2 text-sm font-body text-muted-foreground transition-colors hover:text-foreground sm:px-4"
           >
             Log in
           </Link>
           <Link
             href="/signup"
-            className="text-sm font-body gradient-violet text-primary-foreground px-5 py-2 rounded-full hover:scale-[1.02] active:scale-[0.98] transition-transform glow-violet-subtle"
+            className="gradient-violet rounded-full px-4 py-2 text-sm font-body text-primary-foreground transition-transform hover:scale-[1.02] active:scale-[0.98] glow-violet-subtle sm:px-5"
           >
             Sign up
           </Link>

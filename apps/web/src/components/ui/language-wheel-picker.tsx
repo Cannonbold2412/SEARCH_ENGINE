@@ -12,7 +12,7 @@ interface LanguageWheelPickerProps {
   className?: string;
 }
 
-const ITEM_HEIGHT = 56; // h-14
+const ITEM_HEIGHT = 52;
 
 const LanguageWheelPicker = React.forwardRef<HTMLDivElement, LanguageWheelPickerProps>(
   ({ value, onChange, disabled = false, className }, ref) => {
@@ -65,7 +65,7 @@ const LanguageWheelPicker = React.forwardRef<HTMLDivElement, LanguageWheelPicker
         role="listbox"
         aria-label="Language selector"
       >
-        <div className="relative h-64 bg-gradient-to-b from-background/0 via-background to-background/0 rounded-lg overflow-hidden sm:h-72">
+        <div className="relative h-56 overflow-hidden rounded-lg bg-gradient-to-b from-background/0 via-background to-background/0 sm:h-72">
           <div
             ref={scrollRef}
             className="relative h-full w-full overflow-y-auto overscroll-contain scrollbar-hide snap-y snap-mandatory"
@@ -80,7 +80,7 @@ const LanguageWheelPicker = React.forwardRef<HTMLDivElement, LanguageWheelPicker
                       onClick={() => !disabled && onChange(language.code)}
                       disabled={disabled}
                       className={cn(
-                        "relative flex h-14 w-full snap-center items-center justify-start px-4 transition-all duration-200",
+                        "relative flex h-[52px] w-full snap-center items-center justify-start px-3 transition-all duration-200 sm:px-4",
                         "hover:bg-accent/50 disabled:cursor-not-allowed",
                         isSelected && "bg-accent/30"
                       )}
@@ -108,9 +108,9 @@ const LanguageWheelPicker = React.forwardRef<HTMLDivElement, LanguageWheelPicker
           </div>
         </div>
 
-        <div className="absolute top-1/2 left-0 h-14 w-1 -translate-y-1/2 rounded-r-sm bg-primary" />
+        <div className="absolute top-1/2 left-0 h-[52px] w-1 -translate-y-1/2 rounded-r-sm bg-primary" />
 
-        <div className="absolute top-1/2 left-6 h-14 w-0.5 -translate-y-1/2 rounded-full bg-border/30" />
+        <div className="absolute top-1/2 left-5 h-[52px] w-0.5 -translate-y-1/2 rounded-full bg-border/30 sm:left-6" />
       </div>
     );
   }

@@ -182,7 +182,7 @@ export default function SettingsPage() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className="max-w-xl mx-auto space-y-6"
+      className="mx-auto max-w-xl space-y-5 sm:space-y-6"
     >
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
@@ -219,7 +219,7 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
                 <Eye className="h-4 w-4 text-muted-foreground" />
@@ -230,7 +230,7 @@ export default function SettingsPage() {
               </div>
             </div>
             {!visibilityLoading && !isEditingVisibility && (
-              <Button variant="outline" size="sm" onClick={handleStartEditingVisibility}>
+              <Button variant="outline" size="sm" onClick={handleStartEditingVisibility} className="w-full sm:w-auto">
                 Edit
               </Button>
             )}
@@ -269,7 +269,7 @@ export default function SettingsPage() {
                 <div className="space-y-4 pl-5 border-l-2 border-primary/20">
                   <div className="space-y-2">
                     <Label className="text-xs">Preferred locations (cities in India)</Label>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                       <select
                         value=""
                         onChange={(e) => {
@@ -279,7 +279,7 @@ export default function SettingsPage() {
                           }
                         }}
                         className={cn(
-                          "rounded-lg border border-input/60 bg-background px-3 py-2 text-sm min-w-[160px]",
+                          "w-full rounded-lg border border-input/60 bg-background px-3 py-2 text-sm sm:min-w-[180px] sm:w-auto",
                           "focus:outline-none focus:ring-1 focus:ring-ring/30 transition-colors"
                         )}
                       >
@@ -327,11 +327,11 @@ export default function SettingsPage() {
                 </div>
               )}
               {saveError && <p className="text-sm text-destructive">{saveError}</p>}
-              <div className="flex items-center gap-2">
-                <Button size="sm" onClick={handleSaveVisibility} disabled={patchVisibility.isPending}>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Button size="sm" onClick={handleSaveVisibility} disabled={patchVisibility.isPending} className="w-full sm:w-auto">
                   Save
                 </Button>
-                <Button variant="ghost" size="sm" onClick={handleCancelVisibilityEdit}>
+                <Button variant="ghost" size="sm" onClick={handleCancelVisibilityEdit} className="w-full sm:w-auto">
                   Cancel
                 </Button>
               </div>
@@ -348,7 +348,7 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
                 <Globe className="h-4 w-4 text-muted-foreground" />
@@ -359,7 +359,7 @@ export default function SettingsPage() {
               </div>
             </div>
             {!visibilityLoading && !isEditingLanguage && (
-              <Button variant="outline" size="sm" onClick={handleStartEditingLanguage}>
+              <Button variant="outline" size="sm" onClick={handleStartEditingLanguage} className="w-full sm:w-auto">
                 Edit
               </Button>
             )}
@@ -372,7 +372,7 @@ export default function SettingsPage() {
             <>
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs text-muted-foreground">Choose your language</Label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {SUPPORTED_LANGUAGES.map((lang) => (
                     <label
                       key={lang.code}
@@ -403,11 +403,11 @@ export default function SettingsPage() {
                 </div>
               </div>
               {languageSaveError && <p className="text-sm text-destructive">{languageSaveError}</p>}
-              <div className="flex items-center gap-2">
-                <Button size="sm" onClick={handleSaveLanguage} disabled={patchVisibility.isPending}>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Button size="sm" onClick={handleSaveLanguage} disabled={patchVisibility.isPending} className="w-full sm:w-auto">
                   Save
                 </Button>
-                <Button variant="ghost" size="sm" onClick={handleCancelLanguageEdit}>
+                <Button variant="ghost" size="sm" onClick={handleCancelLanguageEdit} className="w-full sm:w-auto">
                   Cancel
                 </Button>
               </div>
@@ -444,7 +444,7 @@ export default function SettingsPage() {
             variant="outline"
             size="sm"
             className={cn(
-              "transition-colors",
+              "w-full transition-colors sm:w-auto",
               confirmLogout
                 ? "text-destructive border-destructive/50 hover:bg-destructive/10"
                 : "text-muted-foreground hover:text-destructive hover:border-destructive/50"

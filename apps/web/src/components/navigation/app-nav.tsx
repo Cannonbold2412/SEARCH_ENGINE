@@ -24,11 +24,13 @@ export function AppNav() {
     closeMobileSidebar,
     toggleMobileSidebar,
   } = useSidebarWidth();
+  const sidebarWidthCss = `${sidebarWidth}px`;
 
   const { data: profile } = useProfileSchema();
   const { blobUrl: profilePhotoBlob } = useProfilePhoto(profile?.photo_url ?? null);
   const accountName = (profile?.display_name || profile?.username || "Account").trim();
   const accountInitial = accountName ? accountName[0]?.toUpperCase() : "U";
+  const showExpandedLabels = !collapsed || mobileSidebarOpen || isMobile;
 
   const sidebarItems = [
     { href: "/home", label: "Home", icon: Compass },
@@ -43,12 +45,12 @@ export function AppNav() {
   const navLinkClass = (isActive: boolean) =>
     cn(
       "flex items-center rounded-lg text-sm font-medium transition-colors min-h-[44px] min-w-[44px]",
-      collapsed && !isMobile ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
+      !showExpandedLabels ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
       isActive ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
     );
 
   const handleNavClick = () => {
-    if (isMobile) closeMobileSidebar();
+    closeMobileSidebar();
   };
 
   // Start downloading the Vapi web SDK as early as possible so Builder voice starts instantly.
@@ -62,7 +64,7 @@ export function AppNav() {
   return (
     <>
       {/* Mobile backdrop - close drawer when tapping outside */}
-      {isMobile && mobileSidebarOpen && (
+      {mobileSidebarOpen && (
         <button
           type="button"
           aria-label="Close menu"
@@ -74,165 +76,153 @@ export function AppNav() {
       {/* Left sidebar - overlay on mobile, permanent on desktop */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex-shrink-0 bg-background border-r border-border/60 overflow-x-hidden min-w-0 transition-[transform] duration-200 ease-out",
-          isMobile && "shadow-xl md:shadow-none",
-          isMobile && !mobileSidebarOpen && "-translate-x-full"
+          "fixed inset-y-0 left-0 z-50 min-w-0 flex-shrink-0 overflow-x-clip border-r border-border/60 bg-background transition-[transform,width] duration-200 ease-out md:translate-x-0",
+          mobileSidebarOpen ? "translate-x-0 shadow-xl md:shadow-none" : "-translate-x-full md:shadow-none"
         )}
-        style={{
-          width: isMobile ? MOBILE_DRAWER_WIDTH : sidebarWidth,
-        }}
+        style={{ ["--sidebar-width" as "--sidebar-width"]: sidebarWidthCss }}
         aria-label="Main navigation"
       >
-        <div className="flex flex-col h-full min-w-0 overflow-hidden">
-          {/* Logo at top + collapse toggle (desktop) / menu close (mobile) */}
-          <div
-            className={cn(
-              "flex-shrink-0 flex border-b border-border/60",
-              collapsed && !isMobile ? "items-center justify-center py-2 min-h-[2.5rem]" : "flex-row items-center gap-1 px-2 py-4 min-h-[3.5rem]"
-            )}
-          >
-            {(!collapsed || isMobile) && (
-              <Link
-                href="/home"
-                onClick={handleNavClick}
-                className="flex flex-1 items-center text-foreground hover:opacity-90 transition-opacity min-w-0 min-h-[44px]"
-              >
-                <span className="inline-block h-9 w-9 shrink-0 overflow-hidden rounded-full bg-muted">
-                  <img src={logoSrc} alt="CONXA" className="block h-full w-full object-cover" style={{ borderRadius: '50%', transform: 'scale(1.25)' }} />
-                </span>
-                <span className="font-semibold text-sm truncate ml-2.5">CONXA</span>
-              </Link>
-            )}
-            {isMobile ? (
+        <div className="h-full w-[260px] md:w-[var(--sidebar-width)]">
+          <div className="flex h-full min-w-0 flex-col overflow-hidden">
+            {/* Logo at top + collapse toggle (desktop) / menu close (mobile) */}
+            <div
+              className={cn(
+                "flex flex-shrink-0 border-b border-border/60",
+                collapsed ? "md:min-h-[2.5rem] md:items-center md:justify-center md:py-2" : "min-h-[3.5rem] flex-row items-center gap-1 px-2 py-4"
+              )}
+            >
+              {showExpandedLabels && (
+                <Link
+                  href="/home"
+                  onClick={handleNavClick}
+                  className="flex min-h-[44px] min-w-0 flex-1 items-center text-foreground transition-opacity hover:opacity-90"
+                >
+                  <span className="inline-block h-9 w-9 shrink-0 overflow-hidden rounded-full bg-muted">
+                    <img src={logoSrc} alt="CONXA" className="block h-full w-full object-cover" style={{ borderRadius: "50%", transform: "scale(1.25)" }} />
+                  </span>
+                  <span className="ml-2.5 truncate text-sm font-semibold">CONXA</span>
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={closeMobileSidebar}
-                className="p-2.5 rounded-lg text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg p-2.5 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground md:hidden"
                 aria-label="Close menu"
               >
                 <PanelLeftClose className="h-5 w-5" />
               </button>
-            ) : (
               <button
                 type="button"
                 onClick={toggleCollapsed}
-                className="p-2 rounded-lg text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="hidden min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground md:flex"
                 aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                 title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
-                {collapsed ? (
-                  <PanelLeft className="h-5 w-5" />
-                ) : (
-                  <PanelLeftClose className="h-5 w-5" />
-                )}
+                {collapsed ? <PanelLeft className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
               </button>
-            )}
-          </div>
+            </div>
 
-          {/* Nav links - fixed, not scrollable */}
-          <nav className="flex-shrink-0 px-2 py-3 space-y-0.5">
-            {sidebarItems.map(({ href, label, icon: Icon }) => {
-              const isActive =
-                pathname === href ||
-                (href === "/home" && (pathname === "/" || pathname === "/home")) ||
-                (href === "/explore" && (pathname.startsWith("/explore") || pathname.startsWith("/people/"))) ||
-                (href === "/searches" && pathname.startsWith("/searches")) ||
-                (href === "/cards" && pathname.startsWith("/cards")) ||
-                (href === "/builder" && pathname.startsWith("/builder")) ||
-                (href === "/inbox" && pathname.startsWith("/inbox")) ||
-                (href === "/unlocked" && pathname.startsWith("/unlocked"));
+            {/* Nav links - fixed, not scrollable */}
+            <nav className="space-y-0.5 px-2 py-3 flex-shrink-0">
+              {sidebarItems.map(({ href, label, icon: Icon }) => {
+                const isActive =
+                  pathname === href ||
+                  (href === "/home" && (pathname === "/" || pathname === "/home")) ||
+                  (href === "/explore" && (pathname.startsWith("/explore") || pathname.startsWith("/people/"))) ||
+                  (href === "/searches" && pathname.startsWith("/searches")) ||
+                  (href === "/cards" && pathname.startsWith("/cards")) ||
+                  (href === "/builder" && pathname.startsWith("/builder")) ||
+                  (href === "/inbox" && pathname.startsWith("/inbox")) ||
+                  (href === "/unlocked" && pathname.startsWith("/unlocked"));
 
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => {
-                    if (href === "/builder") {
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => {
+                      if (href === "/builder") {
+                        void preloadVapiWeb().catch(() => {});
+                      }
+                      handleNavClick();
+                    }}
+                    onPointerEnter={() => {
+                      if (href !== "/builder") return;
                       void preloadVapiWeb().catch(() => {});
-                    }
-                    handleNavClick();
-                  }}
-                  onPointerEnter={() => {
-                    if (href !== "/builder") return;
-                    void preloadVapiWeb().catch(() => {});
-                  }}
-                  onFocus={() => {
-                    if (href !== "/builder") return;
-                    void preloadVapiWeb().catch(() => {});
-                  }}
-                  className={navLinkClass(isActive)}
-                  title={collapsed && !isMobile ? label : undefined}
-                >
-                  <Icon className="h-5 w-5 shrink-0" />
-                  {(!collapsed || isMobile) && <span>{label}</span>}
-                </Link>
-              );
-            })}
-          </nav>
+                    }}
+                    onFocus={() => {
+                      if (href !== "/builder") return;
+                      void preloadVapiWeb().catch(() => {});
+                    }}
+                    className={navLinkClass(isActive)}
+                    title={!showExpandedLabels ? label : undefined}
+                  >
+                    <Icon className="h-5 w-5 shrink-0" />
+                    {showExpandedLabels && <span>{label}</span>}
+                  </Link>
+                );
+              })}
+            </nav>
 
-          <div className="flex-1 min-h-0" />
+            <div className="min-h-0 flex-1" />
 
-          {/* Account + Settings at bottom */}
-          <div className="flex-shrink-0 border-t border-border/60 px-2 py-3 space-y-0.5">
-            <Link
-              href="/profile"
-              onClick={handleNavClick}
-              className={navLinkClass(pathname === "/profile" || pathname.startsWith("/profile"))}
-              title={accountName}
-              aria-label="Account"
-            >
-              {profilePhotoBlob ? (
-                <img
-                  src={profilePhotoBlob}
-                  alt={accountName}
-                  className="h-7 w-7 shrink-0 rounded-full object-cover bg-muted"
-                />
-              ) : (
-                <span className="h-7 w-7 shrink-0 rounded-full bg-muted text-foreground/80 flex items-center justify-center text-xs font-semibold">
-                  {accountInitial}
-                </span>
-              )}
-              {(!collapsed || isMobile) && <span className="truncate">{accountName}</span>}
-            </Link>
+            {/* Account + Settings at bottom */}
+            <div className="space-y-0.5 border-t border-border/60 px-2 py-3 flex-shrink-0">
+              <Link
+                href="/profile"
+                onClick={handleNavClick}
+                className={navLinkClass(pathname === "/profile" || pathname.startsWith("/profile"))}
+                title={accountName}
+                aria-label="Account"
+              >
+                {profilePhotoBlob ? (
+                  <img
+                    src={profilePhotoBlob}
+                    alt={accountName}
+                    className="h-7 w-7 shrink-0 rounded-full object-cover bg-muted"
+                  />
+                ) : (
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground/80">
+                    {accountInitial}
+                  </span>
+                )}
+                {showExpandedLabels && <span className="truncate">{accountName}</span>}
+              </Link>
 
-            <Link
-              href="/settings"
-              onClick={handleNavClick}
-              className={navLinkClass(pathname === "/settings" || pathname.startsWith("/settings"))}
-              title={collapsed && !isMobile ? "Settings" : undefined}
-            >
-              <Settings className="h-5 w-5 shrink-0" />
-              {(!collapsed || isMobile) && <span>Settings</span>}
-            </Link>
+              <Link
+                href="/settings"
+                onClick={handleNavClick}
+                className={navLinkClass(pathname === "/settings" || pathname.startsWith("/settings"))}
+                title={!showExpandedLabels ? "Settings" : undefined}
+              >
+                <Settings className="h-5 w-5 shrink-0" />
+                {showExpandedLabels && <span>Settings</span>}
+              </Link>
+            </div>
           </div>
         </div>
       </aside>
 
       {/* Top bar */}
       <header
-        className="sticky top-0 z-40 flex h-14 min-h-[44px] items-center border-b border-border/60 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
-        style={{ paddingLeft: sidebarWidth }}
+        className="sticky top-0 z-40 flex h-14 min-h-[44px] items-center border-b border-border/60 bg-background/95 pl-0 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:pl-[var(--sidebar-width)]"
+        style={{ ["--sidebar-width" as "--sidebar-width"]: sidebarWidthCss }}
       >
-        <div className="flex h-full w-full items-center justify-between px-3 sm:px-4 gap-2">
+        <div className="flex h-full w-full items-center justify-between gap-2 px-3 sm:px-4">
           <div className="flex items-center min-w-0">
-            {isMobile && (
-              <button
-                type="button"
-                onClick={toggleMobileSidebar}
-                className="p-2.5 rounded-lg text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                aria-label="Open menu"
-              >
-                <Menu className="h-5 w-5" />
-              </button>
-            )}
-            {isMobile && (
-              <Link
-                href="/home"
-                className="font-semibold text-sm text-foreground hover:text-foreground/90 transition-colors min-h-[44px] flex items-center ml-1"
-              >
-                CONXA
-              </Link>
-            )}
+            <button
+              type="button"
+              onClick={toggleMobileSidebar}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg p-2.5 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground md:hidden"
+              aria-label="Open menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <Link
+              href="/home"
+              className="ml-1 flex min-h-[44px] items-center text-sm font-semibold text-foreground transition-colors hover:text-foreground/90 md:hidden"
+            >
+              CONXA
+            </Link>
           </div>
           <div className="flex items-center min-h-[44px]">
             <CreditsBadge />

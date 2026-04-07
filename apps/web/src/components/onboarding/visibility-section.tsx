@@ -61,10 +61,10 @@ export function VisibilitySection({
       </div>
 
       {visibilityMode === "open_to_work" && (
-        <div className="mt-4 space-y-4 pl-5 border-l-2 border-primary/20">
+        <div className="mt-4 space-y-4 border-l-2 border-primary/20 pl-4 sm:pl-5">
           <div className="space-y-2">
             <Label>Preferred locations (cities in India)</Label>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <select
                 value={""}
                 onChange={(e) => {
@@ -74,7 +74,7 @@ export function VisibilitySection({
                   }
                 }}
                 className={cn(
-                  "rounded-lg border border-input/60 bg-background px-3 py-2 text-sm min-w-[160px]",
+                  "w-full rounded-lg border border-input/60 bg-background px-3 py-2 text-sm sm:min-w-[180px] sm:w-auto",
                   "focus:outline-none focus:ring-1 focus:ring-ring/30 transition-colors"
                 )}
               >
@@ -104,7 +104,7 @@ export function VisibilitySection({
                       onClick={() =>
                         onWorkPreferredLocationsChange(workPreferredLocations.filter((c) => c !== city))
                       }
-                      className="text-muted-foreground hover:text-foreground ml-0.5"
+                      className="ml-0.5 flex min-h-[24px] min-w-[24px] items-center justify-center text-muted-foreground hover:text-foreground"
                       aria-label={`Remove ${city}`}
                     >
                       {"x"}

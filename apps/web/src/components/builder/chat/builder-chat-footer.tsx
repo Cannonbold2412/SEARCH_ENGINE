@@ -42,7 +42,7 @@ export function BuilderChatFooter({
           {voiceError}
         </p>
       )}
-      <div className="flex items-end gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <textarea
           placeholder={voiceConnected ? "Voice active - or type here..." : "Type here..."}
           value={input}
@@ -62,7 +62,7 @@ export function BuilderChatFooter({
           size="icon"
           onClick={() => sendMessage()}
           disabled={!input.trim() || loading}
-          className="shrink-0 h-11 w-11"
+          className="h-11 w-full shrink-0 sm:w-11"
           aria-label="Send"
         >
           <Send className="h-4 w-4" />

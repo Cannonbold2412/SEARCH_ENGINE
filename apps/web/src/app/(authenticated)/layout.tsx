@@ -79,9 +79,10 @@ export default function AuthenticatedLayout({
 function AuthenticatedLayoutBody({ children, onboardingStep }: { children: ReactNode; onboardingStep: OnboardingStep | null }) {
   const { sidebarWidth } = useSidebarWidth();
   const inOnboarding = isOnboardingStep(onboardingStep);
+  const contentOffset = inOnboarding ? "0px" : `${sidebarWidth}px`;
 
   return (
-    <div className="overflow-x-hidden">
+    <div className="min-h-app-screen overflow-x-clip">
       <CardsRouteWarmup />
       {!inOnboarding && (
         <Suspense fallback={null}>
@@ -89,18 +90,18 @@ function AuthenticatedLayoutBody({ children, onboardingStep }: { children: React
         </Suspense>
       )}
       <div
-        style={{ paddingLeft: inOnboarding ? 0 : sidebarWidth }}
+        style={{ ["--content-offset" as "--content-offset"]: contentOffset }}
         className={
           inOnboarding
-            ? "min-w-0 overflow-x-hidden h-screen"
-            : "min-w-0 overflow-x-hidden h-[calc(100vh-3.5rem)]"
+            ? "min-w-0 min-h-app-screen"
+            : "min-w-0 h-app-shell max-h-app-shell pl-0 md:pl-[var(--content-offset)]"
         }
       >
         <main
           className={
             inOnboarding
-              ? "mx-auto px-3 sm:px-4 py-4 sm:py-6 h-full max-w-full overflow-x-hidden overflow-y-auto scrollbar-theme flex items-center justify-center"
-              : "container mx-auto px-3 sm:px-4 py-4 sm:py-6 h-full max-w-full overflow-x-hidden overflow-y-auto scrollbar-theme"
+              ? "mx-auto flex h-full max-w-full items-start justify-center overflow-y-auto overflow-x-clip px-3 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:items-center sm:px-4 sm:py-6 scrollbar-theme"
+              : "container mx-auto h-full max-w-full overflow-y-auto overflow-x-clip px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4 sm:py-6 scrollbar-theme"
           }
         >
           {children}

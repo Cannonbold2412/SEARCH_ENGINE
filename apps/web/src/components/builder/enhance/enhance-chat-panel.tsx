@@ -59,7 +59,7 @@ export function EnhanceChatPanel({
 
   return (
     <div className="relative flex flex-col h-full min-h-0 rounded-xl border border-border/60 bg-card overflow-hidden">
-      <div className="flex-shrink-0 px-4 py-3 border-b border-border/60">
+      <div className="flex-shrink-0 border-b border-border/60 px-3 py-3 sm:px-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-foreground">{title}</h2>
@@ -84,7 +84,7 @@ export function EnhanceChatPanel({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scrollbar-thin scrollbar-theme">
+      <div className="flex-1 min-h-0 space-y-4 overflow-y-auto p-3 scrollbar-thin scrollbar-theme sm:p-4">
         <AnimatePresence initial={false}>
           {messages.map((msg) => (
             <motion.div
@@ -119,7 +119,7 @@ export function EnhanceChatPanel({
       </div>
 
       {onVoiceToggle && !voiceDisabled && (
-        <div className="pointer-events-none absolute bottom-10 right-3 z-20 overflow-visible">
+        <div className="pointer-events-none absolute bottom-16 right-3 z-20 overflow-visible sm:bottom-10">
           <AiSphere
             intensity={voiceSphereIntensity}
             active={voiceSphereActive}
@@ -130,8 +130,8 @@ export function EnhanceChatPanel({
         </div>
       )}
 
-      <div className="flex flex-col gap-1.5 px-3 py-2 border-t border-border/60 flex-shrink-0">
-        <div className="flex items-end gap-2">
+      <div className="flex flex-col gap-1.5 border-t border-border/60 px-3 py-2 flex-shrink-0">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <textarea
             placeholder={placeholder}
             value={input}
@@ -151,7 +151,7 @@ export function EnhanceChatPanel({
             size="icon"
             onClick={() => void handleSend()}
             disabled={!input.trim() || disabled || isSending}
-            className="shrink-0 h-11 w-11"
+            className="h-11 w-full shrink-0 sm:w-11"
             aria-label="Send"
           >
             <Send className="h-4 w-4" />

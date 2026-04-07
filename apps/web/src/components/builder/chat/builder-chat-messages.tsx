@@ -32,7 +32,7 @@ function ScrollToBottomButton({ scrollRef }: { scrollRef: RefObject<HTMLDivEleme
     <button
       type="button"
       onClick={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
-      className="absolute bottom-24 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 rounded-full bg-background/90 border border-border/60 shadow-md px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      className="absolute bottom-28 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border/60 bg-background/90 px-3 py-1.5 text-xs text-muted-foreground shadow-md transition-colors hover:text-foreground sm:bottom-24"
       aria-label="Scroll to bottom"
     >
       <ArrowDown className="h-3 w-3" />
@@ -50,7 +50,7 @@ type BuilderChatMessagesProps = {
 
 export function BuilderChatMessages({ messages, loading, commitStatus, scrollRef }: BuilderChatMessagesProps) {
   return (
-    <div className="relative flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scrollbar-thin scrollbar-theme">
+    <div className="relative flex-1 min-h-0 space-y-4 overflow-y-auto p-3 scrollbar-thin scrollbar-theme sm:p-4">
       <AnimatePresence initial={false}>
         {messages.map((msg) => (
           <motion.div

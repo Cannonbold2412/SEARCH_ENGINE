@@ -165,13 +165,13 @@ function SearchesPageContent() {
 
   return (
     <main
-      className="min-w-0 min-h-[calc(100vh-3.5rem)] flex flex-col md:flex-row"
+      className="flex h-full min-h-0 min-w-0 flex-col md:flex-row"
       role="application"
       aria-label="Your searches"
     >
       <aside
         className={cn(
-          "flex-shrink-0 border-r border-border/60 bg-background flex flex-col min-h-0",
+          "flex h-full min-h-0 flex-shrink-0 flex-col border-r border-border/60 bg-background",
           "w-full md:w-52 lg:w-60",
           !showMobileList && "hidden md:flex"
         )}
@@ -198,7 +198,7 @@ function SearchesPageContent() {
               </Link>
             </div>
           ) : (
-            <ul className="space-y-0.5 px-2" role="list">
+          <ul className="space-y-0.5 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:pb-2" role="list">
               {searches.map((search) => {
                 const isActive = selectedSearchId === search.id;
                 const isConfirming = confirmDeleteId === search.id;
@@ -234,8 +234,8 @@ function SearchesPageContent() {
                           className={cn(
                             "h-8 w-8 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-all",
                             isConfirming
-                              ? "text-destructive bg-destructive/10"
-                              : "text-muted-foreground hover:text-destructive opacity-0 group-hover/item:opacity-100 focus:opacity-100"
+                              ? "bg-destructive/10 text-destructive"
+                              : "text-muted-foreground opacity-100 hover:text-destructive md:opacity-0 md:group-hover/item:opacity-100 md:focus:opacity-100"
                           )}
                           aria-label={isConfirming ? "Confirm delete" : "Delete search"}
                           title={isConfirming ? "Click again to confirm" : "Delete search"}
@@ -254,7 +254,7 @@ function SearchesPageContent() {
       </aside>
 
       <div
-        className={cn("flex-1 flex flex-col min-w-0 min-h-0", showMobileList && "hidden md:flex")}
+        className={cn("flex flex-1 min-h-0 min-w-0 flex-col", showMobileList && "hidden md:flex")}
       >
         <AnimatePresence mode="wait">
           {!selectedSearchId || searches.length === 0 ? (
@@ -286,7 +286,7 @@ function SearchesPageContent() {
               transition={{ duration: 0.15 }}
               className="flex-1 overflow-y-auto"
             >
-              <div className="sticky top-0 z-10 flex-shrink-0 border-b border-border/60 bg-background/95 backdrop-blur py-3 px-4 sm:px-6">
+              <div className="sticky top-0 z-10 flex-shrink-0 border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -307,7 +307,7 @@ function SearchesPageContent() {
                 </div>
               </div>
 
-              <div className="container max-w-5xl mx-auto px-4 sm:px-6 py-6">
+              <div className="container mx-auto max-w-5xl px-3 py-4 sm:px-6 sm:py-6">
                 {isLoadingResults ? (
                   <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {Array.from({ length: 6 }).map((_, i) => (

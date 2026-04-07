@@ -6,12 +6,12 @@ import { ArrowRight } from "lucide-react";
 
 export default function CTASection() {
   return (
-    <section className="py-24 px-6">
+    <section className="px-4 py-16 sm:px-6 sm:py-24">
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        className="container mx-auto max-w-3xl glass-card rounded-3xl p-12 sm:p-16 text-center relative overflow-hidden"
+        className="container relative mx-auto max-w-3xl overflow-hidden rounded-3xl glass-card p-6 text-center sm:p-12 lg:p-16"
       >
         <div
           className="absolute inset-0 pointer-events-none animate-glow-pulse"
@@ -20,7 +20,7 @@ export default function CTASection() {
           }}
         />
 
-        <h2 className="font-display text-3xl sm:text-5xl font-bold mb-6 relative z-10">
+        <h2 className="relative z-10 mb-6 font-display text-3xl font-bold sm:text-5xl">
           Start building your
           <br />
           <span className="gradient-text">searchable profile.</span>

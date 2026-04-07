@@ -109,7 +109,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
     <div className="relative flex flex-col h-full min-h-0 rounded-xl border border-border/60 bg-card overflow-hidden">
       <BuilderChatMessages messages={messages} loading={loading} commitStatus={commitStatus} scrollRef={scrollRef} />
 
-      <div className="pointer-events-none absolute bottom-10 right-3 z-20 overflow-visible">
+      <div className="pointer-events-none absolute bottom-16 right-3 z-20 overflow-visible sm:bottom-10">
         <AiSphere
           intensity={sphereIntensity}
           active={sphereActive}

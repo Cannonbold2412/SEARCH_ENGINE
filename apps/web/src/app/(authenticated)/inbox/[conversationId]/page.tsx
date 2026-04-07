@@ -7,10 +7,6 @@ import {
   ArrowLeft,
   MessageCircle,
   Send,
-  MoreVertical,
-  Phone,
-  Video,
-  Info,
   Paperclip,
   Smile,
   Loader2,
@@ -24,8 +20,7 @@ import type { ConversationDetail, MessageItem } from "@/lib/types";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { PageLoading, PageError } from "@/components/feedback";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui";
+import { PageError } from "@/components/feedback";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui";
 import {
   type MessageStatus,
@@ -179,7 +174,7 @@ export default function ConversationPage() {
 
   if (conversationQuery.isLoading) {
     return (
-      <div className="max-w-3xl mx-auto h-[calc(100vh-6rem)] flex flex-col">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col">
         <Card className="flex flex-col h-full border-none bg-card/90">
           <CardHeader className="flex flex-row items-center gap-3 px-4 py-3 border-b border-border/20">
             <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
@@ -264,11 +259,11 @@ export default function ConversationPage() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-        className="max-w-3xl mx-auto h-[calc(100vh-6rem)] flex flex-col"
+        className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col"
       >
         <Card className="flex flex-col h-full shadow-sm border border-zinc-700/60 overflow-hidden bg-gradient-to-b from-background/80 to-background/60">
           {/* Header */}
-          <CardHeader className="flex flex-row items-center gap-3 px-4 py-3 border-b border-zinc-700/60 bg-gradient-to-r from-background/80 to-background/60 shrink-0">
+          <CardHeader className="flex flex-row items-center gap-3 border-b border-zinc-700/60 bg-gradient-to-r from-background/80 to-background/60 px-3 py-3 shrink-0 sm:px-4">
             <Link
               href="/inbox"
               className="inline-flex items-center justify-center h-9 w-9 -ml-1 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
@@ -460,9 +455,9 @@ export default function ConversationPage() {
           </CardContent>
 
           {/* Input area */}
-          <div className="border-t border-zinc-700/60 bg-gradient-to-r from-background/80 to-background/60 p-3 sm:p-4 shrink-0">
-            <div className="relative flex items-center gap-2">
-              <div className="flex items-center gap-1 rounded-2xl bg-zinc-900/70 border border-zinc-700/70 px-2.5 py-1.5 flex-1">
+          <div className="shrink-0 border-t border-zinc-700/60 bg-gradient-to-r from-background/80 to-background/60 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4">
+            <div className="relative flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="flex flex-1 items-center gap-1 rounded-2xl border border-zinc-700/70 bg-zinc-900/70 px-2.5 py-1.5">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -510,13 +505,13 @@ export default function ConversationPage() {
                   }}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  className="flex-1 min-h-[36px] max-h-[120px] resize-none border-0 bg-transparent px-2 py-2 text-sm leading-snug focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-0 placeholder:text-muted-foreground/70 scrollbar-thin"
+                  className="flex-1 min-h-[36px] max-h-[120px] resize-none border-0 bg-transparent px-2 py-2 text-sm leading-snug placeholder:text-muted-foreground/70 scrollbar-thin focus-visible:border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
               </div>
 
               {/* Simple emoji picker popover */}
               {showEmojiPicker && (
-                <div className="absolute -top-2 left-2 right-16 mb-2 translate-y-[-100%] z-20 rounded-xl border border-zinc-700 bg-background/95 shadow-lg p-2 flex flex-wrap gap-1 max-w-[260px]">
+                <div className="absolute bottom-full left-2 right-2 z-20 mb-2 flex max-w-[260px] flex-wrap gap-1 rounded-xl border border-zinc-700 bg-background/95 p-2 shadow-lg sm:right-16">
                   {["😀", "😁", "😂", "😊", "😍", "🤔", "🙏", "🎉", "👍", "❤️"].map(
                     (emoji) => (
                       <button
@@ -539,7 +534,7 @@ export default function ConversationPage() {
                     onClick={handleSend}
                     disabled={sendMessageMutation.isPending || !messageText.trim()}
                     className={cn(
-                      "shrink-0 h-10 w-10 rounded-full transition-all duration-200",
+                      "h-10 w-full rounded-full transition-all duration-200 sm:w-10 shrink-0",
                       messageText.trim()
                         ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
                         : "bg-muted text-muted-foreground"
