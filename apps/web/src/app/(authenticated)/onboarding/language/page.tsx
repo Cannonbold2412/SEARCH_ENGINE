@@ -75,13 +75,11 @@ export default function OnboardingLanguagePage() {
             </div>
           )}
 
-          <div className="h-80">
-            <LanguageWheelPicker
-              value={currentLanguage}
-              onChange={setSelectedLanguage}
-              disabled={patchLanguage.isPending}
-            />
-          </div>
+          <LanguageWheelPicker
+            value={currentLanguage}
+            onChange={setSelectedLanguage}
+            disabled={patchLanguage.isPending}
+          />
 
           <div className="mt-6 text-center">
             <p className="text-sm text-muted-foreground mb-4">

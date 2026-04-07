@@ -100,9 +100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
+      const normEmail = email.trim().toLowerCase();
       const { access_token } = await api<{ access_token: string }>("/auth/login", {
         method: "POST",
-        body: { email, password },
+        body: { email: normEmail, password },
       });
       const pendingStep = readPendingOnboardingStep();
       startSession(access_token, pendingStep ?? null);
@@ -114,10 +115,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = useCallback(
     async (payload: { email: string; password: string; displayName?: string }) => {
+      const normEmail = payload.email.trim().toLowerCase();
       const res = await api<{ access_token?: string | null; email_verification_required: boolean }>("/auth/signup", {
         method: "POST",
         body: {
-          email: payload.email,
+          email: normEmail,
           password: payload.password,
           display_name: payload.displayName ?? null,
         },

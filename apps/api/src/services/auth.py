@@ -37,12 +37,19 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-async def _send_verification_email(db: AsyncSession, person: Person) -> None:
+async def _send_verification_email(db: AsyncSession, person: Person) -> bool:
+    """
+    Generate and send a verification email to the person.
+
+    Returns True if email was sent successfully, False otherwise.
+    The verification token is kept in the database even if sending fails,
+    so that resend can be attempted later.
+    """
     try:
         provider = get_email_provider()
     except EmailConfigError:
         logger.info("Email verification skipped; SendGrid not configured.")
-        return
+        return False
 
     settings = get_settings()
     token = str(secrets.randbelow(1_000_000)).zfill(6)
@@ -63,10 +70,11 @@ async def _send_verification_email(db: AsyncSession, person: Person) -> None:
 
     try:
         await provider.send_email(person.email, "Verify your email", text)
+        return True
     except EmailServiceError:
-        person.email_verification_token_hash = None
-        person.email_verification_expires_at = None
+        # Keep the token in DB so resend can be attempted
         logger.warning("Failed to send verification email for person %s", person.id)
+        return False
 
 
 async def signup(db: AsyncSession, body: SignupRequest) -> SignupResponse:
@@ -173,11 +181,12 @@ async def resend_verification_email(
     result = await db.execute(select(Person).where(func.lower(Person.email) == email))
     person = result.scalar_one_or_none()
 
+    # Don't reveal whether the email exists for security reasons
     if not person or person.email_verified_at:
         return ResendVerificationResponse(sent=True)
 
-    await _send_verification_email(db, person)
-    return ResendVerificationResponse(sent=True)
+    sent = await _send_verification_email(db, person)
+    return ResendVerificationResponse(sent=sent)
 
 
 class AuthService:

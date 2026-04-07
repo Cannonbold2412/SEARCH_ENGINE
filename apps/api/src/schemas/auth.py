@@ -40,15 +40,23 @@ class VerifyEmailRequest(BaseModel):
     email: EmailStr
     token: str
 
+    @field_validator("token", mode="before")
+    @classmethod
+    def coerce_token(cls, value: object) -> str:
+        if value is None:
+            return ""
+        s = str(value).strip()
+        # Match web: allow pasted codes with spaces (e.g. "123 456")
+        return re.sub(r"\s+", "", s)
+
     @field_validator("token")
     @classmethod
     def validate_token(cls, value: str) -> str:
-        trimmed = (value or "").strip()
-        if not trimmed:
+        if not value:
             raise ValueError("Verification code is required")
-        if not re.match(r"^\d{6}$", trimmed):
+        if not re.match(r"^\d{6}$", value):
             raise ValueError("Verification code must be exactly 6 digits")
-        return trimmed
+        return value
 
 
 class VerifyEmailResponse(BaseModel):

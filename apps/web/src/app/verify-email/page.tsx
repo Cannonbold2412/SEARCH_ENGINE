@@ -50,24 +50,29 @@ function VerifyEmailPageContent() {
     formState: { errors },
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
-  const verify = useCallback(async (email: string, token: string) => {
+  const verify = useCallback(async (email: string, token: string, source: "auto" | "form" = "form") => {
     const trimmedToken = token.trim().replace(/\s/g, "");
     if (trimmedToken.length !== 6 || !/^\d{6}$/.test(trimmedToken)) {
       setError("Enter the 6-digit code from your email");
       return;
     }
+    const normEmail = email.trim().toLowerCase();
     setError(null);
     setSuccess(null);
     setIsVerifying(true);
     try {
       await api("/auth/verify-email", {
         method: "POST",
-        body: { email: email.trim().toLowerCase(), token: trimmedToken },
+        body: { email: normEmail, token: trimmedToken },
       });
-      router.replace(`/login?email=${encodeURIComponent(email)}`);
+      router.replace(`/login?email=${encodeURIComponent(normEmail)}`);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Verification failed";
-      setError(message);
+      const verifyHint =
+        message === "Invalid or expired verification code"
+          ? "Verification failed for this email. Check it matches the account you created, or request a new code below."
+          : message;
+      setError(verifyHint);
     } finally {
       setIsVerifying(false);
     }
@@ -78,7 +83,9 @@ function VerifyEmailPageContent() {
   };
 
   const onResend = async () => {
-    const email = getValues("email")?.trim().toLowerCase();
+    const fromForm = getValues("email");
+    const fromQuery = searchParams.get("email");
+    const email = (fromForm ?? fromQuery ?? "").trim().toLowerCase();
     if (!email) {
       setError("Enter your email to resend the verification email.");
       return;
@@ -87,8 +94,12 @@ function VerifyEmailPageContent() {
     setSuccess(null);
     setIsResending(true);
     try {
-      await api("/auth/verify-email/resend", { method: "POST", body: { email } });
-      setSuccess("Verification email sent. Check your inbox and spam folder.");
+      const result = await api<{ sent: boolean }>("/auth/verify-email/resend", { method: "POST", body: { email } });
+      if (result.sent) {
+        setSuccess("Verification email sent. Check your inbox and spam folder.");
+      } else {
+        setError("Unable to send verification email. Please try again later.");
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to resend verification email";
       setError(message);
@@ -109,7 +120,7 @@ function VerifyEmailPageContent() {
     const token = searchParams.get("token");
     if (!email || !token || autoAttempted.current) return;
     autoAttempted.current = true;
-    void verify(email, token);
+    void verify(email, token, "auto");
   }, [searchParams, verify]);
 
   return (

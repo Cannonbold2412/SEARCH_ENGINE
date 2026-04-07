@@ -17,7 +17,10 @@ import { AuthLayout } from "@/components/auth";
 import { LoadingScreen, ErrorMessage } from "@/components/feedback";
 
 const schema = z.object({
-  email: z.string().email("Invalid email"),
+  email: z
+    .string()
+    .email("Invalid email")
+    .transform((s) => s.trim().toLowerCase()),
   password: z.string().min(1, "Password required"),
 });
 

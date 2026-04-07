@@ -22,12 +22,15 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession]:
-    """Yield an async DB session; commit only when changes were made, rollback on error."""
+    """Yield an async DB session; commit on success, rollback on error."""
     async with async_session() as session:
         try:
             yield session
-            if session.dirty or session.new or session.deleted:
-                await session.commit()
+            # Always commit after a successful request. Relying on dirty/new/deleted is
+            # unsafe: after flush() those flags are often cleared while the transaction
+            # is still open (e.g. signup verification token), which would skip commit and
+            # roll back all work.
+            await session.commit()
         except Exception:
             await session.rollback()
             raise

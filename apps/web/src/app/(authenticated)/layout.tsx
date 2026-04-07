@@ -4,7 +4,7 @@ import { Suspense, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
-import { getPostAuthPath, isPathAllowedForStep } from "@/lib/auth-flow";
+import { getPostAuthPath, isPathAllowedForStep, type OnboardingStep } from "@/lib/auth-flow";
 import { SearchProvider } from "@/contexts/search-context";
 import { AppNav } from "@/components/navigation";
 import { SidebarWidthProvider, useSidebarWidth } from "@/contexts/sidebar-width-context";
@@ -15,6 +15,11 @@ import { preloadVapiWeb } from "@/lib/vapi-client";
 import type { SavedCardFamily } from "@/lib/types";
 
 import type { ReactNode } from "react";
+
+/** Check if current step is an onboarding step that should hide the sidebar. */
+function isOnboardingStep(step: OnboardingStep | null): boolean {
+  return step === "bio" || step === "language";
+}
 
 const CARD_FAMILIES_STALE_MS = 2 * 60 * 1000;
 
@@ -65,26 +70,39 @@ export default function AuthenticatedLayout({
   return (
     <SearchProvider>
       <SidebarWidthProvider>
-        <AuthenticatedLayoutBody>{children}</AuthenticatedLayoutBody>
+        <AuthenticatedLayoutBody onboardingStep={onboardingStep}>{children}</AuthenticatedLayoutBody>
       </SidebarWidthProvider>
     </SearchProvider>
   );
 }
 
-function AuthenticatedLayoutBody({ children }: { children: ReactNode }) {
+function AuthenticatedLayoutBody({ children, onboardingStep }: { children: ReactNode; onboardingStep: OnboardingStep | null }) {
   const { sidebarWidth } = useSidebarWidth();
+  const inOnboarding = isOnboardingStep(onboardingStep);
 
   return (
     <div className="overflow-x-hidden">
       <CardsRouteWarmup />
-      <Suspense fallback={null}>
-        <AppNav />
-      </Suspense>
+      {!inOnboarding && (
+        <Suspense fallback={null}>
+          <AppNav />
+        </Suspense>
+      )}
       <div
-        style={{ paddingLeft: sidebarWidth }}
-        className="min-w-0 overflow-x-hidden h-[calc(100vh-3.5rem)]"
+        style={{ paddingLeft: inOnboarding ? 0 : sidebarWidth }}
+        className={
+          inOnboarding
+            ? "min-w-0 overflow-x-hidden h-screen"
+            : "min-w-0 overflow-x-hidden h-[calc(100vh-3.5rem)]"
+        }
       >
-        <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 h-full max-w-full overflow-x-hidden overflow-y-auto scrollbar-theme">
+        <main
+          className={
+            inOnboarding
+              ? "mx-auto px-3 sm:px-4 py-4 sm:py-6 h-full max-w-full overflow-x-hidden overflow-y-auto scrollbar-theme flex items-center justify-center"
+              : "container mx-auto px-3 sm:px-4 py-4 sm:py-6 h-full max-w-full overflow-x-hidden overflow-y-auto scrollbar-theme"
+          }
+        >
           {children}
         </main>
       </div>
