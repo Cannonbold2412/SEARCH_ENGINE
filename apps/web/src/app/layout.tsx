@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers";
 import { AuthProvider } from "@/contexts/auth-context";
@@ -68,6 +69,10 @@ export default function RootLayout({
         <style>{`:root { --font-clash: 'Clash Display', system-ui, sans-serif; --font-satoshi: 'Satoshi', system-ui, sans-serif; }`}</style>
       </head>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans bg-background text-foreground antialiased`}>
+        <Script
+          src="https://t.contentsquare.net/uxa/42015009e5407.js"
+          strategy="afterInteractive"
+        />
         <QueryProvider>
           <AuthProvider>
             <LanguageProvider>{children}</LanguageProvider>
