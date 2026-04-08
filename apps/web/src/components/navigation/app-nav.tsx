@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, type CSSProperties } from "react";
 import { usePathname } from "next/navigation";
 import { LockOpen, Settings, Compass, LayoutGrid, Hammer, Globe, PanelLeftClose, PanelLeft, Menu, MessageSquare, Search } from "lucide-react";
 import { useSidebarWidth, MOBILE_DRAWER_WIDTH } from "@/contexts/sidebar-width-context";
@@ -79,7 +79,7 @@ export function AppNav() {
           "fixed inset-y-0 left-0 z-50 min-w-0 flex-shrink-0 overflow-x-clip border-r border-border/60 bg-background transition-[transform,width] duration-200 ease-out md:translate-x-0",
           mobileSidebarOpen ? "translate-x-0 shadow-xl md:shadow-none" : "-translate-x-full md:shadow-none"
         )}
-        style={{ ["--sidebar-width" as "--sidebar-width"]: sidebarWidthCss }}
+        style={{ "--sidebar-width": sidebarWidthCss } as CSSProperties}
         aria-label="Main navigation"
       >
         <div className="h-full w-[260px] md:w-[var(--sidebar-width)]">
@@ -205,7 +205,7 @@ export function AppNav() {
       {/* Top bar */}
       <header
         className="sticky top-0 z-40 flex h-14 min-h-[44px] items-center border-b border-border/60 bg-background/95 pl-0 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:pl-[var(--sidebar-width)]"
-        style={{ ["--sidebar-width" as "--sidebar-width"]: sidebarWidthCss }}
+        style={{ "--sidebar-width": sidebarWidthCss } as CSSProperties}
       >
         <div className="flex h-full w-full items-center justify-between gap-2 px-3 sm:px-4">
           <div className="flex items-center min-w-0">

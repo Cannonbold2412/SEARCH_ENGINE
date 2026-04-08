@@ -14,7 +14,7 @@ import { api } from "@/lib/api";
 import { preloadVapiWeb } from "@/lib/vapi-client";
 import type { SavedCardFamily } from "@/lib/types";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 /** Check if current step is an onboarding step that should hide the sidebar. */
 function isOnboardingStep(step: OnboardingStep | null): boolean {
@@ -90,7 +90,7 @@ function AuthenticatedLayoutBody({ children, onboardingStep }: { children: React
         </Suspense>
       )}
       <div
-        style={{ ["--content-offset" as "--content-offset"]: contentOffset }}
+        style={{ "--content-offset": contentOffset } as CSSProperties}
         className={
           inOnboarding
             ? "min-w-0 min-h-app-screen"
