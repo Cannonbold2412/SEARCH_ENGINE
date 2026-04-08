@@ -8,7 +8,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Search, Trash2, Users, ChevronLeft } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import type { SavedSearchesResponse, PersonSearchResult } from "@/lib/types";
 import { PageError, PageLoading } from "@/components/feedback";
 import { PersonResultCard } from "@/components/search/person-result-card";
@@ -16,11 +15,6 @@ import { useLanguage } from "@/contexts/language-context";
 
 const MAX_STORED_RESULTS = 24;
 const EMPTY_SEARCHES: SavedSearchesResponse["searches"] = [];
-
-function truncateQuery(text: string, maxLen = 44): string {
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen).trim() + "...";
-}
 
 function formatSearchDate(value: string): string {
   const date = new Date(value);
@@ -164,60 +158,61 @@ function SearchesPageContent() {
   const showMobileList = !selectedSearchId || searches.length === 0;
 
   return (
-    <main
+    <div
       className="flex h-full min-h-0 min-w-0 flex-col md:flex-row"
       role="application"
       aria-label="Your searches"
     >
       <aside
         className={cn(
-          "flex h-full min-h-0 flex-shrink-0 flex-col border-r border-border/60 bg-background",
-          "w-full md:w-52 lg:w-60",
+          "flex h-full min-h-0 flex-shrink-0 flex-col border-border/60 bg-background",
+          "w-full border-b md:w-52 md:border-b-0 md:border-r lg:w-60",
           !showMobileList && "hidden md:flex"
         )}
         aria-label="Saved searches"
       >
-        <div className="flex-shrink-0 px-4 py-3 border-b border-border/60">
+        <div className="flex-shrink-0 border-b border-border/60 px-3 py-3 sm:px-4">
           <h2 className="text-sm font-semibold text-foreground">Your Searches</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {searches.length === 0 ? "No searches yet" : `${searches.length} ${searches.length === 1 ? "search" : "searches"}`}
           </p>
         </div>
-        <div className="flex-1 overflow-y-auto py-2">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain py-2 [-webkit-overflow-scrolling:touch]">
           {searches.length === 0 ? (
-            <div className="px-4 py-8 text-center">
+            <div className="px-3 py-8 text-center sm:px-4">
               <p className="text-sm text-muted-foreground">
                 Searches you run from Home appear here so you can revisit results.
               </p>
               <Link
                 href="/home"
-                className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                className="mt-4 inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-lg text-sm font-medium text-primary hover:underline"
               >
                 <Search className="h-4 w-4" />
                 Run your first search
               </Link>
             </div>
           ) : (
-          <ul className="space-y-0.5 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:pb-2" role="list">
+          <ul className="space-y-0.5 px-1.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-2 md:pb-2" role="list">
               {searches.map((search) => {
                 const isActive = selectedSearchId === search.id;
                 const isConfirming = confirmDeleteId === search.id;
                 return (
                   <li key={search.id}>
-                    <div className={cn("flex items-stretch rounded-lg group/item", isActive && "bg-accent")}>
+                    <div className={cn("flex items-stretch rounded-lg group/item touch-manipulation", isActive && "bg-accent")}>
                       <Link
                         href={`/searches?id=${encodeURIComponent(search.id)}`}
                         title={search.query_text}
                         className={cn(
-                          "flex-1 min-w-0 flex flex-col gap-0.5 px-3 py-2.5 rounded-l-lg text-left transition-colors",
-                          "min-h-[52px] justify-center",
+                          "flex min-h-[52px] flex-1 flex-col justify-center gap-0.5 rounded-l-lg px-3 py-2.5 text-left transition-colors",
                           isActive
                             ? "bg-accent text-foreground"
                             : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                         )}
                         aria-current={isActive ? "true" : undefined}
                       >
-                        <span className="truncate text-sm font-medium">{truncateQuery(search.query_text)}</span>
+                        <span className="line-clamp-2 text-sm font-medium leading-snug break-words md:line-clamp-1 md:break-normal">
+                          {search.query_text}
+                        </span>
                         <span className="text-xs text-muted-foreground">
                           {search.result_count} {search.result_count === 1 ? "result" : "results"} ·{" "}
                           {formatSearchDate(search.created_at)}
@@ -254,7 +249,7 @@ function SearchesPageContent() {
       </aside>
 
       <div
-        className={cn("flex flex-1 min-h-0 min-w-0 flex-col", showMobileList && "hidden md:flex")}
+        className={cn("flex min-h-0 min-w-0 flex-1 flex-col", showMobileList && "hidden md:flex")}
       >
         <AnimatePresence mode="wait">
           {!selectedSearchId || searches.length === 0 ? (
@@ -263,16 +258,19 @@ function SearchesPageContent() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex-1 flex items-center justify-center p-8"
+              className="flex flex-1 items-center justify-center p-6 sm:p-8"
             >
-              <div className="text-center max-w-sm">
-                <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-4">
+              <div className="max-w-sm text-center">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
                   <Users className="h-6 w-6 text-muted-foreground" />
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Select a search from the list to view its results.
                 </p>
-                <Link href="/home" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">
+                <Link
+                  href="/home"
+                  className="mt-4 inline-flex min-h-[44px] items-center justify-center text-sm font-medium text-primary hover:underline"
+                >
                   Go to Home
                 </Link>
               </div>
@@ -284,30 +282,34 @@ function SearchesPageContent() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
-              className="flex-1 overflow-y-auto"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
             >
-              <div className="sticky top-0 z-10 flex-shrink-0 border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
-                <div className="flex items-center gap-2">
+              <div className="sticky top-0 z-10 flex shrink-0 items-center border-b border-border/60 bg-background/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6">
+                <div className="flex w-full min-w-0 items-start gap-2">
                   <button
                     type="button"
                     onClick={() => router.push("/searches")}
-                    className="md:hidden p-1 -ml-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+                    className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground md:hidden"
                     aria-label="Back to search list"
                   >
-                    <ChevronLeft className="h-5 w-5" />
+                    <ChevronLeft className="h-6 w-6" />
                   </button>
-                  <div className="min-w-0">
-                    <p className="text-sm text-foreground font-medium truncate" title={selectedSearch?.query_text}>
+                  <div className="min-w-0 flex-1 pt-0.5">
+                    <p
+                      className="line-clamp-2 break-words text-sm font-medium text-foreground md:line-clamp-1 md:break-normal"
+                      title={selectedSearch?.query_text}
+                    >
                       {selectedSearch?.query_text ?? "Search results"}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       {isLoadingResults ? "Loading..." : `${people.length} of ${selectedSearch?.result_count ?? 0} profiles`}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="container mx-auto max-w-5xl px-3 py-4 sm:px-6 sm:py-6">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-[calc(1rem+env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]">
+                <div className="mx-auto w-full max-w-5xl px-2 py-4 sm:px-4 sm:py-6">
                 {isLoadingResults ? (
                   <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {Array.from({ length: 6 }).map((_, i) => (
@@ -315,17 +317,20 @@ function SearchesPageContent() {
                     ))}
                   </ul>
                 ) : people.length === 0 ? (
-                  <div className="py-16 text-center">
-                    <Users className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+                  <div className="py-12 text-center sm:py-16">
+                    <Users className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
                     <p className="text-sm font-medium text-foreground">
                       {selectedSearch?.expired ? "This search has expired" : "No profiles in this search"}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {selectedSearch?.expired
                         ? "Results expire after a period of inactivity."
                         : "Run a new search from Home to find people."}
                     </p>
-                    <Link href="/home" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">
+                    <Link
+                      href="/home"
+                      className="mt-4 inline-flex min-h-[44px] items-center justify-center text-sm font-medium text-primary hover:underline"
+                    >
                       Go to Home
                     </Link>
                   </div>
@@ -336,11 +341,12 @@ function SearchesPageContent() {
                     ))}
                   </ul>
                 )}
+                </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-    </main>
+    </div>
   );
 }
