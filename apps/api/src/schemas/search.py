@@ -1,0 +1,230 @@
+from decimal import Decimal
+from typing import Any
+
+from pydantic import BaseModel, field_serializer, model_validator
+
+from src.schemas.bio import BioResponse
+from src.schemas.builder import CardFamilyResponse, ExperienceCardResponse
+from src.schemas.contact import ContactDetailsResponse
+
+
+def _list(d: dict, key: str) -> list:
+    v = d.get(key)
+    if v is None:
+        return []
+    return list(v) if isinstance(v, (list, tuple)) else []
+
+
+# ---------------------------------------------------------------------------
+# Search.parsed_constraints_json shape (single extraction -> execute on columns + person_profiles)
+# ---------------------------------------------------------------------------
+
+
+class ParsedConstraintsMust(BaseModel):
+    company_norm: list[str] = []
+    team_norm: list[str] = []
+    intent_primary: list[str] = []
+    domain: list[str] = []
+    sub_domain: list[str] = []
+    employment_type: list[str] = []
+    seniority_level: list[str] = []
+    location_text: str | None = None
+    city: str | None = None
+    country: str | None = None
+    time_start: str | None = None
+    time_end: str | None = None
+    is_current: bool | None = None
+    open_to_work_only: bool | None = None
+    offer_salary_inr_per_year: float | None = None
+
+
+class ParsedConstraintsShould(BaseModel):
+    skills_or_tools: list[str] = []
+    keywords: list[str] = []
+    intent_secondary: list[str] = []
+
+
+class ParsedConstraintsExclude(BaseModel):
+    company_norm: list[str] = []
+    keywords: list[str] = []
+
+
+def _int_or_none(v: Any, min_val: int | None = None, max_val: int | None = None) -> int | None:
+    if v is None:
+        return None
+    try:
+        n = int(v)
+        if min_val is not None and n < min_val:
+            return min_val
+        if max_val is not None and n > max_val:
+            return max_val
+        return n
+    except (TypeError, ValueError):
+        return None
+
+
+class ParsedConstraintsPayload(BaseModel):
+    """Single extraction output stored in Search.parsed_constraints_json. Executed against experience_cards + person_profiles."""
+
+    query_original: str = ""
+    query_cleaned: str = ""
+    must: ParsedConstraintsMust = ParsedConstraintsMust()
+    should: ParsedConstraintsShould = ParsedConstraintsShould()
+    exclude: ParsedConstraintsExclude = ParsedConstraintsExclude()
+    search_phrases: list[str] = []
+    query_embedding_text: str = ""
+    confidence_score: float = 0.0
+    num_cards: int | None = None  # number of result cards to return (1-24); null = use default 6
+
+    @classmethod
+    def from_llm_dict(cls, data: dict[str, Any]) -> "ParsedConstraintsPayload":
+        """Normalize LLM output to full schema (fill missing keys)."""
+        must = data.get("must") or {}
+        should = data.get("should") or {}
+        exclude = data.get("exclude") or {}
+        return cls(
+            query_original=data.get("query_original") or "",
+            query_cleaned=data.get("query_cleaned") or "",
+            must=ParsedConstraintsMust(
+                company_norm=_list(must, "company_norm"),
+                team_norm=_list(must, "team_norm"),
+                intent_primary=_list(must, "intent_primary"),
+                domain=_list(must, "domain"),
+                sub_domain=_list(must, "sub_domain"),
+                employment_type=_list(must, "employment_type"),
+                seniority_level=_list(must, "seniority_level"),
+                location_text=must.get("location_text"),
+                city=must.get("city"),
+                country=must.get("country"),
+                time_start=must.get("time_start"),
+                time_end=must.get("time_end"),
+                is_current=must.get("is_current"),
+                open_to_work_only=must.get("open_to_work_only"),
+                offer_salary_inr_per_year=_float_or_none(must.get("offer_salary_inr_per_year")),
+            ),
+            should=ParsedConstraintsShould(
+                skills_or_tools=_list(should, "skills_or_tools"),
+                keywords=_list(should, "keywords"),
+                intent_secondary=_list(should, "intent_secondary"),
+            ),
+            exclude=ParsedConstraintsExclude(
+                company_norm=_list(exclude, "company_norm"),
+                keywords=_list(exclude, "keywords"),
+            ),
+            search_phrases=_list(data, "search_phrases"),
+            query_embedding_text=data.get("query_embedding_text") or "",
+            confidence_score=float(data.get("confidence_score") or 0.0),
+            num_cards=_int_or_none(data.get("num_cards"), min_val=1, max_val=24),
+        )
+
+
+def _float_or_none(v: Any) -> float | None:
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _serialize_decimal(v: Decimal | None) -> float | None:
+    """Serialize Decimal for JSON (idempotency storage, API response)."""
+    return float(v) if v is not None else None
+
+
+class SearchRequest(BaseModel):
+    query: str
+    open_to_work_only: bool | None = None
+    preferred_locations: list[str] | None = None  # preferred_locations_any when open_to_work_only
+    salary_min: Decimal | None = None  # recruiter min (INR/year), for display only
+    salary_max: Decimal | None = (
+        None  # recruiter offer budget INR/year; candidates matched where work_preferred_salary_min <= salary_max (NULL = keep but downrank)
+    )
+    num_cards: int | None = (
+        None  # result count (1-24); if set, overrides query parsing; else derived from query or default 6
+    )
+    language: str = "en"  # BCP-47 code; query translated to English, results translated to this language
+
+    @model_validator(mode="after")
+    def _validate_salary_bounds(self) -> "SearchRequest":
+        if (
+            self.salary_min is not None
+            and self.salary_max is not None
+            and self.salary_min > self.salary_max
+        ):
+            raise ValueError("salary_min must be <= salary_max")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_num_cards(self) -> "SearchRequest":
+        if self.num_cards is not None and (self.num_cards < 1 or self.num_cards > 1000):
+            raise ValueError("num_cards must be between 1 and 24")
+        return self
+
+
+class PersonSearchResult(BaseModel):
+    id: str
+    name: str | None = None  # display_name
+    headline: str | None = None
+    bio: str | None = None
+    profile_photo_url: str | None = None
+    similarity_percent: int | None = None
+    why_matched: list[str] = []
+    open_to_work: bool
+    open_to_contact: bool
+    work_preferred_locations: list[str] = []
+    work_preferred_salary_min: Decimal | None = None
+    matched_cards: list[ExperienceCardResponse] = []  # 1-3 best matching cards
+
+    @field_serializer("work_preferred_salary_min")
+    def _ser_salary(self, v: Decimal | None) -> float | None:
+        return _serialize_decimal(v)
+
+
+class SearchResponse(BaseModel):
+    search_id: str
+    people: list[PersonSearchResult]
+    num_cards: int | None = (
+        None  # limit applied for this search (1-24); credits charged = num_cards when non-empty
+    )
+
+
+class PersonProfileResponse(BaseModel):
+    """Profile for search results; visibility fields from PersonProfile. Includes full card families and bio like public profile."""
+
+    id: str
+    display_name: str | None = None
+    open_to_work: bool
+    open_to_contact: bool
+    work_preferred_locations: list[str]
+    work_preferred_salary_min: Decimal | None = None  # minimum salary needed (INR/year)
+    experience_cards: list[ExperienceCardResponse]  # kept for backward compatibility
+    card_families: list[CardFamilyResponse] = []  # parent + children for full experience view
+    bio: BioResponse | None = None
+    contact: ContactDetailsResponse | None = None  # only if unlocked
+
+    @field_serializer("work_preferred_salary_min")
+    def _ser_salary(self, v: Decimal | None) -> float | None:
+        return _serialize_decimal(v)
+
+
+class SavedSearchItem(BaseModel):
+    id: str
+    query_text: str
+    created_at: str
+    expires_at: str
+    expired: bool
+    result_count: int
+
+
+class SavedSearchesResponse(BaseModel):
+    searches: list[SavedSearchItem]
+
+
+class UnlockContactRequest(BaseModel):
+    search_id: str | None = None
+
+
+class UnlockContactResponse(BaseModel):
+    unlocked: bool
+    contact: ContactDetailsResponse

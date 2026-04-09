@@ -1,0 +1,31 @@
+/**
+ * Builder components – experience cards, chat, forms, voice, family views, modals.
+ * Import from "@/components/builder" for a single entry point.
+ */
+
+export { CardDetails, cardTopics } from "./card";
+export { CardTypeIcon } from "./card";
+export { CardFamilyDisplay } from "./card";
+export type { CardFamilyDisplayProps } from "./card";
+
+export { ParentCardEditForm } from "./forms";
+export { ChildCardEditForm } from "./forms";
+
+export { BuilderChat } from "./chat";
+export type { ChatMessage } from "./chat";
+
+export { AiSphere } from "./ai-sphere";
+
+export {
+  DraftCardFamily,
+  SavedCardFamily,
+  ExperienceFamilyCardPreview,
+  FamilyTree,
+} from "./family";
+export type { ExperienceFamilyCardPreviewProps } from "./family";
+export type { TreeNode } from "./family";
+
+export { SaveCardsModal } from "./modals";
+
+export { EnhanceChatPanel } from "./enhance/enhance-chat-panel";
+export type { EnhanceChatMessage } from "./enhance/enhance-chat-panel";

@@ -1,0 +1,363 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 0 0% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 4%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 95%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 72% 51%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 0 0% 9%;
+    --radius: 0.625rem;
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 98%;
+    --info: 200 98% 39%;
+    --info-foreground: 0 0% 98%;
+    --card-glass: 0 0% 100% / 0.04;
+    --border-glass: 0 0% 100% / 0.08;
+  }
+  .dark {
+    /* CONXA landing theme - violet/teal */
+    --background: 234 60% 4%;
+    --foreground: 240 100% 97%;
+    --card: 240 20% 8%;
+    --card-foreground: 240 100% 97%;
+    --primary: 244 95% 69%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 166 100% 42%;
+    --secondary-foreground: 234 60% 4%;
+    --muted: 240 20% 12%;
+    --muted-foreground: 240 20% 60%;
+    /* Use a neutral accent instead of gold */
+    --accent: 240 20% 16%;
+    --accent-foreground: 240 100% 97%;
+    --destructive: 0 84% 60%;
+    --border: 240 5% 26%;
+    --input: 240 5% 26%;
+    --ring: 244 95% 69%;
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 98%;
+    --info: 200 98% 48%;
+    --info-foreground: 0 0% 98%;
+    /* CONXA tokens */
+    --glow-violet: 244 95% 69%;
+    --glow-teal: 166 100% 42%;
+    --gold: 37 90% 55%;
+    --card-glass: 0 0% 100% / 0.04;
+    --border-glass: 240 5% 26% / 0.6;
+  }
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+  min-height: 100%;
+  overflow-x: clip;
+  /* Remove 300ms tap delay on touch devices */
+  touch-action: manipulation;
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+  min-height: 100%;
+  overflow-x: clip;
+}
+
+@layer utilities {
+  .min-h-app-screen {
+    min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
+  }
+
+  .h-app-screen {
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+  }
+
+  .max-h-app-screen {
+    max-height: 100vh;
+    max-height: 100svh;
+    max-height: 100dvh;
+  }
+
+  .min-h-app-shell {
+    min-height: calc(100vh - 3.5rem);
+    min-height: calc(100svh - 3.5rem);
+    min-height: calc(100dvh - 3.5rem);
+  }
+
+  .h-app-shell {
+    height: calc(100vh - 3.5rem);
+    height: calc(100svh - 3.5rem);
+    height: calc(100dvh - 3.5rem);
+  }
+
+  .max-h-app-shell {
+    max-height: calc(100vh - 3.5rem);
+    max-height: calc(100svh - 3.5rem);
+    max-height: calc(100dvh - 3.5rem);
+  }
+
+  .min-h-app-panel {
+    min-height: calc(100vh - 6rem);
+    min-height: calc(100svh - 6rem);
+    min-height: calc(100dvh - 6rem);
+  }
+
+  .h-app-panel {
+    height: calc(100vh - 6rem);
+    height: calc(100svh - 6rem);
+    height: calc(100dvh - 6rem);
+  }
+
+  .max-h-app-panel {
+    max-height: calc(100vh - 6rem);
+    max-height: calc(100svh - 6rem);
+    max-height: calc(100dvh - 6rem);
+  }
+}
+
+/* Themed scrollbars - match dark/light theme */
+.scrollbar-theme {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
+}
+.scrollbar-theme::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-theme::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-theme::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.35);
+  border-radius: 3px;
+}
+.scrollbar-theme::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Keyframe animations */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out forwards;
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted-foreground) / 0.12) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Hide scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Glass / frosted effect */
+.glass {
+  background: hsl(var(--card) / 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Subtle ring glow for elevated cards */
+.glow-ring {
+  box-shadow: 0 0 0 1px hsl(var(--border) / 0.5),
+    0 0 24px -4px hsl(var(--ring) / 0.06);
+}
+
+/* Depth shadows for 3D card effect */
+.depth-shadow {
+  box-shadow: 0 2px 8px -2px hsl(var(--foreground) / 0.08),
+    0 4px 16px -4px hsl(var(--foreground) / 0.06);
+}
+.depth-shadow-lg {
+  box-shadow: 0 4px 12px -2px hsl(var(--foreground) / 0.1),
+    0 8px 32px -8px hsl(var(--foreground) / 0.08);
+}
+
+/* 3D perspective utilities */
+.perspective-1000 {
+  perspective: 1000px;
+}
+.transform-3d {
+  transform-style: preserve-3d;
+}
+.card-3d-inner {
+  transform-style: preserve-3d;
+}
+
+/* Pulse glow for modals */
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px hsl(var(--border) / 0.5),
+      0 0 24px -4px hsl(var(--ring) / 0.06);
+  }
+  50% {
+    box-shadow: 0 0 0 1px hsl(var(--border) / 0.7),
+      0 0 32px -4px hsl(var(--ring) / 0.1);
+  }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2.5s ease-in-out infinite;
+}
+
+/* ── Thread / timeline connector system ── */
+.thread-line {
+  position: absolute;
+  left: 20px;
+  width: 2px;
+  background: hsl(var(--border));
+  pointer-events: none;
+}
+
+.thread-node {
+  position: absolute;
+  left: 15px;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  border: 2px solid hsl(var(--border));
+  background: hsl(var(--background));
+  pointer-events: none;
+  z-index: 1;
+}
+
+.thread-node-active {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15);
+}
+
+.thread-node-sm {
+  left: 16px;
+  width: 10px;
+  height: 10px;
+}
+
+@keyframes thread-draw {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+
+.thread-line-animated {
+  transform-origin: top;
+  animation: thread-draw 0.3s ease-out forwards;
+}
+
+@keyframes thread-node-pop {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.thread-node-animated {
+  animation: thread-node-pop 0.25s ease-out forwards;
+}
+
+/* Hero scene (CSS-only) */
+@keyframes hero-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(0, -8px) scale(1.02); }
+}
+@keyframes hero-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes hero-node-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.2); }
+}
+
+/* CONXA landing utilities */
+.font-display {
+  font-family: var(--font-clash), var(--font-outfit), system-ui, sans-serif;
+}
+.font-body {
+  font-family: var(--font-satoshi), system-ui, sans-serif;
+}
+.gradient-text {
+  @apply bg-clip-text text-transparent;
+  background-image: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)));
+}
+.gradient-violet {
+  background: linear-gradient(135deg, hsl(244 95% 69%), hsl(244 95% 55%));
+}
+.gradient-violet-teal {
+  background: linear-gradient(135deg, hsl(244 95% 69%), hsl(166 100% 42%));
+}
+.glass-card {
+  background: hsl(var(--card-glass));
+  border: 1px solid hsl(var(--border-glass));
+  backdrop-filter: blur(16px);
+}
+.glass-navbar {
+  background: hsl(234 60% 4% / 0.8);
+  border-bottom: 1px solid hsl(var(--border-glass));
+  backdrop-filter: blur(16px);
+}
+.glow-violet {
+  box-shadow: 0 0 40px hsl(244 95% 69% / 0.3), 0 0 80px hsl(244 95% 69% / 0.1);
+}
+.glow-teal {
+  box-shadow: 0 0 40px hsl(166 100% 42% / 0.3);
+}
+.glow-violet-subtle {
+  box-shadow: 0 0 20px hsl(244 95% 69% / 0.15);
+}
+.text-gradient-logo {
+  @apply bg-clip-text text-transparent;
+  background-image: linear-gradient(135deg, hsl(244 95% 69%), hsl(166 100% 42%));
+}

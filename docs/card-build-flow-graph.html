@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>CONXA – Card Build &amp; Enhance Flow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0b0f1a;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    color: #e2e8f0;
+    min-height: 100vh;
+  }
+
+  h1 {
+    text-align: center;
+    padding: 32px 16px 6px;
+    font-size: 1.55rem;
+    font-weight: 800;
+    letter-spacing: .025em;
+    color: #f8fafc;
+  }
+  p.subtitle {
+    text-align: center;
+    font-size: .83rem;
+    color: #64748b;
+    padding-bottom: 24px;
+  }
+
+  /* ── legend ── */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    justify-content: center;
+    padding: 0 24px 28px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: .77rem;
+    color: #94a3b8;
+  }
+  .legend-dot {
+    width: 14px; height: 14px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  /* ── section labels ── */
+  .section-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 32px 16px;
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: #475569;
+  }
+  .section-bar::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #1e293b;
+  }
+
+  .canvas-wrap {
+    overflow-x: auto;
+    padding: 0 24px 56px;
+  }
+  svg { display: block; margin: 0 auto; }
+
+  /* ── node text ── */
+  .lbl     { font-size: 11.5px; font-weight: 700; fill: #f1f5f9; text-anchor: middle; dominant-baseline: middle; }
+  .lbl-sub { font-size: 9.5px;  fill: #94a3b8;   text-anchor: middle; dominant-baseline: middle; }
+  .lbl-sm  { font-size: 10px;   font-weight: 600; fill: #f1f5f9; text-anchor: middle; dominant-baseline: middle; }
+  .lbl-api { font-size: 9px;    font-weight: 700; fill: #fcd34d; text-anchor: middle; dominant-baseline: middle; }
+  .edge-lbl { font-size: 9px; fill: #64748b; text-anchor: middle; dominant-baseline: middle; }
+
+  /* arrow heads */
+  marker { overflow: visible; }
+</style>
+</head>
+<body>
+
+<h1>CONXA — Card Build &amp; Enhance Flow</h1>
+<p class="subtitle">End-to-end: User speaks / types → Card created → Cards page → Enhance voice / chat → Save</p>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div> User / UI action</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#1d4ed8"></div> Frontend component / hook</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#0f766e"></div> API endpoint</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#b45309"></div> Backend service / function</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#be185d"></div> External service</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#15803d"></div> Database / output</div>
+</div>
+
+<div class="canvas-wrap">
+<svg width="1520" height="2860" viewBox="0 0 1520 2860" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <!-- arrow markers -->
+  <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#475569"/>
+  </marker>
+  <marker id="arr-gold" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#f59e0b"/>
+  </marker>
+  <marker id="arr-green" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#22c55e"/>
+  </marker>
+  <marker id="arr-red" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
+  </marker>
+  <marker id="arr-purple" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#a78bfa"/>
+  </marker>
+  <marker id="arr-blue" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L0,6 L8,3 z" fill="#60a5fa"/>
+  </marker>
+
+  <!-- glow filter for important nodes -->
+  <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur stdDeviation="4" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="glow-sm" x="-20%" y="-20%" width="140%" height="140%">
+    <feGaussianBlur stdDeviation="2.5" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+
+</defs>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  PHASE 0 – User arrives at /builder                    -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<!-- Phase label -->
+<rect x="20" y="16" width="224" height="26" rx="6" fill="#1e293b"/>
+<text x="132" y="29" class="lbl" style="font-size:10.5px;fill:#94a3b8;letter-spacing:.07em">PHASE 1 — BUILDER (VOICE)</text>
+
+<!-- User: navigate to /builder -->
+<rect x="620" y="52" width="280" height="52" rx="10" fill="#7c3aed" filter="url(#glow)"/>
+<text x="760" y="72" class="lbl">User navigates to /builder</text>
+<text x="760" y="89" class="lbl-sub">route: /builder</text>
+
+<!-- BuilderChat component -->
+<rect x="590" y="136" width="340" height="52" rx="10" fill="#1d4ed8"/>
+<text x="760" y="156" class="lbl">BuilderChat component mounts</text>
+<text x="760" y="173" class="lbl-sub">builder-chat.tsx · restores sessionStorage draft</text>
+
+<!-- useBuilderChatVoice hook -->
+<rect x="570" y="220" width="380" height="52" rx="10" fill="#1d4ed8"/>
+<text x="760" y="240" class="lbl">useBuilderChatVoice hook initialises</text>
+<text x="760" y="257" class="lbl-sub">detects pathname === "/builder" → auto-start Vapi</text>
+
+<!-- Vapi Web SDK -->
+<rect x="170" y="220" width="280" height="52" rx="10" fill="#be185d"/>
+<text x="310" y="240" class="lbl">createPatchedVapiClient()</text>
+<text x="310" y="257" class="lbl-sub">@vapi-ai/web SDK · NEXT_PUBLIC_VAPI_PUBLIC_KEY</text>
+
+<!-- Vapi Dashboard -->
+<rect x="140" y="308" width="340" height="52" rx="10" fill="#be185d" filter="url(#glow-sm)"/>
+<text x="310" y="328" class="lbl">Vapi Cloud — Builder Assistant</text>
+<text x="310" y="345" class="lbl-sub">NEXT_PUBLIC_VAPI_ASSISTANT_ID · STT + TTS + WebRTC</text>
+
+<!-- user speaks -->
+<rect x="620" y="308" width="280" height="52" rx="10" fill="#7c3aed"/>
+<text x="760" y="328" class="lbl">User speaks into microphone</text>
+<text x="760" y="345" class="lbl-sub">AiSphere orb intensity = active</text>
+
+<!-- transcript streaming -->
+<rect x="570" y="392" width="380" height="52" rx="10" fill="#1d4ed8"/>
+<text x="760" y="412" class="lbl">upsertStreamingTranscriptMessage()</text>
+<text x="760" y="429" class="lbl-sub">role:user / role:assistant bubbles appear in real-time</text>
+
+<!-- call-end event -->
+<rect x="590" y="476" width="340" height="52" rx="10" fill="#7c3aed"/>
+<text x="760" y="496" class="lbl">User ends voice call</text>
+<text x="760" y="513" class="lbl-sub">Vapi fires "call-end" event in SDK</text>
+
+<!-- optional: typed text input (parallel path) -->
+<rect x="1060" y="308" width="320" height="52" rx="10" fill="#7c3aed"/>
+<text x="1220" y="328" class="lbl">User types in chat (optional)</text>
+<text x="1220" y="345" class="lbl-sub">sendMessage() — local bubbles only, no API call</text>
+<text x="1220" y="357" class="lbl-api" style="fill:#94a3b8">no backend call during typing</text>
+
+<!-- arrow: navigate → mount -->
+<line x1="760" y1="104" x2="760" y2="136" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+<!-- mount → hook -->
+<line x1="760" y1="188" x2="760" y2="220" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+<!-- hook → SDK (left) -->
+<line x1="570" y1="246" x2="450" y2="246" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arr-purple)"/>
+<!-- SDK → Vapi cloud (down) -->
+<line x1="310" y1="272" x2="310" y2="308" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arr-purple)"/>
+<!-- hook → user speaks -->
+<line x1="760" y1="272" x2="760" y2="308" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+<!-- user speaks → transcript streaming -->
+<line x1="760" y1="360" x2="760" y2="392" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+<!-- streaming → call-end -->
+<line x1="760" y1="444" x2="760" y2="476" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+<!-- typed → merges into transcript at call-end -->
+<path d="M1060,334 Q920,380 900,502" stroke="#475569" stroke-width="1.5" stroke-dasharray="5,4" fill="none" marker-end="url(#arr)"/>
+<text x="970" y="410" class="edge-lbl">falls back if call-end has empty</text>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  PHASE 2 – Commit transcript → backend                 -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<rect x="20" y="548" width="254" height="26" rx="6" fill="#1e293b"/>
+<text x="147" y="561" class="lbl" style="font-size:10.5px;fill:#94a3b8;letter-spacing:.07em">PHASE 2 — TRANSCRIPT COMMIT</text>
+
+<!-- POST /builder/transcript/commit -->
+<rect x="565" y="560" width="390" height="60" rx="10" fill="#0f766e" filter="url(#glow)"/>
+<text x="760" y="580" class="lbl">POST /builder/transcript/commit</text>
+<text x="760" y="596" class="lbl-sub">{ call_id?, transcript?, mode:"voice", language }</text>
+<text x="760" y="611" class="lbl-api">routers/builder.py → commit_builder_transcript()</text>
+
+<!-- arrow: call-end → commit -->
+<line x1="760" y1="528" x2="760" y2="560" stroke="#22c55e" stroke-width="2" marker-end="url(#arr-green)"/>
+<text x="780" y="544" class="edge-lbl">on call-end</text>
+
+<!-- Vapi REST fetch (optional) -->
+<rect x="140" y="568" width="310" height="52" rx="10" fill="#be185d"/>
+<text x="295" y="588" class="lbl">Vapi REST API (optional)</text>
+<text x="295" y="605" class="lbl-sub">GET api.vapi.ai/call/{call_id} → official transcript</text>
+
+<!-- arrow: commit → Vapi REST -->
+<line x1="565" y1="590" x2="450" y2="590" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-gold)"/>
+<text x="508" y="582" class="edge-lbl">if VAPI_API_KEY set</text>
+
+<!-- commit_builder_transcript service -->
+<rect x="570" y="652" width="380" height="60" rx="10" fill="#b45309"/>
+<text x="760" y="672" class="lbl">commit_builder_transcript()</text>
+<text x="760" y="688" class="lbl-sub">engine.py · merge transcript · normalize duplicates</text>
+<text x="760" y="703" class="lbl-sub">→ translate to English if needed (translation service)</text>
+
+<!-- arrow: endpoint → service -->
+<line x1="760" y1="620" x2="760" y2="652" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- Translation service -->
+<rect x="1060" y="652" width="320" height="52" rx="10" fill="#be185d"/>
+<text x="1220" y="672" class="lbl">Translation Service</text>
+<text x="1220" y="689" class="lbl-sub">Sarvam / OpenAI-compat · text → English</text>
+
+<!-- arrow: service → translation (conditional) -->
+<path d="M950,682 Q1005,682 1060,678" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arr-gold)"/>
+<text x="1005" y="670" class="edge-lbl">if non-English</text>
+
+<!-- _commit_extraction_input -->
+<rect x="570" y="744" width="380" height="52" rx="10" fill="#b45309"/>
+<text x="760" y="764" class="lbl">_commit_extraction_input()</text>
+<text x="760" y="781" class="lbl-sub">builder_extraction.py · run_draft_single(db, person_id, text, 1, 1)</text>
+
+<!-- arrow -->
+<line x1="760" y1="712" x2="760" y2="744" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  PHASE 3 – Experience extraction pipeline              -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<rect x="20" y="816" width="274" height="26" rx="6" fill="#1e293b"/>
+<text x="157" y="829" class="lbl" style="font-size:10.5px;fill:#94a3b8;letter-spacing:.07em">PHASE 3 — EXPERIENCE EXTRACTION</text>
+
+<!-- run_draft_single -->
+<rect x="565" y="828" width="390" height="60" rx="10" fill="#b45309" filter="url(#glow-sm)"/>
+<text x="760" y="848" class="lbl">run_draft_single()</text>
+<text x="760" y="864" class="lbl-sub">extraction.py · index=1, total=1</text>
+<text x="760" y="879" class="lbl-sub">one experience per builder commit</text>
+
+<!-- arrow -->
+<line x1="760" y1="796" x2="760" y2="828" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- rewrite_raw_text -->
+<rect x="220" y="916" width="270" height="52" rx="10" fill="#b45309"/>
+<text x="355" y="936" class="lbl">rewrite_raw_text()</text>
+<text x="355" y="953" class="lbl-sub">LLM PROMPT_REWRITE → cleaned text</text>
+
+<!-- PROMPT_EXTRACT_SINGLE_CARDS -->
+<rect x="630" y="916" width="260" height="52" rx="10" fill="#b45309"/>
+<text x="760" y="936" class="lbl">LLM: PROMPT_EXTRACT_SINGLE_CARDS</text>
+<text x="760" y="953" class="lbl-sub">get_chat_provider().chat() → JSON</text>
+
+<!-- arrow: run_draft_single → rewrite -->
+<path d="M630,858 Q430,858 355,916" stroke="#475569" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+<text x="490" y="878" class="edge-lbl">step 1</text>
+
+<!-- arrow: rewrite → extract -->
+<line x1="490" y1="942" x2="630" y2="942" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+<text x="560" y="934" class="edge-lbl">step 2</text>
+
+<!-- LLM Provider -->
+<rect x="1060" y="916" width="320" height="52" rx="10" fill="#be185d"/>
+<text x="1220" y="936" class="lbl">LLM Provider</text>
+<text x="1220" y="953" class="lbl-sub">CHAT_API_BASE_URL / CHAT_MODEL (Groq, OpenAI…)</text>
+
+<!-- arrow: extract → LLM -->
+<line x1="890" y1="942" x2="1060" y2="942" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arr-gold)"/>
+
+<!-- parse_llm_response_to_families -->
+<rect x="575" y="1000" width="370" height="52" rx="10" fill="#b45309"/>
+<text x="760" y="1020" class="lbl">parse_llm_response_to_families()</text>
+<text x="760" y="1037" class="lbl-sub">extract JSON → Family list (parent + children)</text>
+
+<!-- arrow: LLM → parse (back) -->
+<path d="M1060,942 Q960,942 945,1026" stroke="#475569" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+
+<!-- inject_metadata_into_family -->
+<rect x="575" y="1084" width="370" height="52" rx="10" fill="#b45309"/>
+<text x="760" y="1104" class="lbl">inject_metadata_into_family()</text>
+<text x="760" y="1121" class="lbl-sub">UUIDs · person_id · timestamps · visibility=False</text>
+
+<!-- arrow -->
+<line x1="760" y1="1052" x2="760" y2="1084" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- persist_families -->
+<rect x="575" y="1168" width="370" height="52" rx="10" fill="#b45309"/>
+<text x="760" y="1188" class="lbl">persist_families()</text>
+<text x="760" y="1205" class="lbl-sub">persistence.py · INSERT ExperienceCard + ExperienceCardChild rows</text>
+
+<!-- arrow -->
+<line x1="760" y1="1136" x2="760" y2="1168" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- DB: draft card (invisible) -->
+<rect x="575" y="1252" width="370" height="52" rx="10" fill="#15803d"/>
+<text x="760" y="1272" class="lbl">PostgreSQL — Draft Card</text>
+<text x="760" y="1289" class="lbl-sub">experience_card_visibility = False · pgvector ready</text>
+
+<!-- arrow -->
+<line x1="760" y1="1220" x2="760" y2="1252" stroke="#22c55e" stroke-width="2" marker-end="url(#arr-green)"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  PHASE 4 – Finalize: visibility + embed                -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<rect x="20" y="1320" width="264" height="26" rx="6" fill="#1e293b"/>
+<text x="152" y="1333" class="lbl" style="font-size:10.5px;fill:#94a3b8;letter-spacing:.07em">PHASE 4 — FINALIZE &amp; EMBED</text>
+
+<!-- _finalize_card -->
+<rect x="565" y="1332" width="390" height="60" rx="10" fill="#b45309" filter="url(#glow-sm)"/>
+<text x="760" y="1352" class="lbl">_finalize_card()</text>
+<text x="760" y="1368" class="lbl-sub">builder_extraction.py · sets experience_card_visibility = True</text>
+<text x="760" y="1383" class="lbl-sub">loads parent + children ORM objects</text>
+
+<!-- arrow -->
+<line x1="760" y1="1304" x2="760" y2="1332" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- embed_experience_cards -->
+<rect x="565" y="1424" width="390" height="60" rx="10" fill="#b45309"/>
+<text x="760" y="1444" class="lbl">embed_experience_cards()</text>
+<text x="760" y="1460" class="lbl-sub">embedding.py · text → 324-dim vector</text>
+<text x="760" y="1475" class="lbl-sub">get_embedding_provider() → pgvector column</text>
+
+<!-- arrow -->
+<line x1="760" y1="1392" x2="760" y2="1424" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- Embedding Provider -->
+<rect x="1060" y="1424" width="320" height="52" rx="10" fill="#be185d"/>
+<text x="1220" y="1444" class="lbl">Embedding Provider</text>
+<text x="1220" y="1461" class="lbl-sub">EMBED_API_BASE_URL · dim=324</text>
+
+<!-- arrow: embed → provider -->
+<line x1="955" y1="1454" x2="1060" y2="1454" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arr-gold)"/>
+
+<!-- DB: visible card with vector -->
+<rect x="565" y="1516" width="390" height="52" rx="10" fill="#15803d" filter="url(#glow-sm)"/>
+<text x="760" y="1536" class="lbl">PostgreSQL — Visible Card + 324-dim Vector</text>
+<text x="760" y="1553" class="lbl-sub">experience_card_visibility = True · searchable</text>
+
+<!-- arrow -->
+<line x1="760" y1="1484" x2="760" y2="1516" stroke="#22c55e" stroke-width="2" marker-end="url(#arr-green)"/>
+
+<!-- Response + cache invalidation -->
+<rect x="565" y="1600" width="390" height="60" rx="10" fill="#1d4ed8"/>
+<text x="760" y="1620" class="lbl">Response → frontend</text>
+<text x="760" y="1636" class="lbl-sub">BuilderSessionCommitResponse: committed_card_ids, cards, children</text>
+<text x="760" y="1651" class="lbl-sub">invalidates: experience-cards + experience-card-families queries</text>
+
+<!-- arrow -->
+<line x1="760" y1="1568" x2="760" y2="1600" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  PHASE 5 – Cards page / manual edit                    -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<rect x="20" y="1676" width="254" height="26" rx="6" fill="#1e293b"/>
+<text x="147" y="1689" class="lbl" style="font-size:10.5px;fill:#94a3b8;letter-spacing:.07em">PHASE 5 — CARDS PAGE</text>
+
+<!-- User: navigates to /cards -->
+<rect x="620" y="1688" width="280" height="52" rx="10" fill="#7c3aed"/>
+<text x="760" y="1708" class="lbl">User navigates to /cards</text>
+<text x="760" y="1725" class="lbl-sub">CardsPage · CardsRouteWarmup preloads Vapi SDK</text>
+
+<!-- arrow -->
+<line x1="760" y1="1660" x2="760" y2="1688" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- GET /experience-card-families -->
+<rect x="570" y="1772" width="380" height="52" rx="10" fill="#0f766e"/>
+<text x="760" y="1792" class="lbl">GET /me/experience-card-families</text>
+<text x="760" y="1809" class="lbl-sub">useExperienceCardFamilies() hook · React Query cache</text>
+
+<!-- arrow -->
+<line x1="760" y1="1740" x2="760" y2="1772" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- SavedCardFamily rendered -->
+<rect x="570" y="1856" width="380" height="52" rx="10" fill="#1d4ed8"/>
+<text x="760" y="1876" class="lbl">SavedCardFamily rendered per card</text>
+<text x="760" y="1893" class="lbl-sub">pencil icon → onStartEditing → navigate to /cards/{id}/enhance</text>
+
+<!-- arrow -->
+<line x1="760" y1="1824" x2="760" y2="1856" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- PATCH /experience-cards/{id} (inline edit) -->
+<rect x="140" y="1856" width="310" height="52" rx="10" fill="#0f766e"/>
+<text x="295" y="1876" class="lbl">PATCH /experience-cards/{id}</text>
+<text x="295" y="1893" class="lbl-sub">inline parent edit → useCardMutations → re-embed</text>
+
+<!-- PATCH /experience-card-children/{id} (inline) -->
+<rect x="1060" y="1856" width="320" height="52" rx="10" fill="#0f766e"/>
+<text x="1220" y="1876" class="lbl">PATCH /experience-card-children/{id}</text>
+<text x="1220" y="1893" class="lbl-sub">inline child edit → useCardMutations</text>
+
+<!-- fill-missing from cards page -->
+<rect x="140" y="1940" width="310" height="52" rx="10" fill="#0f766e"/>
+<text x="295" y="1960" class="lbl">POST /experience-cards/fill-missing-from-text</text>
+<text x="295" y="1977" class="lbl-sub">Update from messy text (with card_id → persists)</text>
+
+<!-- arrows for side paths -->
+<path d="M570,1882 Q455,1882 450,1882" stroke="#475569" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+<path d="M950,1882 Q1005,1882 1060,1882" stroke="#475569" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+<path d="M295,1908 Q295,1940 295,1940" stroke="#475569" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  PHASE 6 – Enhance page                                -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<rect x="20" y="2028" width="234" height="26" rx="6" fill="#1e293b"/>
+<text x="137" y="2041" class="lbl" style="font-size:10.5px;fill:#94a3b8;letter-spacing:.07em">PHASE 6 — ENHANCE PAGE</text>
+
+<!-- User: /cards/{id}/enhance -->
+<rect x="615" y="2040" width="290" height="52" rx="10" fill="#7c3aed" filter="url(#glow)"/>
+<text x="760" y="2060" class="lbl">User opens /cards/{id}/enhance</text>
+<text x="760" y="2077" class="lbl-sub">preloadVapiWeb() was already warmed · Vapi SDK ready</text>
+
+<!-- arrow from cards page pencil -->
+<line x1="760" y1="1908" x2="760" y2="2040" stroke="#a78bfa" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arr-purple)"/>
+<text x="782" y="1974" class="edge-lbl">pencil click → router.push</text>
+
+<!-- populate forms -->
+<rect x="570" y="2124" width="380" height="52" rx="10" fill="#1d4ed8"/>
+<text x="760" y="2144" class="lbl">populateParentForm() / childToForm()</text>
+<text x="760" y="2161" class="lbl-sub">load card data from React Query cache into local draft</text>
+
+<!-- arrow -->
+<line x1="760" y1="2092" x2="760" y2="2124" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- useEnhanceVapiVoice -->
+<rect x="565" y="2208" width="390" height="52" rx="10" fill="#1d4ed8"/>
+<text x="760" y="2228" class="lbl">useEnhanceVapiVoice hook</text>
+<text x="760" y="2245" class="lbl-sub">NEXT_PUBLIC_VAPI_EDIT_ASSISTANT_ID · variableValues = card snapshot</text>
+
+<!-- arrow -->
+<line x1="760" y1="2176" x2="760" y2="2208" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- Vapi Edit Assistant -->
+<rect x="150" y="2208" width="300" height="52" rx="10" fill="#be185d" filter="url(#glow-sm)"/>
+<text x="300" y="2228" class="lbl">Vapi Cloud — Edit Assistant</text>
+<text x="300" y="2245" class="lbl-sub">variableValues inject card context into prompt</text>
+
+<!-- arrow: hook → edit assistant -->
+<line x1="565" y1="2234" x2="450" y2="2234" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arr-purple)"/>
+
+<!-- User speaks to edit assistant -->
+<rect x="620" y="2292" width="280" height="52" rx="10" fill="#7c3aed"/>
+<text x="760" y="2312" class="lbl">User speaks edits to Vapi assistant</text>
+<text x="760" y="2329" class="lbl-sub">assistant returns structured tool payloads</text>
+
+<!-- arrow -->
+<line x1="760" y1="2260" x2="760" y2="2292" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- extractUpdateCardDraftPatch -->
+<rect x="560" y="2376" width="400" height="60" rx="10" fill="#1d4ed8"/>
+<text x="760" y="2396" class="lbl">extractUpdateCardDraftPatch()</text>
+<text x="760" y="2412" class="lbl-sub">vapi-card-draft-messages.ts · parse tool payload → CardPatch</text>
+<text x="760" y="2427" class="lbl-sub">applyCardDraftPatch() → updates editForm local state</text>
+
+<!-- arrow -->
+<line x1="760" y1="2344" x2="760" y2="2376" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- OR: typed chat fill-missing -->
+<rect x="1060" y="2292" width="320" height="60" rx="10" fill="#0f766e"/>
+<text x="1220" y="2312" class="lbl">POST /experience-cards/fill-missing-from-text</text>
+<text x="1220" y="2328" class="lbl-sub">handleChatSend → fillParentFromAnswer</text>
+<text x="1220" y="2344" class="lbl-sub">no card_id → filled JSON returned, merged locally</text>
+
+<!-- label: OR -->
+<text x="1020" y="2322" class="edge-lbl" style="fill:#f59e0b;font-weight:700">OR typed chat</text>
+<path d="M950,2318 Q1000,2318 1060,2318" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#arr-gold)"/>
+
+<!-- Local state: hasUnsavedChanges -->
+<rect x="570" y="2468" width="380" height="44" rx="10" fill="#1e293b" stroke="#475569" stroke-width="1.5"/>
+<text x="760" y="2485" class="lbl" style="fill:#cbd5e1">Local draft state: hasUnsavedChanges = true</text>
+<text x="760" y="2501" class="lbl-sub">ExperienceFamilyCardPreview re-renders live</text>
+
+<!-- arrow -->
+<line x1="760" y1="2436" x2="760" y2="2468" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- Save & exit -->
+<rect x="565" y="2544" width="390" height="60" rx="10" fill="#7c3aed" filter="url(#glow)"/>
+<text x="760" y="2564" class="lbl">User clicks "Save &amp; exit"</text>
+<text x="760" y="2580" class="lbl-sub">buildCommitDraftPayload() → { parent patch + children }</text>
+<text x="760" y="2595" class="lbl-sub">POST /experience-cards/{cardId}/commit-draft</text>
+
+<!-- arrow -->
+<line x1="760" y1="2512" x2="760" y2="2544" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- commit-draft API endpoint -->
+<rect x="565" y="2616" width="390" height="60" rx="10" fill="#0f766e" filter="url(#glow-sm)"/>
+<text x="760" y="2636" class="lbl">POST /experience-cards/{card_id}/commit-draft</text>
+<text x="760" y="2652" class="lbl-sub">routers/builder.py → commit_card_draft()</text>
+<text x="760" y="2667" class="lbl-api">apply parent patch · upsert children · re-embed · invalidate locale</text>
+
+<!-- arrow -->
+<line x1="760" y1="2604" x2="760" y2="2616" stroke="#22c55e" stroke-width="2" marker-end="url(#arr-green)"/>
+
+<!-- DB: updated card + vectors -->
+<rect x="565" y="2700" width="390" height="44" rx="10" fill="#15803d" filter="url(#glow-sm)"/>
+<text x="760" y="2718" class="lbl">PostgreSQL — Updated Card + Fresh 324-dim Vectors</text>
+<text x="760" y="2733" class="lbl-sub">parent patch · upserted children · re-embedded · locale cache bumped</text>
+
+<!-- arrow -->
+<line x1="760" y1="2676" x2="760" y2="2700" stroke="#22c55e" stroke-width="2" marker-end="url(#arr-green)"/>
+
+<!-- Response: CardFamilyResponse → frontend -->
+<rect x="565" y="2776" width="390" height="52" rx="10" fill="#1d4ed8"/>
+<text x="760" y="2796" class="lbl">CardFamilyResponse → frontend</text>
+<text x="760" y="2813" class="lbl-sub">{ parent, children[] } · invalidates React Query · router.push("/cards")</text>
+
+<!-- arrow -->
+<line x1="760" y1="2744" x2="760" y2="2776" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  Horizontal connector lines and cross-section labels   -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<!-- Phase divider lines (subtle) -->
+<line x1="40" y1="546" x2="1480" y2="546" stroke="#1e293b" stroke-width="1.5" stroke-dasharray="6,4"/>
+<line x1="40" y1="814" x2="1480" y2="814" stroke="#1e293b" stroke-width="1.5" stroke-dasharray="6,4"/>
+<line x1="40" y1="1318" x2="1480" y2="1318" stroke="#1e293b" stroke-width="1.5" stroke-dasharray="6,4"/>
+<line x1="40" y1="1674" x2="1480" y2="1674" stroke="#1e293b" stroke-width="1.5" stroke-dasharray="6,4"/>
+<line x1="40" y1="2026" x2="1480" y2="2026" stroke="#1e293b" stroke-width="1.5" stroke-dasharray="6,4"/>
+
+<!-- "No DB" note for typed chat in builder -->
+<rect x="1060" y="370" width="320" height="36" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+<text x="1220" y="388" class="lbl-sub">Text bubbles shown instantly in UI.</text>
+<text x="1220" y="399" class="lbl-sub">Transcript used as fallback on call-end.</text>
+
+</svg>
+</div>
+
+<!-- ── textual summary ── -->
+<div style="max-width:960px;margin:0 auto 60px;padding:0 32px">
+  <h2 style="font-size:1.05rem;font-weight:700;color:#94a3b8;letter-spacing:.05em;margin-bottom:16px;border-bottom:1px solid #1e293b;padding-bottom:8px">FLOW SUMMARY</h2>
+  <div style="display:grid;gap:10px;font-size:.83rem;color:#94a3b8;line-height:1.6">
+    <div><span style="color:#a78bfa;font-weight:700">Phase 1 — Builder voice:</span> User opens <code style="background:#1e293b;padding:1px 5px;border-radius:3px">/builder</code> → <code>BuilderChat</code> mounts → <code>useBuilderChatVoice</code> auto-starts Vapi SDK with the builder assistant ID → user speaks → transcript streams into chat bubbles in real-time. Text typed in the input box is shown as bubbles locally but makes <em>no</em> backend calls; it becomes a fallback transcript.</div>
+    <div><span style="color:#34d399;font-weight:700">Phase 2 — Transcript commit:</span> When the Vapi call ends, <code>POST /builder/transcript/commit</code> is fired with the <code>call_id</code> and/or client transcript. The server optionally fetches the official transcript from Vapi's REST API, normalises duplicates, and translates to English if needed.</div>
+    <div><span style="color:#fb923c;font-weight:700">Phase 3 — Extraction:</span> <code>run_draft_single()</code> runs: (1) rewrite via LLM, (2) extract with <code>PROMPT_EXTRACT_SINGLE_CARDS</code>, (3) parse JSON into a <code>Family</code>, (4) inject UUIDs + metadata, (5) persist to DB with <code>visibility=False</code>.</div>
+    <div><span style="color:#4ade80;font-weight:700">Phase 4 — Finalize:</span> <code>_finalize_card()</code> flips <code>experience_card_visibility=True</code> then <code>embed_experience_cards()</code> calls the embedding provider to generate a 324-dim vector stored in pgvector. The card is now searchable.</div>
+    <div><span style="color:#60a5fa;font-weight:700">Phase 5 — Cards page:</span> Frontend invalidates React Query caches → <code>GET /me/experience-card-families</code> fetches the new card. User sees <code>SavedCardFamily</code> cards. Inline edits go to <code>PATCH /experience-cards/{id}</code>. Clicking the pencil icon navigates to <code>/cards/{id}/enhance</code> and pre-warms the Vapi SDK.</div>
+    <div><span style="color:#f472b6;font-weight:700">Phase 6 — Enhance:</span> The enhance page loads the card into local draft state. Voice uses a separate <em>edit</em> assistant (<code>NEXT_PUBLIC_VAPI_EDIT_ASSISTANT_ID</code>) with the card snapshot injected as <code>variableValues</code>. Structured tool payloads from Vapi are parsed client-side into patches applied to local state — <em>no DB write until Save</em>. Typed chat calls <code>POST /experience-cards/fill-missing-from-text</code> and merges the response locally. "Save &amp; exit" calls <code>POST /experience-cards/{cardId}/commit-draft</code> which applies the parent patch, upserts all children (update by id or upsert by type), re-embeds parent + all children, invalidates locale cache, and returns a <code>CardFamilyResponse</code>.</div>
+  </div>
+</div>
+
+</body>
+</html>
