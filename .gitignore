@@ -67,7 +67,7 @@ coverage/
 # Generated / local tooling (graphify knowledge graph — see .cursor/rules/graphify.mdc)
 graphify-out/
 obsidian_SEARCH_ENGINE_OVERVIEW/
-
+scripts/k6/
 
 .graphify_python
 OB.py
