@@ -906,13 +906,8 @@ Deployment notes and production considerations are summarized in `PRODUCTION_AUD
 
 ### 14.4 Backward-Compatible Experience Graph
 
-- `domain.py` defines:
-  - `Intent`
-  - `ChildIntent`
-  - `ChildRelationType`
-  - `ALLOWED_CHILD_TYPES`
-  - `ENTITY_TAXONOMY`
-- Changes to these enums require:
+- `domain.py` defines experience-card and profile **literals** (e.g. `Intent`, `SeniorityLevel`, `EmploymentType`, `CompanyType`), **`ALLOWED_CHILD_TYPES`**, and **Pydantic wire schemas** (`ExperienceCardSchema`, `PersonSchema`, nested field models). Some UI-only lists are duplicated in `apps/web/src/lib/schemas.ts`.
+- Changes to shared enums require:
   - Updating prompts in `experience_card_enums.py` and `experience_card.py`.
   - Considering DB migrations and existing data.
 

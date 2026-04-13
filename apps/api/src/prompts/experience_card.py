@@ -45,6 +45,13 @@ RULES:
 6. If the input is already clean, return it as-is. Do not rephrase for the sake of it.
 7. Output ONLY the rewritten text. No explanations, no commentary, no JSON, no preamble.
 
+QUALITY GATE — before rewriting, check if the input contains a real, extractable work experience described by the user. Output the single token INSUFFICIENT_INPUT (nothing else) if ANY of these are true:
+- The text is only an assistant/bot greeting or prompt with no user response (e.g. "Welcome to Conexa. Tell me about…").
+- The text contains no substantive description of something the user built, worked on, or handled.
+- The user's contribution is only greetings, filler, or acknowledgements ("hi", "ok", "sure", "thanks") with no experience details.
+- The text is clearly truncated mid-sentence with no complete thought about a work experience.
+If the input passes the quality gate, proceed with the rewrite as normal.
+
 INPUT:
 {{USER_TEXT}}
 """

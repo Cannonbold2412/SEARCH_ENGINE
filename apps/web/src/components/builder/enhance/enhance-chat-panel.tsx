@@ -28,6 +28,8 @@ type EnhanceChatPanelProps = {
   voiceDisabled?: boolean;
   voiceSphereIntensity?: number;
   voiceSphereActive?: "idle" | "user" | "ai" | "connecting";
+  sttMuted?: boolean;
+  voiceActive?: boolean;
 };
 
 export function EnhanceChatPanel({
@@ -45,6 +47,8 @@ export function EnhanceChatPanel({
   voiceDisabled = false,
   voiceSphereIntensity = 0,
   voiceSphereActive = "idle",
+  sttMuted = false,
+  voiceActive = false,
 }: EnhanceChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -64,8 +68,11 @@ export function EnhanceChatPanel({
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-foreground">{title}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Answer questions — your card updates on the left as you go. Voice edits stay local until you
-              save. Tap the sphere to start or end the call.
+              {voiceActive && !sttMuted
+                ? "Voice active — speak naturally or type. Tap the orb to mute mic. Card saves automatically when the call ends."
+                : voiceActive && sttMuted
+                  ? "Mic muted — type your response. Tap the orb to unmute."
+                  : "Connecting voice… your card will update live and save when the call ends."}
             </p>
           </div>
         </div>
@@ -125,6 +132,13 @@ export function EnhanceChatPanel({
             active={voiceSphereActive}
             size={56}
             onClick={onVoiceToggle}
+            aria-label={
+              !voiceActive
+                ? "Connecting voice..."
+                : sttMuted
+                  ? "Unmute microphone"
+                  : "Mute microphone"
+            }
             className="pointer-events-auto"
           />
         </div>

@@ -28,11 +28,13 @@ function collapseAdjacentDuplicatePhrases(text: string): string {
   if (tokens.length < 2) return text.trim();
 
   const normalized = (token: string) => normalizedTokenForDedupe(token);
-  const maxWindow = Math.min(12, Math.floor(tokens.length / 2));
+  let passes = 0;
   let changed = true;
 
   while (changed) {
+    if (++passes > tokens.length + 10) break;
     changed = false;
+    const maxWindow = Math.min(12, Math.floor(tokens.length / 2));
     for (let i = 0; i < tokens.length - 1; i++) {
       let removed = false;
       for (let size = maxWindow; size >= 1; size--) {

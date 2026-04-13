@@ -24,7 +24,6 @@ from src.services.builder.roles import (
 
 from .builder_extraction import (
     _commit_extraction_input,
-    _debug_log,
     _fetch_vapi_transcript_by_call_id,
     _normalize_adjacent_duplicate_phrases,
 )
@@ -136,17 +135,6 @@ async def commit_builder_transcript(
 ) -> dict[str, Any]:
     resolved_call_id = str(call_id or "").strip()
     transcript_text = ""
-    _debug_log(
-        "H1-H4",
-        "engine.py:commit_builder_transcript:start",
-        "commit_builder_transcript received input",
-        {
-            "hasCallId": bool(resolved_call_id),
-            "inputTranscriptLength": len(str(transcript or "").strip()),
-            "hasSessionId": bool(str(session_id or "").strip()),
-            "mode": mode,
-        },
-    )
     if resolved_call_id:
         transcript_text = await _fetch_vapi_transcript_by_call_id(resolved_call_id)
 
@@ -160,22 +148,7 @@ async def commit_builder_transcript(
         from src.services.translation import to_english
 
         extraction_input = await to_english(extraction_input, language, db)
-        _debug_log(
-            "H3-H5",
-            "engine.py:commit_builder_transcript:translated",
-            "translated extraction input to English",
-            {"sourceLanguage": language, "translatedLength": len(extraction_input or "")},
-        )
 
-    _debug_log(
-        "H3-H5",
-        "engine.py:commit_builder_transcript:extraction",
-        "computed extraction input",
-        {
-            "transcriptTextLength": len(transcript_text or ""),
-            "extractionInputLength": len(extraction_input or ""),
-        },
-    )
     if not extraction_input:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

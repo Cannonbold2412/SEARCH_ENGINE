@@ -7,7 +7,9 @@ import { AUTH_TOKEN_KEY } from "@/lib/auth-flow";
 import { api } from "@/lib/api";
 import { isVapiVoiceConfigured, getVapiAssistantId, getVapiPublicKey } from "@/lib/vapi-config";
 import {
+  claimEagerPrewarm,
   createPatchedVapiClient,
+  discardEagerPrewarm,
   isBenignVapiDisconnectError,
   preloadVapiWeb,
   stopVapiClient,
@@ -62,23 +64,6 @@ function resolveVoiceErrorMessage(error: unknown): string {
   return errMsg || "Voice connection error";
 }
 
-function isAssistantWrapUpTranscript(text: string): boolean {
-  const normalized = text.toLowerCase().replace(/\s+/g, " ").trim();
-  if (!normalized) return false;
-
-  const hasClearPicture =
-    normalized.includes("clear picture of that experience") ||
-    normalized.includes("clear picture of that") ||
-    normalized.includes("i've got a clear picture") ||
-    normalized.includes("ive got a clear picture");
-  const hasThanks =
-    normalized.includes("thank you") ||
-    normalized.includes("thanks") ||
-    normalized.includes("good luck");
-
-  return hasClearPicture || (hasThanks && normalized.length < 220);
-}
-
 function extractVapiCallId(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
   const obj = payload as Record<string, unknown>;
@@ -122,26 +107,22 @@ export function useBuilderChatVoice({
   const [aiSpeaking, setAiSpeaking] = useState(true);
   const [userSpeaking, setUserSpeaking] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [sttMuted, setSttMuted] = useState(false);
   const activeAssistantMessageIdRef = useRef<string | null>(null);
   const committedAssistantTextRef = useRef("");
   const activeUserMessageIdRef = useRef<string | null>(null);
   const committedUserTextRef = useRef("");
-  const pendingAutoEndRef = useRef(false);
-  const autoEndTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transcriptCommitInFlightRef = useRef(false);
   const activeVapiCallIdRef = useRef<string | null>(null);
   const callStartMessageCountRef = useRef(0);
+  const voiceStartInFlightRef = useRef(false);
 
   const resetVoiceState = useCallback(() => {
     setVoiceConnecting(false);
     setVoiceConnected(false);
     setAiSpeaking(false);
     setUserSpeaking(false);
-    pendingAutoEndRef.current = false;
-    if (autoEndTimeoutRef.current) {
-      clearTimeout(autoEndTimeoutRef.current);
-      autoEndTimeoutRef.current = null;
-    }
+    setSttMuted(false);
     activeVapiCallIdRef.current = null;
     callStartMessageCountRef.current = 0;
   }, []);
@@ -208,9 +189,13 @@ export function useBuilderChatVoice({
       onCardsSaved?.();
     } catch (error) {
       setCommitStatus("error");
+      const serverMsg = error instanceof Error ? error.message : "";
+      const isInsufficientInput = serverMsg.length > 20 && !serverMsg.includes("unavailable");
       addMessage({
         role: "assistant",
-        content: "Conversation ended, but saving cards failed. Please try again.",
+        content: isInsufficientInput
+          ? serverMsg
+          : "Conversation ended, but saving cards failed. Please try again.",
       });
     } finally {
       setLoading(false);
@@ -226,44 +211,75 @@ export function useBuilderChatVoice({
     });
   }, [detachVoice]);
 
-  const startVoice = useCallback(async () => {
-    if (vapiRef.current) return;
-    setVoiceError(null);
-    setVoiceConnecting(true);
-    let vapi: VapiClient | null = null;
-
-    const token = typeof window !== "undefined" ? localStorage.getItem(AUTH_TOKEN_KEY) : null;
-    if (!token) {
-      setVoiceError("Please sign in to use voice");
+  const attachFullHandlers = useCallback((client: VapiClient) => {
+    client.on("call-start", () => {
       setVoiceConnecting(false);
-      return;
-    }
-    if (!isVapiVoiceConfigured(language)) {
-      setVoiceError(
-        "Voice is not configured. Set NEXT_PUBLIC_VAPI_PUBLIC_KEY and NEXT_PUBLIC_VAPI_ASSISTANT_ID in apps/web/.env.local (Vapi dashboard -> API keys)."
-      );
-      setVoiceConnecting(false);
-      return;
-    }
+      setVoiceConnected(true);
+      setVoiceError(null);
+      setCommitStatus("idle");
+      const callId = getCurrentVapiCallId(client);
+      if (callId) activeVapiCallIdRef.current = callId;
+      callStartMessageCountRef.current = messagesRef.current.length;
+    });
 
-    try {
-      const publicKey = getVapiPublicKey();
-      const assistantId = getVapiAssistantId(language);
-      vapi = await createPatchedVapiClient(publicKey);
-      const client = vapi;
-      vapiRef.current = client;
-
-      client.on("call-start", () => {
-        setVoiceConnecting(false);
-        setVoiceConnected(true);
-        setVoiceError(null);
-        setCommitStatus("idle");
-        const callId = getCurrentVapiCallId(client);
-        if (callId) activeVapiCallIdRef.current = callId;
-        callStartMessageCountRef.current = messagesRef.current.length;
+    client.on("call-end", () => {
+      const callId = activeVapiCallIdRef.current ?? getCurrentVapiCallId(client);
+      const transcriptStartIndex = Math.max(0, callStartMessageCountRef.current);
+      const transcriptMessages = messagesRef.current.slice(transcriptStartIndex);
+      const transcriptFallback = serializeTranscriptFromMessages(transcriptMessages);
+      void commitVoiceTranscript(callId, transcriptFallback);
+      void stopVapiClient(client).finally(() => {
+        detachVoice(client);
+        activeVapiCallIdRef.current = null;
+        callStartMessageCountRef.current = 0;
       });
+    });
 
-      client.on("call-end", () => {
+    client.on("speech-start", () => {
+      setAiSpeaking(true);
+      activeAssistantMessageIdRef.current = null;
+      committedAssistantTextRef.current = "";
+      activeUserMessageIdRef.current = null;
+      committedUserTextRef.current = "";
+      setUserSpeaking(false);
+    });
+    client.on("speech-end", () => {
+      setAiSpeaking(false);
+      activeAssistantMessageIdRef.current = null;
+      committedAssistantTextRef.current = "";
+    });
+
+    client.on("message", (msg: unknown) => {
+      const m = msg as Record<string, unknown>;
+      const isPartial = isTranscriptPartial(m);
+      const text = extractTranscriptText(m);
+      const role: TranscriptRole = m.role === "assistant" ? "assistant" : "user";
+      const eventCallId = extractVapiCallId(m);
+      if (eventCallId) activeVapiCallIdRef.current = eventCallId;
+      if (!text) return;
+      if (role === "user") setUserSpeaking(true);
+
+      setMessages((prev) =>
+        role === "user"
+          ? upsertStreamingTranscriptMessage(prev, "user", text, isPartial, activeUserMessageIdRef, committedUserTextRef)
+          : upsertStreamingTranscriptMessage(
+              prev,
+              "assistant",
+              text,
+              isPartial,
+              activeAssistantMessageIdRef,
+              committedAssistantTextRef
+            )
+      );
+    });
+
+    client.on("error", (err) => {
+      const errObj = err as Record<string, unknown>;
+      const errType = String(errObj?.type ?? "").toLowerCase();
+      const friendlyMsg = resolveVoiceErrorMessage(err);
+      const meetingEnded = errType === "daily-error" && /meeting has ended/i.test(friendlyMsg);
+      if (meetingEnded) {
+        setVoiceError(null);
         const callId = activeVapiCallIdRef.current ?? getCurrentVapiCallId(client);
         const transcriptStartIndex = Math.max(0, callStartMessageCountRef.current);
         const transcriptMessages = messagesRef.current.slice(transcriptStartIndex);
@@ -274,80 +290,67 @@ export function useBuilderChatVoice({
           activeVapiCallIdRef.current = null;
           callStartMessageCountRef.current = 0;
         });
+        return;
+      }
+      void stopVapiClient(client).finally(() => {
+        detachVoice(client);
+        setVoiceError(friendlyMsg);
       });
+    });
+  }, [commitVoiceTranscript, detachVoice, messagesRef, setMessages, setCommitStatus]);
 
-      client.on("speech-start", () => {
-        setAiSpeaking(true);
-        activeAssistantMessageIdRef.current = null;
-        committedAssistantTextRef.current = "";
-        activeUserMessageIdRef.current = null;
-        committedUserTextRef.current = "";
-        setUserSpeaking(false);
-      });
-      client.on("speech-end", () => {
-        setAiSpeaking(false);
-        activeAssistantMessageIdRef.current = null;
-        committedAssistantTextRef.current = "";
-        if (pendingAutoEndRef.current) {
-          pendingAutoEndRef.current = false;
-          stopVoice();
-        }
-      });
+  const startVoice = useCallback(async () => {
+    if (vapiRef.current || voiceStartInFlightRef.current) return;
+    voiceStartInFlightRef.current = true;
+    setVoiceError(null);
+    setVoiceConnecting(true);
+    let vapi: VapiClient | null = null;
 
-      client.on("message", (msg: unknown) => {
-        const m = msg as Record<string, unknown>;
-        const isPartial = isTranscriptPartial(m);
-        const text = extractTranscriptText(m);
-        const role: TranscriptRole = m.role === "assistant" ? "assistant" : "user";
-        const eventCallId = extractVapiCallId(m);
-        if (eventCallId) activeVapiCallIdRef.current = eventCallId;
-        if (!text) {
-          return;
-        }
-        if (role === "user") setUserSpeaking(true);
-        if (role === "assistant" && isAssistantWrapUpTranscript(text)) {
-          pendingAutoEndRef.current = true;
-          if (autoEndTimeoutRef.current) {
-            clearTimeout(autoEndTimeoutRef.current);
-          }
-          autoEndTimeoutRef.current = setTimeout(() => {
-            if (!pendingAutoEndRef.current) return;
-            pendingAutoEndRef.current = false;
-            stopVoice();
-          }, 2200);
-        }
+    const token = typeof window !== "undefined" ? localStorage.getItem(AUTH_TOKEN_KEY) : null;
+    if (!token) {
+      setVoiceError("Please sign in to use voice");
+      setVoiceConnecting(false);
+      voiceStartInFlightRef.current = false;
+      return;
+    }
+    if (!isVapiVoiceConfigured(language)) {
+      setVoiceError(
+        "Voice is not configured. Set NEXT_PUBLIC_VAPI_PUBLIC_KEY and NEXT_PUBLIC_VAPI_ASSISTANT_ID in apps/web/.env.local (Vapi dashboard -> API keys)."
+      );
+      setVoiceConnecting(false);
+      voiceStartInFlightRef.current = false;
+      return;
+    }
 
-        setMessages((prev) =>
-          role === "user"
-            ? upsertStreamingTranscriptMessage(prev, "user", text, isPartial, activeUserMessageIdRef, committedUserTextRef)
-            : upsertStreamingTranscriptMessage(
-                prev,
-                "assistant",
-                text,
-                isPartial,
-                activeAssistantMessageIdRef,
-                committedAssistantTextRef
-              )
-        );
-      });
-
-      client.on("error", (err) => {
-        const errObj = err as Record<string, unknown>;
-        const errType = String(errObj?.type ?? "").toLowerCase();
-        const friendlyMsg = resolveVoiceErrorMessage(err);
-        const meetingEnded = errType === "daily-error" && /meeting has ended/i.test(friendlyMsg);
-        if (meetingEnded) {
+    try {
+      // 1. Try the module-level eager prewarm (started from nav click)
+      const eager = await claimEagerPrewarm();
+      if (eager) {
+        vapi = eager.client;
+        vapiRef.current = vapi;
+        eager.client.removeAllListeners("call-start");
+        eager.client.removeAllListeners("error");
+        attachFullHandlers(vapi);
+        if (eager.callStartFired) {
+          setVoiceConnecting(false);
+          setVoiceConnected(true);
           setVoiceError(null);
-          void stopVapiClient(client).finally(() => detachVoice(client));
-          return;
+          setCommitStatus("idle");
+          const callId = getCurrentVapiCallId(vapi);
+          if (callId) activeVapiCallIdRef.current = callId;
+          callStartMessageCountRef.current = messagesRef.current.length;
         }
-        void stopVapiClient(client).finally(() => {
-          detachVoice(client);
-          setVoiceError(friendlyMsg);
-        });
-      });
+        voiceStartInFlightRef.current = false;
+        return;
+      }
 
-      await client.start(assistantId);
+      // 2. Cold start — no prewarm available
+      const publicKey = getVapiPublicKey();
+      const assistantId = getVapiAssistantId(language);
+      vapi = await createPatchedVapiClient(publicKey);
+      vapiRef.current = vapi;
+      attachFullHandlers(vapi);
+      await vapi.start(assistantId);
     } catch (e) {
       const isExpectedDisconnect = isBenignVapiDisconnectError(e);
       if (isExpectedDisconnect) {
@@ -361,19 +364,14 @@ export function useBuilderChatVoice({
         void stopVapiClient(vapi).finally(() => detachVoice(vapi));
       }
       setVoiceError(e instanceof Error ? e.message : "Could not start voice session");
+    } finally {
+      voiceStartInFlightRef.current = false;
     }
   }, [
-    commitVoiceTranscript,
+    attachFullHandlers,
     detachVoice,
     messagesRef,
-    setMessages,
     setCommitStatus,
-    setVoiceError,
-    setVoiceConnecting,
-    setVoiceConnected,
-    setAiSpeaking,
-    setUserSpeaking,
-    stopVoice,
     language,
   ]);
 
@@ -403,6 +401,27 @@ export function useBuilderChatVoice({
     await startVoice();
   }, [startVoice, stopVoice, voiceConnected]);
 
+  const toggleStt = useCallback(() => {
+    const client = vapiRef.current;
+    if (!client) return;
+    const nowMuted = !sttMuted;
+    client.setMuted(nowMuted);
+    setSttMuted(nowMuted);
+  }, [sttMuted]);
+
+  const sendTextToAssistant = useCallback((text: string) => {
+    const client = vapiRef.current;
+    if (!client || !text.trim()) return false;
+    client.send({ type: "add-message", message: { role: "user", content: text.trim() } });
+    return true;
+  }, []);
+
+  useEffect(() => {
+    if (!sttMuted) return;
+    setAiSpeaking(false);
+    setUserSpeaking(false);
+  }, [sttMuted]);
+
   useEffect(() => {
     if (pathname !== "/builder") return;
     void preloadVapiWeb().catch(() => {});
@@ -414,20 +433,26 @@ export function useBuilderChatVoice({
     if (vapiRef.current) {
       stopVoice();
     }
+    discardEagerPrewarm();
   }, [pathname, stopVoice]);
 
   return {
     voiceConnecting,
     voiceConnected,
     voiceError,
+    sttMuted,
     sphereActive: voiceConnecting
       ? ("connecting" as const)
-      : aiSpeaking
-        ? ("ai" as const)
-        : userSpeaking || voiceConnected
-          ? ("user" as const)
-          : ("idle" as const),
-    sphereIntensity: aiSpeaking ? 0.85 : userSpeaking ? 0.7 : voiceConnected ? 0.25 : 0,
+      : sttMuted
+        ? ("idle" as const)
+        : aiSpeaking
+          ? ("ai" as const)
+          : userSpeaking || voiceConnected
+            ? ("user" as const)
+            : ("idle" as const),
+    sphereIntensity: sttMuted ? 0 : aiSpeaking ? 0.85 : userSpeaking ? 0.7 : voiceConnected ? 0.25 : 0,
     toggleVoice,
+    toggleStt,
+    sendTextToAssistant,
   };
 }

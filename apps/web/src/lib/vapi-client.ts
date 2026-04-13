@@ -184,3 +184,81 @@ export async function createPatchedVapiClient(publicKey: string): Promise<VapiCl
   await vapiDailyTeardown;
   return patchVapiClient(new VapiCtor!(publicKey));
 }
+
+// ---------------------------------------------------------------------------
+// Eager call prewarm — start a Vapi call before the builder page mounts so
+// the ~3s API + WebRTC setup overlaps with navigation/rendering.
+// ---------------------------------------------------------------------------
+
+type EagerPrewarm = {
+  client: VapiClient;
+  callStartFired: boolean;
+  error: string | null;
+  promise: Promise<void>;
+};
+
+let eagerPrewarm: EagerPrewarm | null = null;
+
+/**
+ * Begin a Vapi call eagerly (e.g. on nav click). Attaches minimal safety
+ * handlers. The consuming hook adopts the client via `claimEagerPrewarm()`.
+ *
+ * Idempotent — only the first call triggers setup; subsequent calls are no-ops.
+ */
+export function startEagerBuilderPrewarm(publicKey: string, assistantId: string): void {
+  if (eagerPrewarm) return;
+  const pw: EagerPrewarm = { client: null as unknown as VapiClient, callStartFired: false, error: null, promise: Promise.resolve() };
+  eagerPrewarm = pw;
+  // Resolve `pw.promise` as soon as the client exists and `start()` is scheduled — do NOT
+  // await `client.start()` here. Awaiting start blocks `claimEagerPrewarm()` for the full
+  // Vapi/WebRTC connect handshake (~multi-second) before the builder hook can attach handlers,
+  // which defeats the entire purpose of overlapping setup with navigation/render time.
+  pw.promise = createPatchedVapiClient(publicKey)
+    .then((client) => {
+      pw.client = client;
+      client.on("call-start", () => {
+        pw.callStartFired = true;
+      });
+      client.on("error", (err: unknown) => {
+        if (isBenignVapiDisconnectError(err)) return;
+        const msg = getVapiErrorMessage(err);
+        pw.error = msg || "Voice connection error";
+        void stopVapiClient(client);
+        if (eagerPrewarm === pw) eagerPrewarm = null;
+      });
+      void client.start(assistantId).catch((e: unknown) => {
+        if (isBenignVapiDisconnectError(e)) return;
+        pw.error = getVapiErrorMessage(e) || "Voice connection error";
+        void stopVapiClient(client);
+        if (eagerPrewarm === pw) eagerPrewarm = null;
+      });
+    })
+    .catch(() => {
+      if (eagerPrewarm === pw) eagerPrewarm = null;
+    });
+}
+
+/**
+ * Claim the eagerly prewarmed call. Returns null if no prewarm is in progress
+ * or if it errored. Clears the singleton so it can't be claimed twice.
+ */
+export async function claimEagerPrewarm(): Promise<EagerPrewarm | null> {
+  const pw = eagerPrewarm;
+  if (!pw) return null;
+  eagerPrewarm = null;
+  await pw.promise;
+  if (pw.error || !pw.client) return null;
+  return pw;
+}
+
+/**
+ * Discard any in-progress eager prewarm (e.g. user navigated away before mount).
+ */
+export function discardEagerPrewarm(): void {
+  const pw = eagerPrewarm;
+  if (!pw) return;
+  eagerPrewarm = null;
+  void pw.promise.then(() => {
+    if (pw.client) void stopVapiClient(pw.client);
+  });
+}

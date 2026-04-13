@@ -10,6 +10,7 @@ type BuilderChatFooterProps = {
   sendMessage: (overrideText?: string) => void;
   loading: boolean;
   voiceConnected: boolean;
+  sttMuted: boolean;
   voiceError: string | null;
   surfacedInsights: string[];
 };
@@ -20,6 +21,7 @@ export function BuilderChatFooter({
   sendMessage,
   loading,
   voiceConnected,
+  sttMuted,
   voiceError,
   surfacedInsights,
 }: BuilderChatFooterProps) {
@@ -43,20 +45,33 @@ export function BuilderChatFooter({
         </p>
       )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <textarea
-          placeholder={voiceConnected ? "Voice active - or type here..." : "Type here..."}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              sendMessage();
-            }
-          }}
-          rows={2}
-          className="flex-1 min-h-[44px] max-h-[120px] resize-none rounded-xl border border-input/60 bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          disabled={loading}
-        />
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <textarea
+            placeholder={voiceConnected && !sttMuted ? "Voice active — or type here..." : "Type here..."}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
+            rows={2}
+            className="min-h-[44px] max-h-[120px] w-full resize-none rounded-xl border border-input/60 bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            disabled={loading}
+          />
+          {voiceConnected && !sttMuted ? (
+            <p className="mb-0 px-3 text-left text-[11px] text-muted-foreground">
+              Voice active — speak naturally or type. Tap the orb to mute mic.
+            </p>
+          ) : voiceConnected && sttMuted ? (
+            <p className="mb-0 px-3 text-left text-[11px] text-muted-foreground">
+              Mic muted — type your response. Tap the orb to unmute.
+            </p>
+          ) : (
+            <p className="mb-0 px-3 text-left text-[11px] text-muted-foreground">Connecting voice...</p>
+          )}
+        </div>
         <Button
           type="button"
           size="icon"
@@ -68,15 +83,6 @@ export function BuilderChatFooter({
           <Send className="h-4 w-4" />
         </Button>
       </div>
-      {voiceConnected ? (
-        <p className="text-[11px] text-center text-muted-foreground mb-0">
-          Voice connected - speak naturally or type. Tap the orb to turn voice off.
-        </p>
-      ) : (
-        <p className="text-[11px] text-center text-muted-foreground mb-0">
-          Voice is off - tap the orb to turn it back on, or just type.
-        </p>
-      )}
     </div>
   );
 }

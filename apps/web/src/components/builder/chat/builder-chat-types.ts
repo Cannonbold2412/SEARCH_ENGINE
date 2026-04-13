@@ -13,8 +13,3 @@ export type BuilderSessionCommitResponse = {
   cards?: import("@/lib/types").ExperienceCard[];
   children?: import("@/lib/types").ExperienceCardChild[];
 };
-
-export type PersistedBuilderChatState = {
-  messages: ChatMessage[];
-  surfacedInsights: string[];
-};

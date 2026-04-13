@@ -11,6 +11,7 @@ type AiSphereProps = {
   size?: number;
   className?: string;
   onClick?: () => void;
+  "aria-label"?: string;
 };
 
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
@@ -36,6 +37,7 @@ export function AiSphere({
   size = 64,
   className,
   onClick,
+  "aria-label": ariaLabelOverride,
 }: AiSphereProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
@@ -240,13 +242,14 @@ export function AiSphere({
         margin: -(canvasSize - size) / 2,
       }}
       aria-label={
-        active === "idle"
-          ? "Start voice"
-          : active === "connecting"
-          ? "Connecting..."
-          : active === "user"
-          ? "Listening to you"
-          : "AI is speaking"
+        ariaLabelOverride
+          ?? (active === "idle"
+            ? "Start voice"
+            : active === "connecting"
+            ? "Connecting..."
+            : active === "user"
+            ? "Listening to you"
+            : "AI is speaking")
       }
     >
       <canvas

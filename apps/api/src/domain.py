@@ -1,15 +1,24 @@
 """
-Domain types and schemas for Experience Cards.
-Single source of truth for prompts, validation, and API responses.
+Domain literals and Pydantic shapes for the API and experience-card prompts.
+
+- **Stored in DB today:** parent cards map to a subset of these fields (see
+  ``serializers.experience_card_to_schema``); child rows use ``child_type`` ∈
+  ``ALLOWED_CHILD_TYPES`` only.
+- **Lists like** ``entities`` / ``outcomes`` / ``evidence`` **on the parent
+  schema** are part of the wire contract and kept for forward-compatible /
+  richer extraction; they are often empty in responses.
+
+UI-only duplicates (e.g. ``ChildRelationType``, ``ENTITY_TAXONOMY``) live in
+``apps/web/src/lib/schemas.ts``, not here.
 """
 
 from datetime import datetime
-from typing import Literal, get_args
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
-# 1. Enums (Literal types used for validation and prompt generation)
+# 1. Literals — prompts, serializers, search constraint validation
 # ---------------------------------------------------------------------------
 
 Intent = Literal[
@@ -28,27 +37,6 @@ Intent = Literal[
     "finance",
     "other",
     "mixed",
-]
-
-ChildIntent = Literal[
-    "responsibility",
-    "capability",
-    "method",
-    "outcome",
-    "learning",
-    "challenge",
-    "decision",
-    "evidence",
-]
-
-ChildRelationType = Literal[
-    "describes",
-    "supports",
-    "demonstrates",
-    "results_in",
-    "learned_from",
-    "involves",
-    "part_of",
 ]
 
 SeniorityLevel = Literal[
@@ -175,8 +163,6 @@ ALLOWED_CHILD_TYPES: tuple[str, ...] = (
     "education",
     "certifications",
 )
-
-ENTITY_TAXONOMY: list[str] = list(get_args(EntityType))
 
 # ---------------------------------------------------------------------------
 # 3. Nested field models

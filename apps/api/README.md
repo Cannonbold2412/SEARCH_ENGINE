@@ -202,7 +202,7 @@ All used by routers and services for validation and serialization.
 
 ### Experience Card prompts (`prompts/experience_card.py`)
 
-Prompts for the Experience Card pipeline (messy text â†’ rewrite â†’ cleanup â†’ extract-all â†’ validate-all). Align with `domain`: parents use `ExperienceCardParentV1Schema` (intent = `Intent`), children use `ExperienceCardChildV1Schema` (intent = `ChildIntent`, relation_type = `ChildRelationType`), child_type from `ALLOWED_CHILD_TYPES`. Do not assume the user is in tech.
+Prompts for the Experience Card pipeline (messy text â†’ rewrite â†’ cleanup â†’ extract-all â†’ validate-all). Align with `domain`: parents use `ExperienceCardParentSchema` (`intent` = `Intent`). Child rows are keyed by `child_type` ∈ `ALLOWED_CHILD_TYPES` (see `ExperienceCardChild` / prompts). Do not assume the user is in tech.
 
 | Prompt | Purpose |
 |--------|---------|

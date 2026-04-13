@@ -63,6 +63,11 @@ async def rewrite_raw_text(raw_text: str) -> str:
         cleaned = " ".join((rewritten or "").split()).strip()
         if not cleaned:
             raise PipelineError(PipelineStage.REWRITE, "Rewrite returned empty text")
+        if cleaned.strip().upper().replace("_", "").startswith("INSUFFICIENTINPUT"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="The conversation did not contain enough experience details to create a card. Please try again and describe something you built, worked on, or handled.",
+            )
         await _rewrite_cache_set(raw_text, cleaned)
         return cleaned
     except ChatServiceError as e:

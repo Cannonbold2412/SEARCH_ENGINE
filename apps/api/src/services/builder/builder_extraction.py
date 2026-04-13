@@ -28,10 +28,6 @@ _vapi_client = httpx.AsyncClient(
 )
 
 
-def _debug_log(hypothesis_id: str, location: str, message: str, data: dict[str, Any]) -> None:
-    pass
-
-
 def _normalize_adjacent_duplicate_phrases(text: str, *, max_window: int = 12) -> str:
     """
     Collapse adjacent repeated word windows caused by streaming/transcript overlap.
@@ -127,12 +123,6 @@ async def _fetch_vapi_transcript_by_call_id(call_id: str) -> str:
 
     base_url = (settings.vapi_api_base_url or "https://api.vapi.ai").rstrip("/")
     url = f"{base_url}/call/{call_id}"
-    _debug_log(
-        "H4",
-        "engine.py:_fetch_vapi_transcript_by_call_id:start",
-        "starting Vapi call fetch",
-        {"hasApiKey": bool(api_key), "baseUrl": base_url, "callIdLength": len(call_id or "")},
-    )
     try:
         response = await _vapi_client.get(
             url,
@@ -162,12 +152,6 @@ async def _fetch_vapi_transcript_by_call_id(call_id: str) -> str:
             status_code=status.HTTP_502_BAD_GATEWAY, detail="Invalid Vapi call response."
         )
     transcript = _extract_vapi_transcript(payload)
-    _debug_log(
-        "H4",
-        "engine.py:_fetch_vapi_transcript_by_call_id:parsed",
-        "parsed Vapi transcript payload",
-        {"hasPayloadDict": isinstance(payload, dict), "transcriptLength": len(transcript or "")},
-    )
     if not transcript:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -250,7 +234,6 @@ async def _commit_extraction_input(
 
 __all__ = [
     "_commit_extraction_input",
-    "_debug_log",
     "_extract_vapi_transcript",
     "_fetch_vapi_transcript_by_call_id",
     "_finalize_card",

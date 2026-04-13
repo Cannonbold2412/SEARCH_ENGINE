@@ -473,7 +473,7 @@ The frontend `api.ts` and `search-context.tsx` demonstrate practical usage patte
 ### 11. Important models/entities (domain)
 
 - **Experience entities (`domain.py`)**
-  - Literals and constants such as `Intent`, `ChildIntent`, `ChildRelationType`, `SeniorityLevel`, `EmploymentType`, `CompanyType`, `ExperienceRelationType`, `Confidence`, `Visibility`, structured nested models (`TimeField`, `LocationField`, …), `ExperienceRelation`, and rich **`ExperienceCardParentSchema`** (aliased as `ExperienceCardSchema`). **`ExperienceCardChildSchema`** was removed; child shapes are handled via API/DB layers and `ALLOWED_CHILD_TYPES`.
+  - Literals and constants such as `Intent`, `SeniorityLevel`, `EmploymentType`, `CompanyType`, `ExperienceRelationType`, `Confidence`, `Visibility`, structured nested models (`TimeField`, `LocationField`, …), `ExperienceRelation`, and rich **`ExperienceCardParentSchema`** (aliased as `ExperienceCardSchema`). **`ExperienceCardChildSchema`** was removed; child rows are keyed by `child_type` ∈ `ALLOWED_CHILD_TYPES` (API/DB layers). Relation/entity enums for some UI fields are duplicated in `apps/web/src/lib/schemas.ts`.
   - These control how LLMs are allowed to populate card fields and child dimensions and strongly influence search filtering behavior (e.g., `must.intent_primary`, `must.employment_type`).
 
 - **Search constraints (`schemas/search.py`)**

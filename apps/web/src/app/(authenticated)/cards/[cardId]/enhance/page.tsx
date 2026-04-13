@@ -82,7 +82,6 @@ export default function EnhanceCardPage() {
   const [isChatSending, setIsChatSending] = useState(false);
   const initCardRef = useRef<string | null>(null);
   const [isEnhanceFormInitialized, setIsEnhanceFormInitialized] = useState(false);
-  const startVoiceRef = useRef<() => Promise<void>>(async () => {});
   const activeAssistantMessageIdRef = useRef<string | null>(null);
   const committedAssistantTextRef = useRef("");
   const activeUserMessageIdRef = useRef<string | null>(null);
@@ -221,11 +220,14 @@ export default function EnhanceCardPage() {
   const {
     voiceActive,
     voiceError: vapiVoiceError,
+    sttMuted,
     voiceSphereActive,
     voiceSphereIntensity,
     startVoice,
     stopVoice,
     toggleVoice,
+    toggleStt,
+    sendTextToAssistant,
   } = useEnhanceVapiVoice({
     enabled: !manualEdit && !!parent,
     voiceSessionKey: cardId,
@@ -235,15 +237,6 @@ export default function EnhanceCardPage() {
     onTranscriptChunk: onVoiceTranscriptChunk,
     onTranscriptStreamReset: resetVoiceTranscriptRefs,
   });
-
-  useEffect(() => {
-    startVoiceRef.current = startVoice;
-  }, [startVoice]);
-
-  useEffect(() => {
-    if (!parent || manualEdit || !isVapiEditVoiceConfigured(language)) return;
-    void startVoiceRef.current();
-  }, [cardId, parent?.id, manualEdit, language, parent]);
 
   useEffect(() => {
     const encodedCardId = encodeURIComponent(cardId);
@@ -315,6 +308,20 @@ export default function EnhanceCardPage() {
   const handleChatSend = useCallback(async () => {
     const text = chatInput.trim();
     if (!text || !parent) return;
+    setChatInput("");
+    setSaveAllError(null);
+
+    if (voiceActive) {
+      const userMsg: EnhanceChatMessage = {
+        id: `u-${crypto.randomUUID()}`,
+        role: "user",
+        content: text,
+      };
+      setChatMessages((prev) => [...prev, userMsg]);
+      sendTextToAssistant(text);
+      return;
+    }
+
     resetVoiceTranscriptRefs();
     const userMsg: EnhanceChatMessage = {
       id: `u-${crypto.randomUUID()}`,
@@ -322,9 +329,7 @@ export default function EnhanceCardPage() {
       content: text,
     };
     setChatMessages((prev) => [...prev, userMsg]);
-    setChatInput("");
     setIsChatSending(true);
-    setSaveAllError(null);
     try {
       const afterCard = await fillParentFromAnswer(text);
       const qs = buildAiQuestions(afterCard);
@@ -360,7 +365,7 @@ export default function EnhanceCardPage() {
     } finally {
       setIsChatSending(false);
     }
-  }, [chatInput, parent, fillParentFromAnswer, resetVoiceTranscriptRefs]);
+  }, [chatInput, parent, voiceActive, sendTextToAssistant, fillParentFromAnswer, resetVoiceTranscriptRefs]);
 
   const onUpdateChildFromMessyText = useCallback(
     async (childId: string, text: string) => {
@@ -643,16 +648,20 @@ export default function EnhanceCardPage() {
             placeholder={
               manualEdit
                 ? "Finish manual edit to continue chat…"
-                : voiceActive
+                : voiceActive && !sttMuted
                   ? "Voice active — or type your answer…"
-                  : "Type your answer…"
+                  : voiceActive && sttMuted
+                    ? "Mic muted — type your response…"
+                    : "Connecting voice…"
             }
             voiceError={vapiVoiceError}
             voiceConfigured={isVapiEditVoiceConfigured(language)}
-            onVoiceToggle={() => void toggleVoice()}
+            onVoiceToggle={voiceActive ? toggleStt : undefined}
             voiceDisabled={manualEdit}
             voiceSphereIntensity={voiceSphereIntensity}
             voiceSphereActive={voiceSphereActive}
+            sttMuted={sttMuted}
+            voiceActive={voiceActive}
           />
         </div>
       </div>

@@ -9,11 +9,13 @@ import { useProfilePhoto } from "@/hooks/use-profile-photo";
 import { cn } from "@/lib/utils";
 import { apiAssetUrl } from "@/lib/constants";
 import { CreditsBadge } from "@/components/common";
-import { preloadVapiWeb } from "@/lib/vapi-client";
+import { preloadVapiWeb, startEagerBuilderPrewarm } from "@/lib/vapi-client";
+import { isVapiVoiceConfigured, getVapiAssistantId, getVapiPublicKey } from "@/lib/vapi-config";
+import { useLanguage } from "@/contexts/language-context";
 
 export function AppNav() {
   const logoSrc = apiAssetUrl("/img/kana_icon_512.png");
-
+  const { language } = useLanguage();
   const pathname = usePathname();
   const {
     sidebarWidth,
@@ -142,6 +144,9 @@ export function AppNav() {
                     onClick={() => {
                       if (href === "/builder") {
                         void preloadVapiWeb().catch(() => {});
+                        if (isVapiVoiceConfigured(language)) {
+                          startEagerBuilderPrewarm(getVapiPublicKey(), getVapiAssistantId(language));
+                        }
                       }
                       handleNavClick();
                     }}

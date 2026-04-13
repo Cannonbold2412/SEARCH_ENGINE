@@ -8,9 +8,7 @@ import { BuilderChatFooter } from "./builder-chat-footer";
 import { BuilderChatMessages } from "./builder-chat-messages";
 import { useBuilderChatVoice } from "./use-builder-chat-voice";
 import { useLanguage } from "@/contexts/language-context";
-import type { ChatMessage, PersistedBuilderChatState } from "./builder-chat-types";
-
-const BUILDER_CHAT_STORAGE_KEY = "builder-chat-state";
+import type { ChatMessage } from "./builder-chat-types";
 
 export type { ChatMessage } from "./builder-chat-types";
 
@@ -18,49 +16,18 @@ interface BuilderChatProps {
   onCardsSaved?: () => void;
 }
 
-function loadPersistedBuilderChatState(): PersistedBuilderChatState {
-  if (typeof window === "undefined") {
-    return { messages: [], surfacedInsights: [] };
-  }
-  const raw = sessionStorage.getItem(BUILDER_CHAT_STORAGE_KEY);
-  if (!raw) {
-    return { messages: [], surfacedInsights: [] };
-  }
-  try {
-    const parsed = JSON.parse(raw) as PersistedBuilderChatState;
-    return {
-      messages: Array.isArray(parsed.messages) ? parsed.messages : [],
-      surfacedInsights: Array.isArray(parsed.surfacedInsights) ? parsed.surfacedInsights : [],
-    };
-  } catch {
-    sessionStorage.removeItem(BUILDER_CHAT_STORAGE_KEY);
-    return { messages: [], surfacedInsights: [] };
-  }
-}
-
 export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const { language } = useLanguage();
-  const [messages, setMessages] = useState<ChatMessage[]>(() => loadPersistedBuilderChatState().messages);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesRef = useRef<ChatMessage[]>([]);
   const [sessionId] = useState<string | null>(null);
-  const [surfacedInsights, setSurfacedInsights] = useState<string[]>(
-    () => loadPersistedBuilderChatState().surfacedInsights
-  );
+  const [surfacedInsights, setSurfacedInsights] = useState<string[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [commitStatus, setCommitStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const state: PersistedBuilderChatState = {
-      messages,
-      surfacedInsights,
-    };
-    sessionStorage.setItem(BUILDER_CHAT_STORAGE_KEY, JSON.stringify(state));
-  }, [messages, surfacedInsights]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -71,7 +38,15 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
   }, [messages]);
 
   useEffect(() => {
+    if (pathname === "/builder") return;
+    setMessages([]);
+    setSurfacedInsights([]);
+  }, [pathname]);
+
+  useEffect(() => {
     if (commitStatus !== "success") return;
+    setMessages([]);
+    setSurfacedInsights([]);
     const timer = setTimeout(() => {
       setCommitStatus("idle");
     }, 5000);
@@ -82,7 +57,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
     setMessages((prev) => [...prev, { ...msg, id: String(prev.length + Date.now()) }]);
   };
 
-  const { voiceConnected, voiceError, sphereActive, sphereIntensity, toggleVoice } = useBuilderChatVoice({
+  const { voiceConnected, voiceError, sttMuted, sphereActive, sphereIntensity, toggleStt, sendTextToAssistant } = useBuilderChatVoice({
     pathname,
     queryClient,
     sessionId,
@@ -99,10 +74,14 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
     if (!text || loading) return;
     setInput("");
     addMessage({ role: "user", content: text });
-    addMessage({
-      role: "assistant",
-      content: "Got it. Keep going - I'll create cards when the voice conversation ends.",
-    });
+    if (voiceConnected) {
+      sendTextToAssistant(text);
+    } else {
+      addMessage({
+        role: "assistant",
+        content: "Voice is not connected. Please wait for the connection or try again.",
+      });
+    }
   };
 
   return (
@@ -114,7 +93,14 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
           intensity={sphereIntensity}
           active={sphereActive}
           size={56}
-          onClick={toggleVoice}
+          onClick={voiceConnected ? toggleStt : undefined}
+          aria-label={
+            !voiceConnected
+              ? "Connecting voice..."
+              : sttMuted
+                ? "Unmute microphone"
+                : "Mute microphone"
+          }
           className="pointer-events-auto"
         />
       </div>
@@ -125,6 +111,7 @@ export function BuilderChat({ onCardsSaved }: BuilderChatProps) {
         sendMessage={sendMessage}
         loading={loading}
         voiceConnected={voiceConnected}
+        sttMuted={sttMuted}
         voiceError={voiceError}
         surfacedInsights={surfacedInsights}
       />
