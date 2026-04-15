@@ -18,6 +18,9 @@ export default function LandingFooter() {
           <a href="/terms" className="hover:text-foreground transition-colors">
             Terms
           </a>
+          <a href="/docs" className="hover:text-foreground transition-colors">
+            Documentation
+          </a>
           <a href="mailto:hello@conxa.in" className="hover:text-foreground transition-colors">
             Contact
           </a>
