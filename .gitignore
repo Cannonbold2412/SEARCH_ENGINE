@@ -71,3 +71,5 @@ scripts/k6/
 
 .graphify_python
 OB.py
+
+.cursor/
