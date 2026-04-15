@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PersonListResponse } from "@/lib/types";
 import { useLanguage } from "@/contexts/language-context";
 
-function getInitials(name?: string): string {
+function getInitials(name?: string | null): string {
   if (!name) return "A";
   const parts = name
     .trim()
