@@ -43,6 +43,17 @@ function detailValueToText(value: DetailRow["value"]): string | null {
   return String(value);
 }
 
+function getInitials(name?: string | null): string {
+  if (!name) return "A";
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  if (parts.length === 0) return "A";
+  return parts.map((part) => part.charAt(0).toUpperCase()).join("");
+}
+
 function DetailGrid({ rows, columns = 2 }: { rows: DetailRow[]; columns?: 1 | 2 }) {
   const visibleRows = rows
     .map((row) => ({ ...row, text: detailValueToText(row.value) }))
@@ -51,11 +62,11 @@ function DetailGrid({ rows, columns = 2 }: { rows: DetailRow[]; columns?: 1 | 2 
   if (visibleRows.length === 0) return null;
 
   return (
-    <dl className={`grid gap-3 ${columns === 2 ? "sm:grid-cols-2" : ""}`}>
+    <dl className={`grid gap-x-6 gap-y-3 ${columns === 2 ? "sm:grid-cols-2" : ""}`}>
       {visibleRows.map((row) => (
-        <div key={row.label} className="space-y-1">
-          <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{row.label}</dt>
-          <dd className="text-sm text-foreground whitespace-pre-wrap break-words">{row.text}</dd>
+        <div key={row.label} className="space-y-0.5">
+          <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{row.label}</dt>
+          <dd className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{row.text}</dd>
         </div>
       ))}
     </dl>
@@ -90,9 +101,9 @@ function BioSection({ bio }: { bio: NonNullable<PersonProfile["bio"]> }) {
   if (!hasAnyValue) return null;
 
   return (
-    <Card>
+    <Card className="border-border/60 shadow-sm">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">About</CardTitle>
+        <CardTitle className="text-base tracking-tight">About</CardTitle>
       </CardHeader>
       <CardContent>
         <DetailGrid rows={rows} />
@@ -139,8 +150,21 @@ function PersonProfilePageContent() {
         { method: "POST", body: searchId ? { search_id: searchId } : {} }
       );
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["person", personId] });
+    onSuccess: (data) => {
+      // Apply returned contact details immediately so the unlock feels instant.
+      queryClient.setQueriesData<PersonProfile>(
+        { queryKey: ["person", personId] },
+        (current) => {
+          if (!current) return current;
+          return {
+            ...current,
+            contact: data.contact,
+          };
+        }
+      );
+
+      // Keep server state in sync without blocking the visible update.
+      queryClient.invalidateQueries({ queryKey: ["person", personId], refetchType: "inactive" });
     },
   });
 
@@ -190,23 +214,27 @@ function PersonProfilePageContent() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className="max-w-2xl mx-auto space-y-6"
+      className="mx-auto w-full max-w-4xl space-y-5 sm:space-y-6"
     >
       <Link
         href={backHref}
-        className="inline-flex items-center gap-2 py-1.5 -my-1.5 px-1 -mx-1 rounded-md text-sm text-muted-foreground hover:text-foreground transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="inline-flex items-center gap-2 rounded-md px-1 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 group -mx-1 -my-1.5"
       >
         <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5 shrink-0" />
         <span>{backLabel}</span>
       </Link>
 
-      <Card className="shadow-sm">
-        <CardHeader className="pb-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex flex-col space-y-2 min-w-0">
-              <div className="flex items-center gap-4">
+      <Card className="relative overflow-hidden border-border/60 bg-card shadow-sm">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-primary/10 via-primary/5 to-transparent"
+          aria-hidden
+        />
+        <CardHeader className="relative pb-4 sm:pb-5">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:gap-6">
+            <div className="min-w-0 space-y-3">
+              <div className="flex items-start gap-3 sm:gap-4">
                 {profilePhotoSrc ? (
-                  <div className="h-14 w-14 rounded-full bg-muted overflow-hidden flex-shrink-0 ring-2 ring-border/50">
+                  <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-full bg-muted ring-2 ring-border/60 sm:h-16 sm:w-16">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={profilePhotoSrc}
@@ -215,37 +243,37 @@ function PersonProfilePageContent() {
                     />
                   </div>
                 ) : (
-                  <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center flex-shrink-0 ring-2 ring-border/50 text-lg font-medium text-muted-foreground">
-                    {(profile.display_name || "A").charAt(0).toUpperCase()}
+                  <div className="h-14 w-14 flex-shrink-0 rounded-full bg-gradient-to-br from-primary/20 via-primary/10 to-muted flex items-center justify-center ring-2 ring-border/60 text-base font-semibold text-foreground sm:h-16 sm:w-16 sm:text-lg">
+                    {getInitials(profile.display_name)}
                   </div>
                 )}
                 <div className="min-w-0">
-                  <CardTitle className="text-xl tracking-tight">{profile.display_name || "Anonymous"}</CardTitle>
+                  <CardTitle className="text-xl tracking-tight sm:text-2xl">{profile.display_name || "Anonymous"}</CardTitle>
                   {profile.open_to_work && profile.work_preferred_locations?.length > 0 && (
-                    <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5 shrink-0" />
-                      <span>{profile.work_preferred_locations.join(", ")}</span>
+                    <p className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/60 bg-muted/60 px-2.5 py-0.5 text-xs text-muted-foreground sm:text-sm">
+                      <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground/80" />
+                      <span className="truncate">{profile.work_preferred_locations.join(", ")}</span>
                     </p>
                   )}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {profile.open_to_work && (
-                  <span className="inline-flex items-center rounded-full bg-success/10 px-3 py-1 text-xs font-medium text-success ring-1 ring-inset ring-success/20">
+                  <span className="inline-flex items-center rounded-full border border-success/20 bg-success/10 px-3 py-1 text-xs font-medium text-success">
                     Open to work
                   </span>
                 )}
                 {profile.open_to_contact && (
-                  <span className="inline-flex items-center rounded-full bg-info/10 px-3 py-1 text-xs font-medium text-info ring-1 ring-inset ring-info/20">
+                  <span className="inline-flex items-center rounded-full border border-info/20 bg-info/10 px-3 py-1 text-xs font-medium text-info">
                     Open to contact
                   </span>
                 )}
               </div>
             </div>
             <Button
-              size="icon"
+              size="sm"
               variant="outline"
-              className="shrink-0 h-10 w-10 rounded-full border-2"
+              className="h-10 shrink-0 gap-1.5 rounded-full border-border/70 px-4 font-medium hover:bg-muted"
               onClick={() => startChatMutation.mutate()}
               disabled={startChatMutation.isPending}
               title="Start chat (1 credit)"
@@ -256,6 +284,7 @@ function PersonProfilePageContent() {
               ) : (
                 <MessageCircle className="h-4 w-4" />
               )}
+              <span>{startChatMutation.isPending ? "Starting..." : "Chat"}</span>
             </Button>
           </div>
         </CardHeader>
@@ -263,56 +292,58 @@ function PersonProfilePageContent() {
 
       {profile.bio && <BioSection bio={profile.bio} />}
 
-      <section className="pt-1">
-        <h2 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
-          <Briefcase className="h-4 w-4 shrink-0" />
-          Experience
-        </h2>
-        {profile.card_families && profile.card_families.length > 0 ? (
-          <div className="space-y-6">
-            {profile.card_families.map((family) => (
-              <SavedCardFamily
-                key={family.parent.id}
-                readOnly
-                parent={family.parent}
-                childCards={family.children}
-              />
-            ))}
-          </div>
-        ) : profile.experience_cards.length === 0 ? (
-          <div className="text-center py-8 rounded-lg border border-dashed border-border/60">
-            <Briefcase className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">No experience cards shared.</p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {profile.experience_cards.map((card) => (
-              <SavedCardFamily
-                key={card.id}
-                readOnly
-                parent={card}
-                childCards={[]}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      <Card className="border-border/60 shadow-sm">
+        <CardHeader className="pb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-muted-foreground flex items-center gap-2">
+            <Briefcase className="h-4 w-4 shrink-0" />
+            Experience
+          </h2>
+        </CardHeader>
+        <CardContent>
+          {profile.card_families && profile.card_families.length > 0 ? (
+            <div className="space-y-5">
+              {profile.card_families.map((family) => (
+                <SavedCardFamily
+                  key={family.parent.id}
+                  readOnly
+                  parent={family.parent}
+                  childCards={family.children}
+                />
+              ))}
+            </div>
+          ) : profile.experience_cards.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 py-10 text-center">
+              <Briefcase className="mx-auto mb-2 h-6 w-6 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">No experience cards shared.</p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {profile.experience_cards.map((card) => (
+                <SavedCardFamily
+                  key={card.id}
+                  readOnly
+                  parent={card}
+                  childCards={[]}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {(profile.open_to_work || profile.open_to_contact || contactUnlocked) && (
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <CardTitle className="text-base">Contact</CardTitle>
-            </div>
+        <Card className="border-border/60 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base tracking-tight">
+              <Mail className="h-4 w-4 text-muted-foreground" />
+              Contact
+            </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             {contactUnlocked ? (
               <div className="space-y-2">
                 {(profile.contact?.email != null && profile.contact.email !== "") || profile.contact?.email_visible ? (
-                  <div className="flex items-center gap-2 text-sm">
+                  <div className="flex items-start gap-2 text-sm">
                     <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span className="text-foreground">
                       {profile.contact?.email || "Email visible to you"}
@@ -320,13 +351,13 @@ function PersonProfilePageContent() {
                   </div>
                 ) : null}
                 {profile.contact?.phone && (
-                  <div className="flex items-center gap-2 text-sm">
+                  <div className="flex items-start gap-2 text-sm">
                     <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span className="text-foreground">{profile.contact.phone}</span>
                   </div>
                 )}
                 {profile.contact?.linkedin_url && (
-                  <div className="flex items-center gap-2 text-sm">
+                  <div className="flex items-start gap-2 text-sm">
                     <ExternalLink className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <a href={profile.contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-foreground hover:underline break-all">
                       {profile.contact.linkedin_url}
@@ -338,25 +369,23 @@ function PersonProfilePageContent() {
                 )}
               </div>
             ) : (
-              <div className="rounded-lg border border-dashed border-border/60 bg-muted/30 p-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-                  <div className="h-8 w-8 rounded-lg bg-background flex items-center justify-center shrink-0">
-                    <Lock className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <span>Unlock email, phone, and links (1 credit)</span>
-                </div>
+              <div className="space-y-3">
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Lock className="h-4 w-4 shrink-0" />
+                  <span>Unlock email, phone, and links for 1 credit.</span>
+                </p>
                 <Button
                   size="default"
                   onClick={() => unlockMutation.mutate()}
                   disabled={unlockMutation.isPending}
-                  className="gap-2"
+                  className="gap-2 cursor-pointer"
                 >
                   {unlockMutation.isPending ? (
                     <span className="h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
                   ) : null}
                   {unlockMutation.isPending ? "Unlocking..." : "Unlock contact"}
                 </Button>
-                <p className="text-xs text-muted-foreground mt-2">One-time use per search. Credits apply.</p>
+                <p className="text-xs text-muted-foreground">One-time use per search. Credits apply.</p>
                 {unlockMutation.isError && (
                   <div className="mt-3">
                     <ErrorMessage

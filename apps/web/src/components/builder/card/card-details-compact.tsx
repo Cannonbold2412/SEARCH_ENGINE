@@ -122,30 +122,35 @@ export function CardDetailsCompact({
   if (!hasAnything) return null;
 
   return (
-    <div className={cn("mt-2.5 space-y-2", compact && "mt-1.5 space-y-1.5")}>
+    <div className={cn("mt-2.5 w-full min-w-0 space-y-2", compact && "mt-1.5 space-y-1.5")}>
       {summaryText && !hideSummary && (
-        <p className={cn("text-sm text-muted-foreground leading-relaxed", !expandSummary && (compact ? "line-clamp-2" : "line-clamp-3"))}>
+        <p
+          className={cn(
+            "w-full min-w-0 max-w-full text-pretty text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]",
+            !expandSummary && (compact ? "line-clamp-2" : "line-clamp-3")
+          )}
+        >
           {summaryText}
         </p>
       )}
 
       {(metaItems.length > 0 || (timeText && !hideTime) || (locationStr && !hideLocation)) && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-start gap-x-2 gap-y-2 text-xs text-muted-foreground sm:gap-x-3 sm:items-center">
           {roleTitleStr && (
-            <span className="inline-flex items-center gap-1">
-              <Briefcase className="h-3 w-3 flex-shrink-0 opacity-60" />
+            <span className="inline-flex max-w-full min-w-0 items-start gap-1 break-words [overflow-wrap:anywhere] sm:items-center">
+              <Briefcase className="mt-0.5 h-3 w-3 flex-shrink-0 opacity-60 sm:mt-0" aria-hidden />
               {roleTitleStr}
             </span>
           )}
           {locationStr && !hideLocation && (
-            <span className="inline-flex items-center gap-1">
-              <MapPin className="h-3 w-3 flex-shrink-0 opacity-60" />
+            <span className="inline-flex max-w-full min-w-0 items-start gap-1 break-words [overflow-wrap:anywhere] sm:items-center">
+              <MapPin className="mt-0.5 h-3 w-3 flex-shrink-0 opacity-60 sm:mt-0" aria-hidden />
               {locationStr}
             </span>
           )}
           {timeText && !hideTime && (
-            <span className="inline-flex items-center gap-1">
-              <Calendar className="h-3 w-3 flex-shrink-0 opacity-60" />
+            <span className="inline-flex max-w-full min-w-0 items-start gap-1 break-words sm:items-center">
+              <Calendar className="mt-0.5 h-3 w-3 flex-shrink-0 opacity-60 sm:mt-0" aria-hidden />
               {timeText}
             </span>
           )}
@@ -153,15 +158,21 @@ export function CardDetailsCompact({
       )}
 
       {hasValueItems ? (
-        <div className="space-y-1">
-          {valueItems!.map((it, i) => (
-            <div key={i} className="text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">{String(it.subtitle ?? it.title ?? "")}</span>
-              {(it.sub_summary ?? it.description) ? (
-                <span className="ml-1.5">- {String(it.sub_summary ?? it.description ?? "")}</span>
-              ) : null}
-            </div>
-          ))}
+        <div className="space-y-2">
+          {valueItems!.map((it, i) => {
+            const sub = it.sub_summary ?? it.description;
+            return (
+              <div key={i} className="min-w-0 text-sm [overflow-wrap:anywhere]">
+                <span className="font-medium text-foreground">{String(it.subtitle ?? it.title ?? "")}</span>
+                {sub ? (
+                  <>
+                    <span className="text-muted-foreground"> – </span>
+                    <span className="font-normal text-muted-foreground">{String(sub)}</span>
+                  </>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       ) : tagItems.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">

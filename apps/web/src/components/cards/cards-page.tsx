@@ -342,29 +342,35 @@ export default function CardsPage() {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="max-w-3xl mx-auto space-y-8"
+      className="mx-auto w-full min-w-0 max-w-3xl space-y-8"
     >
       {!hasCards ? (
         <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.3 }}
-          className="flex flex-col items-center justify-center py-16 px-4 rounded-2xl border border-dashed border-zinc-700/60 gap-4"
+          className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-dashed border-border/60 bg-muted/10 px-6 py-16 shadow-sm"
         >
-          <p className="text-sm text-muted-foreground text-center">No experience cards yet</p>
+          <p className="text-center font-body text-sm text-muted-foreground">No experience cards yet</p>
           <Link href="/builder">
-            <Button size="sm" className="rounded-full px-5 h-9">
+            <Button size="sm" className="h-10 rounded-full px-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
               <Plus className="h-3.5 w-3.5 mr-1.5" />
               Add your first experience
             </Button>
           </Link>
         </motion.div>
       ) : (
-        <section className="space-y-4">
-          <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-            Your experience
-          </h2>
-          <div className="space-y-4">
+        <section className="space-y-5">
+          <div className="flex items-center gap-2">
+            <span
+              className="h-2 w-2 shrink-0 rounded-full bg-primary shadow-[0_0_12px_hsl(var(--primary)/0.45)]"
+              aria-hidden
+            />
+            <h2 className="font-display text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Your experience
+            </h2>
+          </div>
+          <div className="space-y-5">
             {savedFamilies.map((family, i) => (
               <SavedCardFamily
                 key={getParentId(family.parent) || `family-${i}`}

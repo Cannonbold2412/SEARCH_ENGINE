@@ -1,24 +1,46 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { motion, useInView } from "framer-motion";
+import { motion, useInView } from "motion/react";
 import { Search } from "lucide-react";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
-const QUERY = "senior python engineer mumbai";
+const QUERY = "experienced python engineer in mumbai";
 const RESULTS = [
-  { title: "Arjun Mehta", subtitle: "Python Developer · Mumbai · 5 years", match: 96, reasons: ["Python expertise", "Mumbai-based", "Senior-level experience"] },
-  { title: "Priya Sharma", subtitle: "Full-Stack Engineer · Navi Mumbai · 4 years", match: 89, reasons: ["Python + Django", "Mumbai metro area", "Quant background"] },
-  { title: "Rahul Desai", subtitle: "Backend Engineer · Pune → Mumbai · 6 years", match: 84, reasons: ["Python backends", "Relocating to Mumbai", "Crypto derivatives"] },
+  {
+    title: "Arjun Mehta",
+    subtitle: "Python developer · Mumbai · 5 years",
+    match: 96,
+    reasons: ["Python", "Mumbai", "Senior level"],
+  },
+  {
+    title: "Priya Sharma",
+    subtitle: "Full-stack engineer · Navi Mumbai · 4 years",
+    match: 89,
+    reasons: ["Python stack", "Nearby", "Numbers background"],
+  },
+  {
+    title: "Rahul Desai",
+    subtitle: "Backend engineer · Pune, open to Mumbai · 6 years",
+    match: 84,
+    reasons: ["Python backends", "Can relocate", "Finance tech"],
+  },
 ];
 
 export default function SearchDemo() {
   const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: "-100px" });
+  const inView = useInView(ref, { once: true, margin: "-60px" });
+  const reduced = usePrefersReducedMotion();
   const [typedText, setTypedText] = useState("");
   const [showResults, setShowResults] = useState(false);
   const [started, setStarted] = useState(false);
 
   useEffect(() => {
+    if (reduced && inView) {
+      setTypedText(QUERY);
+      setShowResults(true);
+      return;
+    }
     if (inView && !started) {
       setStarted(true);
       let i = 0;
@@ -30,19 +52,21 @@ export default function SearchDemo() {
           clearInterval(interval);
           setTimeout(() => setShowResults(true), 400);
         }
-      }, 70 + Math.random() * 40);
+      }, 55);
       return () => clearInterval(interval);
     }
-  }, [inView, started]);
+  }, [inView, started, reduced]);
 
   return (
-    <div ref={ref} className="max-w-2xl mx-auto">
-      <div className="glass-card rounded-2xl p-1 mb-6">
-        <div className="flex items-center gap-3 px-5 py-4">
-          <Search className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-          <span className="font-body text-foreground text-base">
+    <div ref={ref} className="mx-auto w-full min-w-0 max-w-2xl">
+      <div className="glass-card mb-6 rounded-2xl p-1">
+        <div className="flex min-w-0 items-start gap-3 px-4 py-4 sm:items-center sm:px-5">
+          <Search className="mt-0.5 h-5 w-5 flex-shrink-0 text-muted-foreground sm:mt-0" aria-hidden />
+          <span className="min-w-0 break-words font-body text-sm text-foreground sm:text-base">
             {typedText}
-            <span className="inline-block w-0.5 h-5 bg-primary ml-0.5 animate-typewriter-cursor align-middle" />
+            {!reduced && (
+              <span className="ml-0.5 inline-block h-5 w-0.5 animate-typewriter-cursor bg-primary align-middle" aria-hidden />
+            )}
           </span>
         </div>
       </div>
@@ -52,24 +76,27 @@ export default function SearchDemo() {
           {RESULTS.map((result, i) => (
             <motion.div
               key={result.title}
-              initial={{ opacity: 0, y: 20 }}
+              initial={reduced ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.15 }}
-              className="glass-card rounded-xl p-5 hover:glow-violet-subtle transition-shadow duration-300"
+              transition={{ duration: reduced ? 0 : 0.35, delay: reduced ? 0 : i * 0.1 }}
+              className="glass-card rounded-xl p-4 transition-shadow duration-200 hover:glow-violet-subtle sm:p-5"
             >
-              <div className="flex items-start justify-between mb-3">
-                <div>
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                <div className="min-w-0">
                   <h4 className="font-display font-semibold text-foreground">{result.title}</h4>
-                  <p className="text-sm text-muted-foreground font-body">{result.subtitle}</p>
+                  <p className="break-words font-body text-sm text-muted-foreground">{result.subtitle}</p>
                 </div>
-                <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-secondary/10 text-secondary border border-secondary/20">
+                <span className="flex-shrink-0 self-start rounded-full border border-secondary/20 bg-secondary/10 px-2.5 py-1 font-mono text-xs text-secondary">
                   {result.match}% match
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-muted-foreground font-body mr-1">Why matched:</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 font-body text-xs text-muted-foreground">Why matched:</span>
                 {result.reasons.map((r) => (
-                  <span key={r} className="text-xs font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                  <span
+                    key={r}
+                    className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 font-mono text-xs text-primary"
+                  >
                     {r}
                   </span>
                 ))}

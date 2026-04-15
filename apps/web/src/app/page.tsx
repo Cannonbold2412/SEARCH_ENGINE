@@ -6,8 +6,7 @@ import {
   SocialProofBar,
   ProblemSection,
   HowItWorks,
-  ForRecruiters,
-  ForPeople,
+  AudienceSection,
   Examples,
   CTASection,
   LandingFooter,
@@ -21,8 +20,7 @@ export default function RootPage() {
       <SocialProofBar />
       <ProblemSection />
       <HowItWorks />
-      <ForRecruiters />
-      <ForPeople />
+      <AudienceSection />
       <Examples />
       <CTASection />
       <LandingFooter />

@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Send, Mic, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AiSphere } from "@/components/builder/ai-sphere";
@@ -62,7 +62,7 @@ export function EnhanceChatPanel({
   }, [input, isSending, disabled, onSend]);
 
   return (
-    <div className="relative flex flex-col h-full min-h-0 rounded-xl border border-border/60 bg-card overflow-hidden">
+    <div className="relative flex h-full min-h-[20rem] flex-col overflow-hidden rounded-2xl border border-border/60 bg-card/95 shadow-sm">
       <div className="flex-shrink-0 border-b border-border/60 px-3 py-3 sm:px-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -74,6 +74,17 @@ export function EnhanceChatPanel({
                   ? "Mic muted — type your response. Tap the orb to unmute."
                   : "Connecting voice… your card will update live and save when the call ends."}
             </p>
+          </div>
+          <div
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium",
+              voiceActive && !sttMuted
+                ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-500"
+                : "border-border/70 bg-muted/40 text-muted-foreground"
+            )}
+          >
+            {voiceActive && !sttMuted ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+            {voiceActive && !sttMuted ? "Listening" : "Muted"}
           </div>
         </div>
         {voiceError && (
@@ -91,7 +102,7 @@ export function EnhanceChatPanel({
         )}
       </div>
 
-      <div className="flex-1 min-h-0 space-y-4 overflow-y-auto p-3 scrollbar-thin scrollbar-theme sm:p-4">
+      <div className="flex-1 min-h-0 space-y-4 overflow-y-auto bg-gradient-to-b from-transparent via-muted/10 to-transparent p-3 scrollbar-thin scrollbar-theme sm:p-4">
         <AnimatePresence initial={false}>
           {messages.map((msg) => (
             <motion.div
@@ -103,10 +114,10 @@ export function EnhanceChatPanel({
             >
               <div
                 className={cn(
-                  "max-w-[90%] rounded-2xl px-4 py-2.5 text-sm",
+                  "max-w-[92%] rounded-2xl border px-4 py-2.5 text-sm shadow-sm",
                   msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted/60 text-foreground"
+                    ? "border-primary/30 bg-primary text-primary-foreground"
+                    : "border-border/60 bg-background/90 text-foreground"
                 )}
               >
                 <p className="whitespace-pre-wrap break-words">{msg.content}</p>
@@ -116,7 +127,7 @@ export function EnhanceChatPanel({
         </AnimatePresence>
         {isSending && (
           <div className="flex justify-start">
-            <div className="rounded-2xl px-4 py-2.5 bg-muted/60 flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-background/90 px-4 py-2.5 text-sm text-muted-foreground shadow-sm">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span>Updating your card…</span>
             </div>
@@ -126,7 +137,7 @@ export function EnhanceChatPanel({
       </div>
 
       {onVoiceToggle && !voiceDisabled && (
-        <div className="pointer-events-none absolute bottom-16 right-3 z-20 overflow-visible sm:bottom-10">
+        <div className="pointer-events-none absolute bottom-20 right-3 z-20 overflow-visible sm:bottom-10">
           <AiSphere
             intensity={voiceSphereIntensity}
             active={voiceSphereActive}
@@ -144,9 +155,13 @@ export function EnhanceChatPanel({
         </div>
       )}
 
-      <div className="flex flex-col gap-1.5 border-t border-border/60 px-3 py-2 flex-shrink-0">
+      <div className="flex flex-shrink-0 flex-col gap-1.5 border-t border-border/60 bg-background/95 px-3 py-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label htmlFor="enhance-chat-input" className="sr-only">
+            Type your response
+          </label>
           <textarea
+            id="enhance-chat-input"
             placeholder={placeholder}
             value={input}
             onChange={(e) => onInputChange(e.target.value)}

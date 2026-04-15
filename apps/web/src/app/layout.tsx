@@ -26,10 +26,10 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://www.conxa.in"),
   title: "CONXA — Every Experience. Searchable. | conxa.in",
   description:
-    "CONXA turns messy human stories into structured, searchable data — connecting people to opportunities they'd never find otherwise.",
+    "Tell your work story in plain words. CONXA turns it into a profile people can search — with clear reasons when someone fits.",
   openGraph: {
     title: "CONXA — Every Experience. Searchable.",
-    description: "CONXA turns messy human stories into structured, searchable data.",
+    description: "Plain-language work profiles and search that explains why people match.",
     url: "https://www.conxa.in",
     siteName: "CONXA",
     type: "website",
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "CONXA — Every Experience. Searchable.",
-    description: "CONXA turns messy human stories into structured, searchable data.",
+    description: "Plain-language work profiles and search that explains why people match.",
   },
   icons: {
     icon: [

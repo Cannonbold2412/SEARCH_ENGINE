@@ -2,31 +2,34 @@ import Link from "next/link";
 
 export default function LandingFooter() {
   return (
-    <footer className="border-t border-border/60 py-12 px-6">
-      <div className="container mx-auto max-w-5xl flex flex-col sm:flex-row items-center justify-between gap-6">
-        <div className="flex flex-col items-center sm:items-start gap-1">
-          <Link href="/" className="font-display text-lg font-bold text-gradient-logo">
+    <footer className="border-t border-border/60 px-4 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-12">
+      <div className="container mx-auto flex max-w-5xl flex-col items-center justify-between gap-6 sm:flex-row">
+        <div className="flex flex-col items-center gap-1 sm:items-start">
+          <Link
+            href="/"
+            className="font-display text-lg font-bold text-gradient-logo focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
             CONXA
           </Link>
-          <span className="text-xs text-muted-foreground font-body">Every experience. Searchable.</span>
+          <span className="font-body text-xs text-muted-foreground">Your work story, searchable.</span>
         </div>
 
-        <div className="flex items-center gap-6 text-xs text-muted-foreground font-body">
-          <a href="/privacy" className="hover:text-foreground transition-colors">
+        <nav className="flex flex-wrap items-center justify-center gap-6 font-body text-xs text-muted-foreground">
+          <a href="/privacy" className="transition-colors hover:text-foreground focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
             Privacy
           </a>
-          <a href="/terms" className="hover:text-foreground transition-colors">
+          <a href="/terms" className="transition-colors hover:text-foreground focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
             Terms
           </a>
-          <a href="/docs" className="hover:text-foreground transition-colors">
+          <a href="/docs" className="transition-colors hover:text-foreground focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
             Documentation
           </a>
-          <a href="mailto:hello@conxa.in" className="hover:text-foreground transition-colors">
+          <a href="mailto:hello@conxa.in" className="transition-colors hover:text-foreground focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
             Contact
           </a>
-        </div>
+        </nav>
 
-        <span className="text-xs text-muted-foreground font-body">Built in India 🇮🇳</span>
+        <span className="font-body text-xs text-muted-foreground">Made in India</span>
       </div>
     </footer>
   );
